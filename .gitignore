@@ -20,3 +20,25 @@ __pycache__/
 .idea/
 .vscode/
 *.swp
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Packaged apps
+*.app
+*.exe
+*.dmg
+out/
