@@ -55,15 +55,11 @@
           <section class="player-card">
             <div class="player-heading">
               <div class="avatar" id="avatar">?</div>
-              <div class="player-name"><span class="eyebrow" id="className">选择职业</span><strong id="playerName">边境旅人</strong><span class="level" id="levelText">Lv.1</span></div>
+              <div class="player-name"><span class="eyebrow" id="className">选择职业</span><strong id="playerName">边境旅人</strong></div>
               <div class="power-score"><span>战力</span><b id="powerText">0</b></div>
             </div>
             <div class="meter-group">
-              <div class="meter-label"><span>生命</span><b id="hpText">-- / --</b></div>
-              <div class="meter hp"><span id="hpBar"></span></div>
-              <div class="meter-label"><span>资源</span><b id="resourceText">-- / --</b></div>
-              <div class="meter mp"><span id="resourceBar"></span></div>
-              <div class="meter-label exp-label"><span>升级进度</span><b id="expText">0 / 120</b></div>
+              <div class="meter-label"><span>升级进度</span><b id="expText">0 / 120</b></div>
               <div class="meter exp"><span id="expBar"></span></div>
             </div>
             <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span></div>
@@ -105,7 +101,11 @@
           <div><button class="move-button" data-move="left" title="向左移动">左</button><button class="move-button" data-move="down" title="向下移动">下</button><button class="move-button" data-move="right" title="向右移动">右</button></div>
         </div>
         <div class="target-block"><span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span></div>
-        <div class="skill-bar" id="skillBar"></div>
+        <button class="normal-attack-button" id="normalAttackBtn" title="普通攻击"><span class="attack-key">J</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip" id="normalAttackTooltip"></span></button>
+        <div class="skill-stack">
+          <div class="action-resource"><div><span id="actionResourceName">资源</span><b id="actionResourceText">-- / --</b></div><div class="action-resource-meter"><span id="actionResourceBar"></span></div></div>
+          <div class="skill-bar" id="skillBar"></div>
+        </div>
         <button class="potion-button" id="potionBtn" title="使用生命药水">药水 <span>Q</span><b id="potionCount">3</b></button>
       </footer>
     </main>

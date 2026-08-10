@@ -10,28 +10,28 @@
     warrior: {
       name: "战士", glyph: "刃", color: "#e7b36b", subtitle: "贴身爆发 · 追击 · 承伤", hp: 350, resource: 100, resourceName: "怒气", attack: 33, defense: 22, speed: 218, range: 70, cooldown: 0.62,
       skills: [
-        { name: "破甲斩", cost: 10, cd: 3, damage: 1.45, range: 90, kind: "破甲" },
-        { name: "旋风扫", cost: 20, cd: 6, damage: 1.08, range: 125, kind: "范围" },
-        { name: "震地冲", cost: 25, cd: 12, damage: 1.25, range: 180, kind: "冲锋" },
-        { name: "焚天斩", cost: 40, cd: 10, damage: 2.4, range: 105, kind: "爆发" }
+        { name: "破甲斩", cost: 10, cd: 3, damage: 1.45, range: 90, kind: "破甲", desc: "斩击锁定目标，造成 145% 攻击伤害，并制造短暂破甲窗口。" },
+        { name: "旋风扫", cost: 20, cd: 6, damage: 1.08, range: 125, kind: "范围", area: 125, areaLabel: "半径 4 格", desc: "以自身为中心横扫，最多命中 5 个敌人，每个目标承受 108% 攻击伤害。" },
+        { name: "震地冲", cost: 25, cd: 12, damage: 1.25, range: 180, kind: "冲锋", desc: "冲向锁定目标并击退，造成 125% 攻击伤害。需要在 6 格内释放。" },
+        { name: "焚天斩", cost: 40, cd: 10, damage: 2.4, range: 105, kind: "爆发", desc: "对锁定目标施放重斩，造成 240% 攻击伤害；满破势时可被一刀时刻强化。" }
       ]
     },
     mage: {
       name: "法师", glyph: "焰", color: "#78b6ec", subtitle: "远程群攻 · 区域控制 · 清怪", hp: 235, resource: 240, resourceName: "法力", attack: 41, defense: 10, speed: 205, range: 220, cooldown: 0.86,
       skills: [
-        { name: "雷矛术", cost: 14, cd: 2.5, damage: 1.65, range: 260, kind: "穿透" },
-        { name: "焰痕地带", cost: 35, cd: 10, damage: 1.15, range: 180, kind: "范围" },
-        { name: "烈焰震环", cost: 25, cd: 12, damage: 1.2, range: 125, kind: "推开" },
-        { name: "天火陨星", cost: 90, cd: 18, damage: 3.1, range: 300, kind: "爆发" }
+        { name: "雷矛术", cost: 14, cd: 2.5, damage: 1.65, range: 260, kind: "穿透", desc: "向锁定目标射出雷矛，造成 165% 魔法伤害；可在 9 格内施放。" },
+        { name: "焰痕地带", cost: 35, cd: 10, damage: 1.15, range: 180, kind: "范围", area: 180, areaLabel: "半径 6 格", desc: "以自身为中心铺开焰痕，范围内最多 5 个敌人承受 115% 魔法伤害。" },
+        { name: "烈焰震环", cost: 25, cd: 12, damage: 1.2, range: 125, kind: "范围", area: 125, areaLabel: "半径 4 格", desc: "向周围爆开烈焰，造成 120% 魔法伤害并推开近身敌人。" },
+        { name: "天火陨星", cost: 90, cd: 18, damage: 3.1, range: 300, kind: "爆发", desc: "召下天火锁定目标，造成 310% 魔法伤害；满破势时获得额外爆发。" }
       ]
     },
     taoist: {
       name: "道士", glyph: "符", color: "#a88ce3", subtitle: "持续输出 · 治疗 · 召唤", hp: 280, resource: 160, resourceName: "符力", attack: 30, defense: 16, speed: 210, range: 185, cooldown: 0.74,
       skills: [
-        { name: "蚀骨咒", cost: 18, cd: 6, damage: 1.1, range: 205, kind: "削弱" },
-        { name: "召唤骨卫", cost: 35, cd: 20, damage: 0.8, range: 180, kind: "召唤" },
-        { name: "生息法阵", cost: 50, cd: 15, damage: 0, range: 120, kind: "治疗" },
-        { name: "镇魂符", cost: 10, cd: 2, damage: 1.55, range: 220, kind: "爆发" }
+        { name: "蚀骨咒", cost: 18, cd: 6, damage: 1.1, range: 205, kind: "削弱", desc: "对锁定目标施放蚀骨咒，造成 110% 道术伤害并积累一刀势能。" },
+        { name: "召唤骨卫", cost: 35, cd: 20, damage: 0.8, range: 180, kind: "召唤", desc: "在身边召唤骨卫协同作战，立刻对锁定目标造成 80% 道术伤害。" },
+        { name: "生息法阵", cost: 50, cd: 15, damage: 0, range: 120, kind: "治疗", area: 120, areaLabel: "半径 4 格", desc: "以自身为中心展开法阵，恢复自身生命并积累一刀势能。" },
+        { name: "镇魂符", cost: 10, cd: 2, damage: 1.55, range: 220, kind: "爆发", desc: "向锁定目标发射镇魂符，造成 155% 道术伤害；中毒目标更容易被终结。" }
       ]
     }
   };
@@ -190,6 +190,35 @@
 
   const MAP_ORDER = ["ash_outskirts", "pine_forest", "black_rock_mine", "red_sand_desert"];
 
+  const MONSTER_FLAVOR = {
+    "腐烬矿工": "被矿尘侵蚀的旧矿工，会挥动沉重矿镐追击闯入者。",
+    "赤牙猎犬": "速度很快的矿道猎犬，防御较低但近身攻击频繁。",
+    "裂脊尸卫": "披着残破甲片的守卫，生命与防御高于同区怪物。",
+    "灰烬侦察者": "在矿道外围巡游的斥候，攻击较高且体型灵活。",
+    "灰鬃狼": "雾松林中的群猎者，擅长快速贴近落单目标。",
+    "林皮蛛": "伏在林地阴影中的毒蛛，攻击高而护甲薄弱。",
+    "松鸦盗": "占据商路的盗匪，攻防均衡并会持续追击。",
+    "枯木菇人": "由腐木孢子聚成的怪物，生命与护甲较高。",
+    "黑岩矿工": "被深井怨气驱使的矿工，使用重型工具近身攻击。",
+    "落石魔": "岩层凝成的厚重魔物，移动迟缓但极难击穿。",
+    "矿脉蝙蝠": "盘旋在矿脉上方的袭击者，生命低但攻击凶狠。",
+    "腐毒僵尸": "尸皇气息催生的腐尸，靠近后持续制造压力。",
+    "赤砂蝎": "赤砂中潜伏的甲蝎，拥有较高防御与稳定伤害。",
+    "沙虫": "从沙层下钻出的巨虫，生命高且会紧贴目标。",
+    "沙盗斥候": "危险商道上的精锐斥候，攻击力远高于普通怪物。",
+    "枯骨游魂": "不受风沙阻挡的游魂，护甲较低但伤害不容忽视。",
+    "裂碑领主": "盘踞腐烬矿道的石碑守卫，低血量时会制造地裂危险区。",
+    "森林巨猿": "统治雾松林的巨兽，阶段二会在玩家附近召下落木。",
+    "坑道尸皇": "深井棺室的统治者，会召唤腐工，并在后续阶段制造地裂与吞噬区。",
+    "沙蝎王": "赤砂大漠的高危首领，尾刺会锁定玩家，并可叠加毒层。"
+  };
+
+  const COMMON_DROPS = [
+    { name: "生命药水", kind: "health_potion", slot: "consumable", quality: "blue", glyph: "药", color: "#f16d66", desc: "拾取后增加 1 瓶生命药水", weight: 36 },
+    { name: "回元露", kind: "resource_potion", slot: "consumable", quality: "blue", glyph: "露", color: "#78b6ec", desc: "拾取后恢复 35% 职业资源", weight: 24 },
+    { name: "散落金币袋", kind: "gold", slot: "currency", quality: "white", glyph: "金", color: "#e7b36b", desc: "拾取后获得一小袋金币", weight: 20 }
+  ];
+
   let state = null;
   let dpr = 1;
   let lastTime = 0;
@@ -198,6 +227,8 @@
   let moveTarget = null;
   let toastTimer = null;
   let pendingTravel = null;
+  let skillSignature = "";
+  let normalAttackSignature = "";
 
   const $ = (id) => document.getElementById(id);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -205,6 +236,29 @@
   const rand = (min, max) => Math.random() * (max - min) + min;
   const pick = (array) => array[Math.floor(Math.random() * array.length)];
   const formatNumber = (value) => Math.floor(value).toLocaleString("zh-CN");
+
+  function weightedPick(entries) {
+    const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = Math.random() * total;
+    for (const entry of entries) {
+      roll -= entry.weight;
+      if (roll <= 0) return entry.item;
+    }
+    return entries.at(-1).item;
+  }
+
+  function monsterProfile(entity) {
+    if (!entity.boss) {
+      return {
+        intro: MONSTER_FLAVOR[entity.name] || "游荡在当前区域的敌对生物。",
+        skills: [`近身攻击：基础伤害 ${entity.attack}`, `护甲：防御 ${entity.defense}`]
+      };
+    }
+    const kind = activeMap().boss.specialKind;
+    const special = kind === "logs" ? "落木狂暴：在玩家附近生成落木圈" : kind === "devour" ? "地裂吞噬：制造延迟爆发危险区" : kind === "sting" ? "锁定尾刺：瞄准玩家位置并叠加毒层" : "碑裂震击：低血量后制造地裂圈";
+    const summon = activeMap().boss.summonMob !== undefined ? "召唤腐工：周期召来普通怪物" : `阶段转换：共 ${activeMap().boss.phases} 个阶段`;
+    return { intro: MONSTER_FLAVOR[entity.name] || "当前区域的首领。", skills: [special, summon] };
+  }
 
   function activeMap() { return MAPS[state.currentMapId]; }
   function activeHero() { return CLASSES[state.classId]; }
@@ -214,13 +268,14 @@
     return {
       classId,
       currentMapId: "ash_outskirts",
-      player: { x: 480, y: 780, hp: hero.hp, resource: hero.resource * .68, level: 1, exp: 0, nextExp: 120, gold: 40, marks: 0, charge: 0, potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0], targetId: null, equipment: { weapon: null, neck: null, boots: null }, poison: 0, visitedMaps: { ash_outskirts: true } },
+      player: { x: 480, y: 780, hp: hero.hp, resource: hero.resource * .68, level: 1, exp: 0, nextExp: 120, gold: 40, marks: 0, charge: 0, potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0], targetId: null, previewSkill: null, equipment: { weapon: null, neck: null, boots: null }, poison: 0, visitedMaps: { ash_outskirts: true } },
       entities: [],
       drops: [], particles: [], texts: [], logs: [],
       boss: { active: true, defeated: false, respawn: 0 },
       startedAt: Date.now(),
       quest: { kills: 0, need: 8, completed: false },
-      hazards: []
+      hazards: [],
+      hoveredEntityId: null
     };
   }
 
@@ -228,10 +283,11 @@
     const result = [];
     map.monsterSpawns.forEach((spawn, index) => {
       const type = map.monsterTypes[spawn[2]];
-      result.push({ id: `mob-${index}`, ...type, x: spawn[0], y: spawn[1], maxHp: type.hp, respawn: 0, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
+      const level = clamp(map.levelMin + spawn[2] * 2 + index % 3, map.levelMin, map.levelMax);
+      result.push({ id: `mob-${index}`, ...type, level, x: spawn[0], y: spawn[1], maxHp: type.hp, respawn: 0, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
     });
     const b = map.boss;
-    result.push({ id: b.id, name: b.name, color: b.color, hp: b.hp, maxHp: b.hp, attack: b.attack, defense: b.defense, exp: b.exp, gold: b.gold, radius: b.radius, x: b.x, y: b.y, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0, phaseTimer: 0, specialTimer: b.specialInterval, summonTimer: b.summonInterval || 0 });
+    result.push({ id: b.id, name: b.name, level: map.levelMax + 2, color: b.color, hp: b.hp, maxHp: b.hp, attack: b.attack, defense: b.defense, exp: b.exp, gold: b.gold, radius: b.radius, x: b.x, y: b.y, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0, phaseTimer: 0, specialTimer: b.specialInterval, summonTimer: b.summonInterval || 0 });
     return result;
   }
 
@@ -250,6 +306,7 @@
     state.particles = [];
     state.texts = [];
     state.hazards = [];
+    state.hoveredEntityId = null;
     state.boss = { active: true, defeated: false, respawn: 0 };
     state.quest = { kills: 0, need: map.id === "ash_outskirts" ? 8 : 10, completed: false };
     state.player.visitedMaps[mapId] = true;
@@ -441,7 +498,8 @@
       state.boss.defeated = true;
     } else log(`${target.name} 被击败，获得 ${expGain} 经验与 ${target.gold} 金币。`);
     spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
-    if (Math.random() < (target.boss ? .95 : .28)) spawnDrop(target);
+    const dropRolls = target.boss ? 2 : (Math.random() < .42 ? 1 : 0);
+    for (let roll = 0; roll < dropRolls; roll += 1) spawnDrop(target, roll);
     if (state.quest.kills >= state.quest.need && !state.quest.completed) {
       state.quest.completed = true; state.player.gold += 60; state.player.marks += 8;
       log("<b>委托完成</b>：黑铁 ×3、60 金币、8 首领印记已发放。", "loot"); showToast("委托完成：你的第一件橙装距离更近了");
@@ -450,9 +508,15 @@
     state.player.targetId = null;
   }
 
-  function spawnDrop(source) {
+  function spawnDrop(source, roll = 0) {
     const map = activeMap();
-    const item = { ...pick(map.drops), id: `item-${Date.now()}-${Math.random()}`, x: source.x + rand(-22, 22), y: source.y + rand(-18, 18), source: source.name };
+    const mapItem = pick(map.drops);
+    const pool = COMMON_DROPS.map((item) => ({ item, weight: item.weight }));
+    pool.push({ item: mapItem, weight: source.boss ? 62 : 20 });
+    if (source.boss) pool.push({ item: { name: "首领印记碎片", kind: "marks", slot: "currency", quality: "purple", glyph: "印", color: "#a88ce3", desc: "拾取后获得 3 枚首领印记" }, weight: 18 });
+    const rolled = weightedPick(pool);
+    const item = { ...rolled, id: `item-${Date.now()}-${roll}-${Math.random()}`, x: source.x + rand(-30, 30), y: source.y + rand(-24, 24), source: source.name };
+    if (item.kind === "gold") item.amount = Math.round(rand(source.boss ? 70 : 12, source.boss ? 150 : 34));
     state.drops.push(item);
     log(`${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，靠近后按 F 拾取。`, "loot");
   }
@@ -460,7 +524,35 @@
   function collectDrops() {
     const nearby = state.drops.filter((drop) => distance(state.player, drop) < 85);
     if (!nearby.length) { showToast("附近没有可拾取物品"); return; }
-    nearby.forEach((drop) => { state.drops = state.drops.filter((entry) => entry.id !== drop.id); state.inventory = state.inventory || []; state.inventory.push(drop); log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，点击背包查看属性。`, "loot"); });
+    state.inventory = state.inventory || [];
+    let collected = 0;
+    nearby.forEach((drop) => {
+      if (!drop.kind && state.inventory.length >= 12) {
+        log(`<b>${drop.name}</b> 未拾取：背包已满。`, "warn");
+        return;
+      }
+      state.drops = state.drops.filter((entry) => entry.id !== drop.id);
+      collected += 1;
+      if (drop.kind === "health_potion") {
+        state.player.potion += 1;
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，生命药水数量 +1。`, "loot");
+      } else if (drop.kind === "resource_potion") {
+        const restored = Math.round(activeHero().resource * .35);
+        state.player.resource = clamp(state.player.resource + restored, 0, activeHero().resource);
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，恢复 ${restored} ${activeHero().resourceName}。`, "loot");
+      } else if (drop.kind === "gold") {
+        state.player.gold += drop.amount;
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，获得 ${drop.amount} 金币。`, "loot");
+      } else if (drop.kind === "marks") {
+        state.player.marks += 3;
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，首领印记 +3。`, "loot");
+      } else {
+        state.inventory.push(drop);
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，点击背包查看属性。`, "loot");
+      }
+    });
+    if (!collected) showToast("背包已满，装备仍保留在地面");
+    renderPlayer();
     renderInventory();
   }
 
@@ -546,6 +638,7 @@
     const map = activeMap();
     let dx = 0, dy = 0;
     if (keys.w || keys.ArrowUp) dy -= 1; if (keys.s || keys.ArrowDown) dy += 1; if (keys.a || keys.ArrowLeft) dx -= 1; if (keys.d || keys.ArrowRight) dx += 1;
+    if (dx || dy) moveTarget = null;
     if (!dx && !dy && moveTarget) { dx = moveTarget.x - state.player.x; dy = moveTarget.y - state.player.y; if (Math.hypot(dx, dy) < 8) moveTarget = null; }
     const length = Math.hypot(dx, dy) || 1; if (dx || dy) { state.player.x += (dx / length) * hero.speed * dt; state.player.y += (dy / length) * hero.speed * dt; }
     state.player.x = clamp(state.player.x, 55, map.width - 55); state.player.y = clamp(state.player.y, 55, map.height - 55);
@@ -615,7 +708,7 @@
         if (aliveMobs < def.summonMax + 8) {
           const type = map.monsterTypes[def.summonMob];
           const id = `summon-${Date.now()}-${Math.random()}`;
-          state.entities.push({ id, ...type, x: boss.x + rand(-80, 80), y: boss.y + rand(-60, 60), maxHp: type.hp, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
+          state.entities.push({ id, ...type, level: map.levelMax, x: boss.x + rand(-80, 80), y: boss.y + rand(-60, 60), maxHp: type.hp, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
           log(`<b>${boss.name}</b> 召唤了一只 ${type.name}。`, "warn");
           spark(boss.x + 60, boss.y, "#7a5a3a", 8);
         }
@@ -689,7 +782,7 @@
     drawLandmarks(map);
     drawExits(map);
     drawHazards();
-    state.drops.forEach(drawDrop); state.entities.filter((entity) => entity.alive).forEach(drawEntity); drawPlayer(); state.particles.forEach(drawParticle); state.texts.forEach(drawText);
+    state.drops.forEach(drawDrop); state.entities.filter((entity) => entity.alive).forEach(drawEntity); drawSkillRangePreview(); drawPlayer(); state.particles.forEach(drawParticle); state.texts.forEach(drawText); drawMonsterTooltip(view, width, height);
     if (moveTarget) { ctx.strokeStyle = "rgba(98, 213, 198, .7)"; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.arc(moveTarget.x, moveTarget.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
     ctx.restore();
   }
@@ -762,11 +855,126 @@
   }
 
   function drawNameplate(entity) {
-    const width = entity.boss ? 134 : 92; const left = entity.x - width / 2; const top = entity.y - entity.radius - (entity.boss ? 40 : 27); ctx.fillStyle = "rgba(9, 16, 19, .76)"; roundedRect(left, top, width, entity.boss ? 22 : 17, 3); ctx.fill(); ctx.fillStyle = entity.boss ? "#f3b1a8" : "#c7d2cb"; ctx.font = `${entity.boss ? 11 : 9}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(entity.name + (entity.boss ? ` · P${entity.phase}` : ""), entity.x, top + (entity.boss ? 14 : 11)); ctx.fillStyle = "#0c1518"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), width - 14, 3); ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), (width - 14) * (entity.hp / entity.maxHp), 3); ctx.textAlign = "start";
+    const width = entity.boss ? 160 : 118;
+    const left = entity.x - width / 2;
+    const top = entity.y - entity.radius - (entity.boss ? 48 : 39);
+    ctx.fillStyle = "rgba(9, 16, 19, .82)";
+    roundedRect(left, top, width, 31, 3);
+    ctx.fill();
+    ctx.fillStyle = entity.boss ? "#f3b1a8" : "#c7d2cb";
+    ctx.font = `${entity.boss ? 11 : 9}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(`Lv.${entity.level} ${entity.name}${entity.boss ? ` · P${entity.phase}` : ""}`, entity.x, top + 11);
+    ctx.fillStyle = "#8d9ca0";
+    ctx.font = "8px sans-serif";
+    ctx.fillText(`${Math.ceil(entity.hp)} / ${entity.maxHp}`, entity.x, top + 21);
+    ctx.fillStyle = "#0c1518";
+    ctx.fillRect(left + 7, top + 25, width - 14, 4);
+    ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2";
+    ctx.fillRect(left + 7, top + 25, (width - 14) * (entity.hp / entity.maxHp), 4);
+    ctx.textAlign = "start";
+  }
+
+  function drawMonsterTooltip(view, viewWidth, viewHeight) {
+    const entity = state.entities.find((entry) => entry.id === state.hoveredEntityId && entry.alive);
+    if (!entity) return;
+    const profile = monsterProfile(entity);
+    const width = 244;
+    const height = entity.boss ? 112 : 104;
+    const x = clamp(entity.x + entity.radius + 18, view.x + 12, view.x + viewWidth - width - 12);
+    const y = clamp(entity.y - entity.radius - 18, view.y + 12, view.y + viewHeight - height - 12);
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 16, 20, .96)";
+    ctx.strokeStyle = entity.boss ? "rgba(241, 109, 102, .55)" : "rgba(98, 213, 198, .42)";
+    ctx.lineWidth = 1;
+    roundedRect(x, y, width, height, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = entity.boss ? "#f3b1a8" : "#eef3f4";
+    ctx.font = "600 11px sans-serif";
+    ctx.fillText(`Lv.${entity.level} ${entity.name}${entity.boss ? " · 区域首领" : ""}`, x + 11, y + 17);
+    ctx.fillStyle = "#e7b36b";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(`生命 ${Math.ceil(entity.hp)}/${entity.maxHp} · 攻击 ${entity.attack} · 防御 ${entity.defense}`, x + 11, y + 33);
+    ctx.fillStyle = "#9fadaf";
+    ctx.fillText(profile.intro, x + 11, y + 49, width - 22);
+    ctx.fillStyle = "#62d5c6";
+    ctx.fillText("技能", x + 11, y + 67);
+    ctx.fillStyle = "#c7d2cb";
+    profile.skills.forEach((skill, index) => ctx.fillText(`· ${skill}`, x + 11, y + 83 + index * 14));
+    ctx.restore();
   }
 
   function drawDrop(drop) { ctx.save(); ctx.translate(drop.x, drop.y); ctx.rotate(Math.PI / 4); ctx.fillStyle = drop.color; ctx.globalAlpha = .9; ctx.fillRect(-6, -6, 12, 12); ctx.globalAlpha = .28; ctx.fillRect(-11, -11, 22, 22); ctx.restore(); }
-  function drawPlayer() { const hero = activeHero(); ctx.save(); ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? .45 : 1; ctx.fillStyle = hero.color; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#102027"; ctx.beginPath(); ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2); ctx.fill(); if (state.player.poison > 0) { ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 28, 0, Math.PI * 2); ctx.fill(); } if (state.player.charge >= 100) { ctx.strokeStyle = "#e7b36b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 30, 0, Math.PI * 2); ctx.stroke(); } ctx.restore(); }
+  function drawSkillRangePreview() {
+    const index = state.player.previewSkill;
+    if (!Number.isInteger(index)) return;
+    const skill = activeHero().skills[index];
+    if (!skill?.area) return;
+    const hero = activeHero();
+    ctx.save();
+    ctx.fillStyle = `${hero.color}22`;
+    ctx.strokeStyle = hero.color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, skill.area, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = hero.color;
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`${skill.name} · ${skill.areaLabel}`, state.player.x, state.player.y + skill.area + 16);
+    ctx.restore();
+  }
+
+  function drawPlayer() {
+    const hero = activeHero();
+    const maxHp = hero.hp + equipmentHp();
+    const left = state.player.x - 44;
+    const top = state.player.y - 56;
+    ctx.save();
+    ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? .45 : 1;
+    ctx.fillStyle = "rgba(8, 15, 18, .82)";
+    roundedRect(left, top, 88, 24, 3);
+    ctx.fill();
+    ctx.fillStyle = "#eef3f4";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`Lv.${state.player.level} 灰烬旅人`, state.player.x, top + 10);
+    ctx.fillStyle = "#0c1518";
+    ctx.fillRect(left + 6, top + 15, 76, 5);
+    ctx.fillStyle = "#f16d66";
+    ctx.fillRect(left + 6, top + 15, 76 * clamp(state.player.hp / maxHp, 0, 1), 5);
+    ctx.fillStyle = hero.color;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.7)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#102027";
+    ctx.beginPath();
+    ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    if (state.player.poison > 0) {
+      ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`;
+      ctx.beginPath();
+      ctx.arc(state.player.x, state.player.y, 28, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (state.player.charge >= 100) {
+      ctx.strokeStyle = "#e7b36b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(state.player.x, state.player.y, 30, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   function drawParticle(particle) { ctx.save(); ctx.globalAlpha = clamp(particle.life * 2, 0, 1); ctx.fillStyle = particle.color; ctx.fillRect(particle.x, particle.y, particle.size, particle.size); ctx.restore(); }
   function drawText(text) { ctx.save(); ctx.globalAlpha = clamp(text.life * 2, 0, 1); ctx.fillStyle = text.color; ctx.font = `700 ${text.size}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(text.message, text.x, text.y); ctx.restore(); }
 
@@ -775,7 +983,7 @@
 
   function renderPlayer() {
     const hero = activeHero(); const maxHp = hero.hp + equipmentHp(); const maxResource = hero.resource; const power = hero.attack + state.player.level * 4 + Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) + hero.defense * 2;
-    $("avatar").textContent = hero.glyph; $("avatar").style.color = hero.color; $("avatar").style.borderColor = hero.color; $("className").textContent = hero.name; $("playerName").textContent = `${hero.name} · 灰烬旅人`; $("levelText").textContent = `Lv.${state.player.level}`; $("powerText").textContent = formatNumber(power); $("hpText").textContent = `${Math.ceil(state.player.hp)} / ${maxHp}`; $("hpBar").style.width = `${clamp(state.player.hp / maxHp * 100, 0, 100)}%`; $("resourceText").textContent = `${Math.ceil(state.player.resource)} / ${maxResource}`; $("resourceBar").style.width = `${clamp(state.player.resource / maxResource * 100, 0, 100)}%`; $("expText").textContent = `${state.player.exp} / ${state.player.nextExp}`; $("expBar").style.width = `${clamp(state.player.exp / state.player.nextExp * 100, 0, 100)}%`; $("goldText").textContent = formatNumber(state.player.gold); $("markText").textContent = `${state.player.marks} / 800`; $("potionCount").textContent = state.player.potion;
+    $("avatar").textContent = hero.glyph; $("avatar").style.color = hero.color; $("avatar").style.borderColor = hero.color; $("className").textContent = hero.name; $("playerName").textContent = `${hero.name} · 灰烬旅人`; $("powerText").textContent = formatNumber(power); $("actionResourceName").textContent = hero.resourceName; $("actionResourceText").textContent = `${Math.ceil(state.player.resource)} / ${maxResource}`; $("actionResourceBar").style.width = `${clamp(state.player.resource / maxResource * 100, 0, 100)}%`; $("expText").textContent = `${state.player.exp} / ${state.player.nextExp}`; $("expBar").style.width = `${clamp(state.player.exp / state.player.nextExp * 100, 0, 100)}%`; $("goldText").textContent = formatNumber(state.player.gold); $("markText").textContent = `${state.player.marks} / 800`; $("potionCount").textContent = state.player.potion;
     const questProgress = state.quest.kills / state.quest.need * 100; $("questBar").style.width = `${questProgress}%`; $("questText").textContent = state.quest.completed ? "已完成 · 领取奖励" : `${state.quest.kills} / ${state.quest.need} 击杀`;
   }
 
@@ -822,12 +1030,27 @@
     });
   }
 
-  function renderSkills() { const hero = activeHero(); $("skillBar").innerHTML = hero.skills.map((skill, index) => `<button class="skill-button" data-skill="${index}" title="${skill.name} · ${skill.kind}"><span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>${state.player.cooldowns[index] > 0 ? `<span class="cooldown">${Math.ceil(state.player.cooldowns[index])}</span>` : ""}</button>`).join(""); $("skillBar").querySelectorAll("button").forEach((button) => { button.disabled = state.player.cooldowns[Number(button.dataset.skill)] > 0; }); }
+  function renderNormalAttack() {
+    const hero = activeHero();
+    if (normalAttackSignature === hero.name) return;
+    normalAttackSignature = hero.name;
+    const resourceEffect = state.classId === "warrior" ? "命中额外获得 6 怒气。" : state.classId === "mage" ? "发射炎弹并消耗 8 法力。" : "命中获得 4 符力。";
+    $("normalAttackBtn").innerHTML = `<span class="attack-key">J</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip"><b>普通攻击</b><span>对当前锁定目标造成 100% 主属性伤害。${resourceEffect}</span><em>靠近目标后可连续使用</em></span>`;
+  }
+
+  function renderSkills() {
+    const hero = activeHero();
+    const signature = `${state.classId}:${state.player.cooldowns.map((cooldown) => Math.ceil(cooldown)).join(",")}`;
+    if (skillSignature === signature) return;
+    skillSignature = signature;
+    $("skillBar").innerHTML = hero.skills.map((skill, index) => `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}"><span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small><span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${skill.area ? `范围：以角色为中心 ${skill.areaLabel}` : `施法距离：${Math.round(skill.range / 30)} 格`} · 冷却 ${skill.cd} 秒</em></span>${state.player.cooldowns[index] > 0 ? `<span class="cooldown">${Math.ceil(state.player.cooldowns[index])}</span>` : ""}</button>`).join("");
+    $("skillBar").querySelectorAll("button").forEach((button) => { button.disabled = state.player.cooldowns[Number(button.dataset.skill)] > 0; });
+  }
 
   function renderEquipment() { const labels = { weapon: "武器", neck: "项链", boots: "靴子" }; $("equipmentGrid").innerHTML = Object.keys(labels).map((slot) => { const item = state.player.equipment[slot]; return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`; }).join(""); }
   function renderInventory() { const inventory = state.inventory || []; $("inventoryCount").textContent = `${inventory.length}/12`; $("inventoryGrid").innerHTML = Array.from({ length: 12 }, (_, index) => { const item = inventory[index]; return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`; }).join(""); $("inventoryGrid").querySelectorAll("[data-item-index]").forEach((button) => { button.addEventListener("click", () => equipItem(inventory[Number(button.dataset.itemIndex)])); }); }
   function renderBoss() { const boss = state.entities.find((entity) => entity.boss); if (!boss) return; $("bossAlertText").textContent = boss.alive ? `${boss.name} · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命 · 阶段 ${boss.phase}/${activeMap().boss.phases}` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
-  function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderRegion(); renderPlayer(); renderTarget(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
+  function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderRegion(); renderPlayer(); renderTarget(); renderNormalAttack(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
 
   function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, quest: state.quest })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与所在地图。", "loot"); }
   function loadGame() {
@@ -836,6 +1059,7 @@
       if (!saved || !CLASSES[saved.classId]) return false;
       state = createState(saved.classId);
       Object.assign(state.player, saved.player);
+      state.player.previewSkill = null;
       state.player.equipment = saved.equipment || saved.player.equipment || {};
       state.inventory = saved.inventory || [];
       state.quest = saved.quest || state.quest;
@@ -852,7 +1076,12 @@
   function setupInput() {
     window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const map = activeMap(); if (map.exits[0]) tryTravel(map.exits[0]); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
     canvas.addEventListener("pointerdown", (event) => { pointer.down = true; const point = canvasPoint(event); const target = state?.entities.find((entity) => entity.alive && distance(point, entity) < entity.radius + 22); if (target) selectTarget(target); else moveTarget = point; }); canvas.addEventListener("pointerup", () => { pointer.down = false; });
-    $("skillBar").addEventListener("click", (event) => { const button = event.target.closest("[data-skill]"); if (button) castSkill(Number(button.dataset.skill)); }); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
+    canvas.addEventListener("pointermove", (event) => { if (!state) return; const point = canvasPoint(event); pointer.x = point.x; pointer.y = point.y; const hovered = state.entities.filter((entity) => entity.alive).sort((a, b) => Number(b.boss) - Number(a.boss)).find((entity) => distance(point, entity) < entity.radius + 18); state.hoveredEntityId = hovered?.id || null; });
+    canvas.addEventListener("pointerleave", () => { if (state) state.hoveredEntityId = null; });
+    $("skillBar").addEventListener("click", (event) => { const button = event.target.closest("[data-skill]"); if (button) castSkill(Number(button.dataset.skill)); });
+    $("skillBar").addEventListener("pointerover", (event) => { const button = event.target.closest("[data-skill]"); if (button && state) state.player.previewSkill = Number(button.dataset.skill); });
+    $("skillBar").addEventListener("pointerleave", () => { if (state) state.player.previewSkill = null; });
+    $("normalAttackBtn").addEventListener("click", normalAttack); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
   }
 
   function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = activeHero().hp + equipmentHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); }
