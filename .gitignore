@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Local environments and secrets
+.env
+.env.*
+.venv/
+venv/
+*.secret
+
+# Generated build, test, and cache files
+build/
+dist/
+coverage/
+.cache/
+__pycache__/
+*.pyc
+
+# Editor and tooling state
+.idea/
+.vscode/
+*.swp
