@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#101820">
+    <title>一刀999 · 灰烬边境</title>
+    <link rel="stylesheet" href="game.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark">999</span>
+          <div>
+            <strong>一刀999</strong>
+            <span>灰烬边境 · 纵向切片</span>
+          </div>
+        </div>
+        <div class="server-status"><span class="status-dot"></span> 烬阳-01 <span class="status-divider"></span> 延迟 42ms</div>
+        <div class="top-actions">
+          <button class="icon-button" id="saveBtn" title="保存当前进度">保存</button>
+          <button class="icon-button" id="resetBtn" title="重新开始本次体验">重置</button>
+        </div>
+      </header>
+
+      <section class="game-layout">
+        <section class="world-panel">
+          <div class="map-header">
+            <div>
+              <span class="eyebrow">当前区域</span>
+              <h1>灰烬村外 · 腐烬矿道</h1>
+            </div>
+            <div class="map-pills"><span class="pill safe">村口保护</span><span class="pill danger">野外可争夺</span></div>
+          </div>
+          <div class="canvas-wrap" id="canvasWrap">
+            <canvas id="gameCanvas" aria-label="灰烬边境战斗场景"></canvas>
+            <div class="zone-label town-label">灰烬村</div>
+            <div class="zone-label mine-label">腐烬矿道</div>
+            <div class="boss-alert" id="bossAlert" aria-live="polite">
+              <span class="boss-pulse"></span>
+              <span><b>首领情报</b><small id="bossAlertText">裂碑领主正在苏醒</small></span>
+            </div>
+            <div class="combat-hint" id="combatHint">点击地面移动，点击目标锁定。WASD 移动，J 普攻，1-4 释放技能。</div>
+          </div>
+          <div class="world-footer">
+            <div class="mini-objectives">
+              <span class="footer-label">区域动态</span>
+              <span class="world-event"><i></i> 矿道刷新中</span>
+              <span class="world-event"><i class="gold"></i> 地面掉落可争夺</span>
+            </div>
+            <div class="coords" id="coords">坐标 480, 720</div>
+          </div>
+        </section>
+
+        <aside class="side-panel">
+          <section class="player-card">
+            <div class="player-heading">
+              <div class="avatar" id="avatar">?</div>
+              <div class="player-name"><span class="eyebrow" id="className">选择职业</span><strong id="playerName">边境旅人</strong><span class="level" id="levelText">Lv.1</span></div>
+              <div class="power-score"><span>战力</span><b id="powerText">0</b></div>
+            </div>
+            <div class="meter-group">
+              <div class="meter-label"><span>生命</span><b id="hpText">-- / --</b></div>
+              <div class="meter hp"><span id="hpBar"></span></div>
+              <div class="meter-label"><span>资源</span><b id="resourceText">-- / --</b></div>
+              <div class="meter mp"><span id="resourceBar"></span></div>
+              <div class="meter-label exp-label"><span>升级进度</span><b id="expText">0 / 120</b></div>
+              <div class="meter exp"><span id="expBar"></span></div>
+            </div>
+            <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span></div>
+          </section>
+
+          <section class="quest-card panel-block">
+            <div class="section-heading"><span><i class="section-icon">01</i> 当前委托</span><span class="quest-tag">进行中</span></div>
+            <h2>清理腐烬矿道</h2>
+            <p>击败矿道中的怪物，找到一件可以改变战局的装备。</p>
+            <div class="quest-progress"><span id="questBar"></span></div>
+            <div class="quest-meta"><span id="questText">0 / 8 击杀</span><b id="questReward">奖励：黑铁 ×3 · 经验</b></div>
+          </section>
+
+          <section class="equipment-card panel-block">
+            <div class="section-heading"><span><i class="section-icon">02</i> 装备</span><button class="link-button" id="inventoryHint">背包 <b id="inventoryCount">0/12</b></button></div>
+            <div class="equipment-grid" id="equipmentGrid"></div>
+          </section>
+
+          <section class="log-card panel-block">
+            <div class="section-heading"><span><i class="section-icon">03</i> 战场记录</span><span class="live-label"><i></i> LIVE</span></div>
+            <div class="event-log" id="eventLog" aria-live="polite"></div>
+          </section>
+
+          <section class="inventory-card panel-block">
+            <div class="section-heading"><span><i class="section-icon">04</i> 随身背包</span><span class="inventory-tip">点击装备</span></div>
+            <div class="inventory-grid" id="inventoryGrid"></div>
+          </section>
+        </aside>
+      </section>
+
+      <footer class="action-bar">
+        <div class="movement-controls" aria-label="移动控制">
+          <button class="move-button" data-move="up" title="向上移动">上</button>
+          <div><button class="move-button" data-move="left" title="向左移动">左</button><button class="move-button" data-move="down" title="向下移动">下</button><button class="move-button" data-move="right" title="向右移动">右</button></div>
+        </div>
+        <div class="target-block"><span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span></div>
+        <div class="skill-bar" id="skillBar"></div>
+        <button class="potion-button" id="potionBtn" title="使用生命药水">药水 <span>Q</span><b id="potionCount">3</b></button>
+      </footer>
+    </main>
+
+    <div class="class-modal" id="classModal">
+      <div class="class-intro">
+        <span class="eyebrow">服务器 · 烬阳-01</span>
+        <h2>选择你的传奇道路</h2>
+        <p>灰烬村外的矿道已经失守。先选定战斗方式，再用地面爆装和一刀时刻打出自己的传说。</p>
+      </div>
+      <div class="class-options" id="classOptions"></div>
+      <div class="modal-footnote">本原型使用服务器权威规则的前端模拟：掉落、升级和装备结果可在右侧实时查看。</div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="game.js"></script>
+  </body>
+</html>
