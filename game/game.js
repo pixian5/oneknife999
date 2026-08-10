@@ -4,8 +4,7 @@
   const canvas = document.querySelector("#gameCanvas");
   const ctx = canvas.getContext("2d");
   const wrap = document.querySelector("#canvasWrap");
-  const WORLD = { width: 2400, height: 1500 };
-  const STORAGE_KEY = "oneknife999-prototype-save-v1";
+  const STORAGE_KEY = "oneknife999-prototype-save-v2";
 
   const CLASSES = {
     warrior: {
@@ -37,19 +36,159 @@
     }
   };
 
-  const MONSTER_TYPES = [
-    { name: "腐烬矿工", color: "#bd8b68", hp: 84, attack: 13, defense: 3, exp: 28, gold: 8, radius: 17 },
-    { name: "赤牙猎犬", color: "#ca6b63", hp: 68, attack: 17, defense: 2, exp: 32, gold: 10, radius: 15 },
-    { name: "裂脊尸卫", color: "#71898a", hp: 132, attack: 19, defense: 8, exp: 52, gold: 15, radius: 20 },
-    { name: "灰烬侦察者", color: "#b49b61", hp: 104, attack: 22, defense: 4, exp: 48, gold: 18, radius: 16 }
-  ];
+  // 四张首发地图：灰烬村外 -> 雾松林 -> 黑岩矿坑 -> 赤砂大漠。
+  // 每张地图包含等级范围、危险等级、调色板、地标、怪物种类、刷新点、BOSS阶段、掉落表和出口。
+  const MAPS = {
+    ash_outskirts: {
+      id: "ash_outskirts",
+      name: "灰烬村外",
+      subtitle: "腐烬矿道",
+      levelMin: 1, levelMax: 10,
+      danger: "safe",
+      dangerLabel: "村口保护",
+      width: 2400, height: 1500,
+      palette: { ground: "#21362a", road: "rgba(173, 147, 90, .12)", roadHi: "rgba(232, 206, 139, .15)", grid: "rgba(205, 219, 183, .035)", town: "rgba(98, 213, 198, .08)", townBorder: "rgba(98, 213, 198, .22)", special: "rgba(34, 64, 65, .42)", specialBorder: "rgba(231, 179, 107, .22)", water: "rgba(114, 173, 178, .16)" },
+      townRect: { x: 150, y: 950, w: 360, h: 300 },
+      specialRect: { x: 1760, y: 230, w: 440, h: 370 },
+      paths: [[240, 1120, 780, 1040, 870, 760, 1270, 790, 1620, 820, 1650, 500, 2190, 330]],
+      landmarks: [
+        { type: "tower", x: 218, y: 1016, r: 18, color: "#4b6b55" }, { type: "tower", x: 282, y: 1100, r: 18, color: "#4b6b55" }, { type: "tower", x: 388, y: 1060, r: 18, color: "#4b6b55" },
+        { type: "rock", x: 1870, y: 326, r: 25, color: "#354d4c" }, { type: "rock", x: 2020, y: 394, r: 25, color: "#354d4c" }, { type: "rock", x: 2150, y: 310, r: 25, color: "#354d4c" }
+      ],
+      landmarkLabels: [{ text: "村口篝火", x: 214, y: 1190 }, { text: "裂碑矿道", x: 1908, y: 565 }],
+      monsterTypes: [
+        { name: "腐烬矿工", color: "#bd8b68", hp: 84, attack: 13, defense: 3, exp: 28, gold: 8, radius: 17 },
+        { name: "赤牙猎犬", color: "#ca6b63", hp: 68, attack: 17, defense: 2, exp: 32, gold: 10, radius: 15 },
+        { name: "裂脊尸卫", color: "#71898a", hp: 132, attack: 19, defense: 8, exp: 52, gold: 15, radius: 20 },
+        { name: "灰烬侦察者", color: "#b49b61", hp: 104, attack: 22, defense: 4, exp: 48, gold: 18, radius: 16 }
+      ],
+      monsterSpawns: [[820, 560, 0], [1010, 700, 1], [1180, 510, 2], [1360, 820, 3], [1550, 610, 0], [1740, 510, 1], [1930, 690, 2], [2100, 850, 3], [920, 1040, 0], [1140, 1120, 1], [1430, 1040, 2], [1700, 1060, 3], [2010, 1110, 0], [690, 1140, 1], [1510, 420, 2], [1880, 390, 3]],
+      boss: { id: "boss-ash", name: "裂碑领主", color: "#e99b5f", hp: 2100, attack: 36, defense: 18, exp: 480, gold: 260, radius: 34, x: 1980, y: 760, phases: 2, phase1Trigger: 0.55, specialInterval: 7, specialKind: "crack" },
+      drops: [
+        { name: "矿道旧刃", slot: "weapon", quality: "blue", glyph: "刀", power: 12, value: 22, color: "#78b6ec", desc: "攻击 12 · 破甲斩伤害 +3%" },
+        { name: "灰烬护符", slot: "neck", quality: "purple", glyph: "玉", power: 18, value: 46, color: "#a88ce3", desc: "生命 +45 · 一刀充能 +4%" },
+        { name: "矿脉战靴", slot: "boots", quality: "blue", glyph: "靴", power: 9, value: 28, color: "#78b6ec", desc: "防御 +8 · 移速 +4" },
+        { name: "裂碑余烬", slot: "material", quality: "orange", glyph: "核", power: 0, value: 120, color: "#e7b36b", desc: "首领铸魂材料 · 可交易" }
+      ],
+      exits: [
+        { x: 2330, y: 540, w: 60, h: 360, target: "pine_forest", spawn: { x: 90, y: 760 }, label: "雾松林", sub: "推荐 Lv.8" }
+      ]
+    },
+    pine_forest: {
+      id: "pine_forest",
+      name: "雾松林",
+      subtitle: "翠木回廊",
+      levelMin: 8, levelMax: 18,
+      danger: "normal",
+      dangerLabel: "野外可争夺",
+      width: 2400, height: 1500,
+      palette: { ground: "#1c2e22", road: "rgba(120, 180, 110, .12)", roadHi: "rgba(160, 220, 130, .15)", grid: "rgba(180, 220, 170, .035)", town: "rgba(98, 213, 198, .08)", townBorder: "rgba(98, 213, 198, .22)", special: "rgba(40, 70, 50, .55)", specialBorder: "rgba(120, 200, 130, .25)", water: "rgba(120, 180, 178, .14)" },
+      townRect: { x: 80, y: 950, w: 280, h: 280 },
+      specialRect: { x: 1700, y: 220, w: 540, h: 460 },
+      paths: [[180, 1080, 620, 1100, 820, 780, 1280, 800, 1620, 720, 1980, 460]],
+      landmarks: [
+        { type: "tree", x: 180, y: 1010, r: 22, color: "#2a4a32" }, { type: "tree", x: 250, y: 1140, r: 22, color: "#2a4a32" },
+        { type: "tree", x: 1750, y: 280, r: 26, color: "#1f3a26" }, { type: "tree", x: 1900, y: 320, r: 26, color: "#1f3a26" }, { type: "tree", x: 2050, y: 260, r: 26, color: "#1f3a26" }, { type: "tree", x: 2150, y: 420, r: 26, color: "#1f3a26" },
+        { type: "log", x: 1400, y: 540, r: 18, color: "#3a2a1c" }, { type: "log", x: 1620, y: 880, r: 18, color: "#3a2a1c" }
+      ],
+      landmarkLabels: [{ text: "采药人营地", x: 150, y: 1255 }, { text: "巨猿巢穴", x: 1900, y: 690 }],
+      monsterTypes: [
+        { name: "灰鬃狼", color: "#9ca39a", hp: 168, attack: 26, defense: 8, exp: 70, gold: 16, radius: 17 },
+        { name: "林皮蛛", color: "#6b8c5a", hp: 142, attack: 30, defense: 5, exp: 78, gold: 18, radius: 15 },
+        { name: "松鸦盗", color: "#7d9bb0", hp: 196, attack: 24, defense: 10, exp: 88, gold: 22, radius: 17 },
+        { name: "枯木菇人", color: "#a07b54", hp: 232, attack: 22, defense: 14, exp: 96, gold: 20, radius: 19 }
+      ],
+      monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 760, 2], [780, 1080, 3], [1100, 280, 0], [1900, 980, 1]],
+      boss: { id: "boss-pine", name: "森林巨猿", color: "#5c7d52", hp: 3600, attack: 52, defense: 28, exp: 820, gold: 420, radius: 36, x: 1980, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 5.5, specialKind: "logs" },
+      drops: [
+        { name: "狼皮护腕", slot: "weapon", quality: "blue", glyph: "腕", power: 18, value: 36, color: "#78b6ec", desc: "攻击 18 · 灰鬃狼掉落" },
+        { name: "蛛丝项链", slot: "neck", quality: "blue", glyph: "玉", power: 14, value: 32, color: "#78b6ec", desc: "生命 +35 · 暴击 +2%" },
+        { name: "采药人短靴", slot: "boots", quality: "purple", glyph: "靴", power: 22, value: 72, color: "#a88ce3", desc: "防御 +14 · 移速 +6" },
+        { name: "翠木之心", slot: "material", quality: "purple", glyph: "核", power: 0, value: 180, color: "#a88ce3", desc: "巨猿铸魂材料 · 可交易" }
+      ],
+      exits: [
+        { x: 20, y: 540, w: 50, h: 360, target: "ash_outskirts", spawn: { x: 2280, y: 760 }, label: "灰烬村外", sub: "Lv.1-10" },
+        { x: 2330, y: 540, w: 60, h: 360, target: "black_rock_mine", spawn: { x: 90, y: 760 }, label: "黑岩矿坑", sub: "推荐 Lv.15" }
+      ]
+    },
+    black_rock_mine: {
+      id: "black_rock_mine",
+      name: "黑岩矿坑",
+      subtitle: "深井回响",
+      levelMin: 15, levelMax: 28,
+      danger: "normal",
+      dangerLabel: "野外可争夺",
+      width: 2400, height: 1500,
+      palette: { ground: "#1a1d22", road: "rgba(180, 140, 80, .14)", roadHi: "rgba(220, 170, 100, .18)", grid: "rgba(200, 190, 170, .04)", town: "rgba(98, 213, 198, .08)", townBorder: "rgba(98, 213, 198, .22)", special: "rgba(50, 40, 30, .55)", specialBorder: "rgba(220, 170, 100, .25)", water: "rgba(100, 130, 150, .12)" },
+      townRect: { x: 80, y: 950, w: 280, h: 280 },
+      specialRect: { x: 1640, y: 220, w: 600, h: 460 },
+      paths: [[180, 1080, 620, 1120, 880, 800, 1280, 820, 1640, 760, 2100, 480]],
+      landmarks: [
+        { type: "lantern", x: 220, y: 1020, r: 14, color: "#d9954a" }, { type: "lantern", x: 320, y: 1140, r: 14, color: "#d9954a" },
+        { type: "beam", x: 1700, y: 280, r: 14, color: "#3a3028" }, { type: "beam", x: 1820, y: 320, r: 14, color: "#3a3028" }, { type: "beam", x: 1980, y: 280, r: 14, color: "#3a3028" }, { type: "beam", x: 2120, y: 400, r: 14, color: "#3a3028" }, { type: "beam", x: 2200, y: 540, r: 14, color: "#3a3028" },
+        { type: "cart", x: 1400, y: 580, r: 18, color: "#4a3a2c" }
+      ],
+      landmarkLabels: [{ text: "矿工营", x: 150, y: 1255 }, { text: "尸皇棺室", x: 1980, y: 700 }],
+      monsterTypes: [
+        { name: "黑岩矿工", color: "#8a7a5a", hp: 320, attack: 48, defense: 18, exp: 130, gold: 26, radius: 18 },
+        { name: "落石魔", color: "#6a6258", hp: 460, attack: 42, defense: 26, exp: 150, gold: 30, radius: 22 },
+        { name: "矿脉蝙蝠", color: "#4a3a4a", hp: 220, attack: 56, defense: 10, exp: 120, gold: 22, radius: 14 },
+        { name: "腐毒僵尸", color: "#5a7050", hp: 380, attack: 50, defense: 14, exp: 158, gold: 28, radius: 19 }
+      ],
+      monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 540, 2], [780, 1080, 3], [1100, 280, 0], [2080, 980, 1]],
+      boss: { id: "boss-mine", name: "坑道尸皇", color: "#7a5a3a", hp: 6400, attack: 78, defense: 42, exp: 1600, gold: 760, radius: 38, x: 2080, y: 700, phases: 3, phase1Trigger: 0.7, phase2Trigger: 0.35, specialInterval: 5, specialKind: "devour", summonInterval: 8, summonMob: 0, summonMax: 4 },
+      drops: [
+        { name: "黑铁长剑", slot: "weapon", quality: "purple", glyph: "剑", power: 32, value: 110, color: "#a88ce3", desc: "攻击 32 · 破甲斩伤害 +6%" },
+        { name: "矿主项链", slot: "neck", quality: "purple", glyph: "玉", power: 28, value: 96, color: "#a88ce3", desc: "生命 +90 · 怒气 +5" },
+        { name: "落石战靴", slot: "boots", quality: "purple", glyph: "靴", power: 26, value: 88, color: "#a88ce3", desc: "防御 +22 · 反伤 +3%" },
+        { name: "技能书残页", slot: "material", quality: "orange", glyph: "卷", power: 0, value: 280, color: "#e7b36b", desc: "15-28 级技能书候选 · 可交易" },
+        { name: "黑铁矿石", slot: "material", quality: "blue", glyph: "矿", power: 0, value: 60, color: "#78b6ec", desc: "强化材料 +1~+5 必成" }
+      ],
+      exits: [
+        { x: 20, y: 540, w: 50, h: 360, target: "pine_forest", spawn: { x: 2280, y: 760 }, label: "雾松林", sub: "Lv.8-18" },
+        { x: 2330, y: 540, w: 60, h: 360, target: "red_sand_desert", spawn: { x: 90, y: 760 }, label: "赤砂大漠", sub: "推荐 Lv.20" }
+      ]
+    },
+    red_sand_desert: {
+      id: "red_sand_desert",
+      name: "赤砂大漠",
+      subtitle: "枯井商道",
+      levelMin: 20, levelMax: 35,
+      danger: "danger",
+      dangerLabel: "危险区·爆装",
+      width: 2400, height: 1500,
+      palette: { ground: "#3a2a1c", road: "rgba(220, 180, 110, .14)", roadHi: "rgba(240, 200, 130, .18)", grid: "rgba(220, 200, 160, .04)", town: "rgba(98, 213, 198, .08)", townBorder: "rgba(98, 213, 198, .22)", special: "rgba(70, 40, 20, .45)", specialBorder: "rgba(240, 180, 90, .28)", water: "rgba(120, 160, 200, .14)" },
+      townRect: { x: 80, y: 950, w: 280, h: 280 },
+      specialRect: { x: 1640, y: 220, w: 600, h: 460 },
+      paths: [[180, 1080, 620, 1100, 880, 800, 1280, 820, 1640, 760, 2100, 480]],
+      landmarks: [
+        { type: "well", x: 220, y: 1020, r: 16, color: "#5a7090" }, { type: "well", x: 320, y: 1140, r: 16, color: "#5a7090" },
+        { type: "dune", x: 1700, y: 280, r: 30, color: "#5a3a20" }, { type: "dune", x: 1880, y: 320, r: 30, color: "#5a3a20" }, { type: "dune", x: 2040, y: 260, r: 30, color: "#5a3a20" }, { type: "dune", x: 2180, y: 420, r: 30, color: "#5a3a20" },
+        { type: "ruin", x: 1400, y: 540, r: 22, color: "#7a5a3a" }, { type: "ruin", x: 1560, y: 880, r: 22, color: "#7a5a3a" },
+        { type: "well", x: 1980, y: 540, r: 16, color: "#5a7090" }
+      ],
+      landmarkLabels: [{ text: "商队驿站", x: 150, y: 1255 }, { text: "蝎王枯井", x: 1980, y: 700 }],
+      monsterTypes: [
+        { name: "赤砂蝎", color: "#c08a4a", hp: 540, attack: 78, defense: 30, exp: 220, gold: 38, radius: 18 },
+        { name: "沙虫", color: "#9a7a4a", hp: 620, attack: 70, defense: 22, exp: 240, gold: 36, radius: 22 },
+        { name: "沙盗斥候", color: "#8a5a3a", hp: 480, attack: 92, defense: 18, exp: 260, gold: 48, radius: 16 },
+        { name: "枯骨游魂", color: "#9ab0a0", hp: 560, attack: 84, defense: 16, exp: 250, gold: 42, radius: 18 }
+      ],
+      monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 540, 2], [780, 1080, 3], [1100, 280, 0], [2080, 980, 1]],
+      boss: { id: "boss-desert", name: "沙蝎王", color: "#d09050", hp: 10000, attack: 112, defense: 60, exp: 2400, gold: 1100, radius: 40, x: 2080, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 4.5, specialKind: "sting", poisonStacks: true },
+      drops: [
+        { name: "蝎尾匕首", slot: "weapon", quality: "orange", glyph: "匕", power: 56, value: 280, color: "#e7b36b", desc: "攻击 56 · 暴击 +6% · 沙蝎王掉落" },
+        { name: "沙漠之星", slot: "neck", quality: "orange", glyph: "玉", power: 48, value: 240, color: "#e7b36b", desc: "生命 +160 · 毒抗 +12%" },
+        { name: "游牧皮靴", slot: "boots", quality: "purple", glyph: "靴", power: 36, value: 130, color: "#a88ce3", desc: "防御 +30 · 移速 +8" },
+        { name: "蝎王毒腺", slot: "material", quality: "orange", glyph: "核", power: 0, value: 320, color: "#e7b36b", desc: "橙装铸魂材料 · 可交易" }
+      ],
+      exits: [
+        { x: 20, y: 540, w: 50, h: 360, target: "black_rock_mine", spawn: { x: 2280, y: 760 }, label: "黑岩矿坑", sub: "Lv.15-28" }
+      ]
+    }
+  };
 
-  const LOOT_TABLE = [
-    { name: "矿道旧刃", slot: "weapon", quality: "blue", glyph: "刀", power: 12, value: 22, color: "#78b6ec", desc: "攻击 12 · 破甲斩伤害 +3%" },
-    { name: "灰烬护符", slot: "neck", quality: "purple", glyph: "玉", power: 18, value: 46, color: "#a88ce3", desc: "生命 +45 · 一刀充能 +4%" },
-    { name: "矿脉战靴", slot: "boots", quality: "blue", glyph: "靴", power: 9, value: 28, color: "#78b6ec", desc: "防御 +8 · 移速 +4" },
-    { name: "裂碑余烬", slot: "material", quality: "orange", glyph: "核", power: 0, value: 120, color: "#e7b36b", desc: "首领铸魂材料 · 可交易" }
-  ];
+  const MAP_ORDER = ["ash_outskirts", "pine_forest", "black_rock_mine", "red_sand_desert"];
 
   let state = null;
   let dpr = 1;
@@ -58,6 +197,7 @@
   let pointer = { x: 0, y: 0, down: false };
   let moveTarget = null;
   let toastTimer = null;
+  let pendingTravel = null;
 
   const $ = (id) => document.getElementById(id);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -66,30 +206,59 @@
   const pick = (array) => array[Math.floor(Math.random() * array.length)];
   const formatNumber = (value) => Math.floor(value).toLocaleString("zh-CN");
 
+  function activeMap() { return MAPS[state.currentMapId]; }
+  function activeHero() { return CLASSES[state.classId]; }
+
   function createState(classId) {
     const hero = CLASSES[classId];
     return {
       classId,
-      player: { x: 480, y: 780, hp: hero.hp, resource: hero.resource * .68, level: 1, exp: 0, nextExp: 120, gold: 40, marks: 0, charge: 0, potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0], targetId: null, equipment: { weapon: null, neck: null, boots: null } },
-      entities: createEntities(),
+      currentMapId: "ash_outskirts",
+      player: { x: 480, y: 780, hp: hero.hp, resource: hero.resource * .68, level: 1, exp: 0, nextExp: 120, gold: 40, marks: 0, charge: 0, potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0], targetId: null, equipment: { weapon: null, neck: null, boots: null }, poison: 0, visitedMaps: { ash_outskirts: true } },
+      entities: [],
       drops: [], particles: [], texts: [], logs: [],
-      boss: { id: "boss-1", active: true, defeated: false, respawn: 0 },
+      boss: { active: true, defeated: false, respawn: 0 },
       startedAt: Date.now(),
-      quest: { kills: 0, need: 8, completed: false }
+      quest: { kills: 0, need: 8, completed: false },
+      hazards: []
     };
   }
 
-  function createEntities() {
+  function createEntities(map) {
     const result = [];
-    const points = [
-      [820, 560], [1010, 700], [1180, 510], [1360, 820], [1550, 610], [1740, 510], [1930, 690], [2100, 850], [920, 1040], [1140, 1120], [1430, 1040], [1700, 1060], [2010, 1110], [690, 1140], [1510, 420], [1880, 390]
-    ];
-    points.forEach((point, index) => {
-      const type = MONSTER_TYPES[index % MONSTER_TYPES.length];
-      result.push({ id: `mob-${index}`, ...type, x: point[0], y: point[1], maxHp: type.hp, respawn: 0, alive: true, hitFlash: 0, wander: Math.random() * 6 });
+    map.monsterSpawns.forEach((spawn, index) => {
+      const type = map.monsterTypes[spawn[2]];
+      result.push({ id: `mob-${index}`, ...type, x: spawn[0], y: spawn[1], maxHp: type.hp, respawn: 0, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
     });
-    result.push({ id: "boss-1", name: "裂碑领主", color: "#e99b5f", hp: 2100, maxHp: 2100, attack: 36, defense: 18, exp: 480, gold: 260, radius: 34, x: 1980, y: 760, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0 });
+    const b = map.boss;
+    result.push({ id: b.id, name: b.name, color: b.color, hp: b.hp, maxHp: b.hp, attack: b.attack, defense: b.defense, exp: b.exp, gold: b.gold, radius: b.radius, x: b.x, y: b.y, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0, phaseTimer: 0, specialTimer: b.specialInterval, summonTimer: b.summonInterval || 0 });
     return result;
+  }
+
+  function loadMap(mapId, spawnX, spawnY, silent) {
+    const map = MAPS[mapId];
+    const fromMap = state.currentMapId;
+    state.currentMapId = mapId;
+    state.player.x = spawnX;
+    state.player.y = spawnY;
+    state.player.targetId = null;
+    state.player.invulnerable = 3;
+    state.player.poison = 0;
+    moveTarget = null;
+    state.entities = createEntities(map);
+    state.drops = [];
+    state.particles = [];
+    state.texts = [];
+    state.hazards = [];
+    state.boss = { active: true, defeated: false, respawn: 0 };
+    state.quest = { kills: 0, need: map.id === "ash_outskirts" ? 8 : 10, completed: false };
+    state.player.visitedMaps[mapId] = true;
+    if (!silent) {
+      log(`进入 <b>${map.name} · ${map.subtitle}</b>：推荐等级 Lv.${map.levelMin}-${map.levelMax}，${map.dangerLabel}。`, "loot");
+      showToast(`${map.name} · ${map.subtitle}（Lv.${map.levelMin}-${map.levelMax}）`);
+      if (map.danger === "danger" || map.danger === "desolate") log(`本区为<b style="color:#ee9b91">危险区</b>：实际游戏会按规则结算 PK 爆装，本原型仅作地图切换演示。`, "warn");
+    }
+    renderAll();
   }
 
   function resizeCanvas() {
@@ -108,14 +277,16 @@
   }
 
   function getViewScale() {
+    const map = activeMap();
     return Math.min(canvas.clientWidth / 940, canvas.clientHeight / 590);
   }
 
   function getCamera() {
+    const map = activeMap();
     const scale = getViewScale();
     const halfW = canvas.clientWidth / scale / 2;
     const halfH = canvas.clientHeight / scale / 2;
-    return { x: clamp(state.player.x - halfW, 0, WORLD.width - halfW * 2), y: clamp(state.player.y - halfH, 0, WORLD.height - halfH * 2) };
+    return { x: clamp(state.player.x - halfW, 0, map.width - halfW * 2), y: clamp(state.player.y - halfH, 0, map.height - halfH * 2) };
   }
 
   function showToast(message) {
@@ -142,14 +313,14 @@
 
   function chooseClass(classId) {
     state = createState(classId);
+    loadMap("ash_outskirts", 480, 780, true);
     $("classModal").classList.add("hidden");
     log(`你选择了 <b>${CLASSES[classId].name}</b>，矿道深处传来石碑碎裂声。`);
     log("短目标：击败 8 只矿道怪物，找到第一件可用装备。", "loot");
+    log("地图右侧的<b>发光出口</b>可前往<b>雾松林</b>，沿线路探索 4 张首发地图。", "loot");
     showToast("出城后会自动记录目标，点击怪物即可锁定");
     renderAll();
   }
-
-  function activeHero() { return CLASSES[state.classId]; }
 
   function findTarget() {
     if (state.player.targetId) {
@@ -163,7 +334,7 @@
     state.player.targetId = entity ? entity.id : null;
     moveTarget = null;
     if (entity) {
-      log(`锁定目标：<b>${entity.name}</b>${entity.boss ? "，贡献按五类行为统计" : ""}`);
+      log(`锁定目标：<b>${entity.name}</b>${entity.boss ? ` · 阶段 ${entity.phase}/${activeMap().boss.phases}` : ""}`);
       showToast(`${entity.name} 已锁定，按 J 或点击普攻攻击`);
     }
     renderTarget();
@@ -230,7 +401,7 @@
     if (distance(state.player, target) > skill.range) { moveTarget = { x: target.x, y: target.y }; showToast(`正在进入 ${skill.name} 的施法距离`); return; }
     state.player.resource -= skill.cost;
     state.player.cooldowns[index] = skill.cd;
-    if (skill.kind === "召唤") { log("骨卫在矿道中现身，接下来 12 秒会协助攻击。", "loot"); state.player.charge = clamp(state.player.charge + 12, 0, 100); }
+    if (skill.kind === "召唤") { log("骨卫在场景中现身，接下来 12 秒会协助攻击。", "loot"); state.player.charge = clamp(state.player.charge + 12, 0, 100); }
     if (skill.kind === "范围") {
       nearestTargets(skill.range, 5).forEach((entity) => resolveDamage(entity, skill.damage, skill.name, skill.kind));
     } else resolveDamage(target, skill.damage, skill.name, skill.kind);
@@ -264,7 +435,8 @@
     state.player.charge = clamp(state.player.charge + (target.boss ? 32 : 12), 0, 100);
     if (target.boss) {
       state.player.marks += 35;
-      log(`<b>首领击破</b>：裂碑领主倒下，个人获得 35 首领印记。`, "loot");
+      const map = activeMap();
+      log(`<b>首领击破</b>：${target.name} 倒下，个人获得 35 首领印记。`, "loot");
       showToast("首领结算完成：贡献快照已锁定");
       state.boss.defeated = true;
     } else log(`${target.name} 被击败，获得 ${expGain} 经验与 ${target.gold} 金币。`);
@@ -279,7 +451,8 @@
   }
 
   function spawnDrop(source) {
-    const item = { ...pick(LOOT_TABLE), id: `item-${Date.now()}-${Math.random()}`, x: source.x + rand(-22, 22), y: source.y + rand(-18, 18), source: source.name };
+    const map = activeMap();
+    const item = { ...pick(map.drops), id: `item-${Date.now()}-${Math.random()}`, x: source.x + rand(-22, 22), y: source.y + rand(-18, 18), source: source.name };
     state.drops.push(item);
     log(`${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，靠近后按 F 拾取。`, "loot");
   }
@@ -304,10 +477,10 @@
 
   function levelCheck() {
     const hero = activeHero();
-    while (state.player.exp >= state.player.nextExp && state.player.level < 10) {
-      state.player.exp -= state.player.nextExp; state.player.level += 1; state.player.nextExp = Math.round(state.player.nextExp * 1.24);
+    while (state.player.exp >= state.player.nextExp && state.player.level < 30) {
+      state.player.exp -= state.player.nextExp; state.player.level += 1; state.player.nextExp = Math.round(state.player.nextExp * 1.22);
       state.player.hp = hero.hp + equipmentHp(); state.player.resource = hero.resource;
-      log(`<b>等级提升</b>：你已达到 Lv.${state.player.level}，新的技能和地图目标正在解锁。`, "loot");
+      log(`<b>等级提升</b>：你已达到 Lv.${state.player.level}，新的地图和装备目标正在解锁。`, "loot");
       showToast(`升级成功：Lv.${state.player.level}`);
     }
   }
@@ -315,34 +488,171 @@
   function playerDamage(dt) {
     if (state.player.invulnerable > 0) return;
     const attacker = state.entities.filter((entity) => entity.alive && distance(state.player, entity) < entity.radius + 70).sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
-    if (!attacker || Math.random() > dt * (attacker.boss ? .6 : .32)) return;
-    const amount = Math.max(1, Math.round(attacker.attack * (1 - activeHero().defense / (activeHero().defense + 100))));
-    state.player.hp = Math.max(0, state.player.hp - amount);
-    textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13); spark(state.player.x, state.player.y, "#f16d66", 4);
+    if (attacker && Math.random() <= dt * (attacker.boss ? .6 : .32)) {
+      const amount = Math.max(1, Math.round(attacker.attack * (1 - activeHero().defense / (activeHero().defense + 100))));
+      state.player.hp = Math.max(0, state.player.hp - amount);
+      textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13); spark(state.player.x, state.player.y, "#f16d66", 4);
+      if (activeMap().boss.poisonStacks && attacker.boss) {
+        state.player.poison = clamp(state.player.poison + 1, 0, 5);
+        if (state.player.poison >= 5) showToast("毒层已满，靠近水井净化");
+      }
+    }
+    // 危险区地面危险区伤害（BOSS阶段二以上）
+    state.hazards.forEach((h) => {
+      if (h.snap) return;
+      h.life -= dt;
+      if (h.life <= 0) {
+        h.snap = true;
+        if (distance(state.player, h) < h.r) {
+          const amount = Math.max(1, Math.round(h.damage * (1 - activeHero().defense / (activeHero().defense + 100))));
+          state.player.hp = Math.max(0, state.player.hp - amount);
+          textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
+          spark(state.player.x, state.player.y, "#f16d66", 6);
+        }
+      }
+    });
+    state.hazards = state.hazards.filter((h) => !h.snap || h.fade > 0);
+    state.hazards.forEach((h) => { if (h.snap) h.fade -= dt; });
+    // 中毒持续伤害
+    if (state.player.poison > 0) {
+      state.player.poisonTimer = (state.player.poisonTimer || 0) - dt;
+      if (state.player.poisonTimer <= 0) {
+        state.player.poisonTimer = 1.2;
+        const amount = state.player.poison * 4;
+        state.player.hp = Math.max(0, state.player.hp - amount);
+        textAt(`-${amount}`, state.player.x, state.player.y - 30, "#a88ce3", 12);
+      }
+      // 在水井旁净化
+      const map = activeMap();
+      if (map.id === "red_sand_desert") {
+        const nearWell = map.landmarks.some((l) => l.type === "well" && distance(state.player, l) < 60);
+        if (nearWell && state.player.poison > 0) {
+          state.player.poison = Math.max(0, state.player.poison - 1);
+          textAt("净化", state.player.x, state.player.y - 40, "#5a7090", 14);
+        }
+      }
+    }
     if (state.player.hp <= 0) die();
   }
 
   function die() {
-    state.player.hp = Math.round((activeHero().hp + equipmentHp()) * .55); state.player.resource = activeHero().resource * .45; state.player.x = 480; state.player.y = 780; state.player.invulnerable = 3; state.player.targetId = null; moveTarget = null;
-    log("<b>你在野外倒下</b>，本原型保留成长资产，实际游戏会按区域与名字状态结算爆装。", "warn"); showToast("已在灰烬村复活：重新整理状态后再出发");
+    state.player.hp = Math.round((activeHero().hp + equipmentHp()) * .55); state.player.resource = activeHero().resource * .45; state.player.x = 480; state.player.y = 780; state.player.invulnerable = 3; state.player.targetId = null; state.player.poison = 0; moveTarget = null;
+    log("<b>你在野外倒下</b>，已传送回灰烬村。本原型保留成长资产，实际游戏会按区域与名字状态结算爆装。", "warn"); showToast("已在灰烬村复活：重新整理状态后再出发");
+    if (state.currentMapId !== "ash_outskirts") loadMap("ash_outskirts", 480, 780, true);
   }
 
   function movePlayer(dt) {
     const hero = activeHero();
+    const map = activeMap();
     let dx = 0, dy = 0;
     if (keys.w || keys.ArrowUp) dy -= 1; if (keys.s || keys.ArrowDown) dy += 1; if (keys.a || keys.ArrowLeft) dx -= 1; if (keys.d || keys.ArrowRight) dx += 1;
     if (!dx && !dy && moveTarget) { dx = moveTarget.x - state.player.x; dy = moveTarget.y - state.player.y; if (Math.hypot(dx, dy) < 8) moveTarget = null; }
     const length = Math.hypot(dx, dy) || 1; if (dx || dy) { state.player.x += (dx / length) * hero.speed * dt; state.player.y += (dy / length) * hero.speed * dt; }
-    state.player.x = clamp(state.player.x, 55, WORLD.width - 55); state.player.y = clamp(state.player.y, 55, WORLD.height - 55);
+    state.player.x = clamp(state.player.x, 55, map.width - 55); state.player.y = clamp(state.player.y, 55, map.height - 55);
+    // 出口触发
+    map.exits.forEach((exit) => {
+      if (state.player.x >= exit.x && state.player.x <= exit.x + exit.w && state.player.y >= exit.y && state.player.y <= exit.y + exit.h) {
+        tryTravel(exit);
+      }
+    });
+  }
+
+  function tryTravel(exit) {
+    if (pendingTravel && pendingTravel.target === exit.target) return;
+    const target = MAPS[exit.target];
+    if (state.player.level < target.levelMin - 2) {
+      pendingTravel = exit;
+      const ok = window.confirm(`即将进入 ${target.name}（推荐 Lv.${target.levelMin}-${target.levelMax}），你当前 Lv.${state.player.level}。\n危险等级：${target.dangerLabel}\n是否仍要进入？`);
+      pendingTravel = null;
+      if (!ok) {
+        // 把玩家弹回安全方向
+        state.player.x = Math.max(60, exit.x - 80);
+        showToast("已取消进入");
+        return;
+      }
+    }
+    log(`通过出口前往 <b>${target.name}</b>……`, "loot");
+    loadMap(exit.target, exit.spawn.x, exit.spawn.y);
   }
 
   function updateEntities(dt) {
+    const map = activeMap();
     state.entities.forEach((entity) => {
       entity.hitFlash = Math.max(0, entity.hitFlash - dt);
-      if (!entity.alive) { entity.respawn -= dt; if (entity.respawn <= 0) { entity.alive = true; entity.hp = entity.maxHp; if (entity.boss) { state.boss.defeated = false; log("<b>首领情报</b>：裂碑领主重新进入矿道深处。", "warn"); } } return; }
-      if (!entity.boss) { entity.wander += dt; const drift = Math.sin(entity.wander * .7) * 3; entity.x = clamp(entity.x + drift * dt, 90, WORLD.width - 90); }
-      if (entity.boss) { entity.phase = entity.hp < entity.maxHp * .55 ? 2 : 1; }
+      if (!entity.alive) {
+        entity.respawn -= dt;
+        if (entity.respawn <= 0) { entity.alive = true; entity.hp = entity.maxHp; if (entity.boss) { state.boss.defeated = false; entity.phase = 1; entity.specialTimer = map.boss.specialInterval; entity.summonTimer = map.boss.summonInterval || 0; log(`<b>首领情报</b>：${entity.name} 重新进入场景。`, "warn"); } }
+        return;
+      }
+      if (!entity.boss) { entity.wander += dt; const drift = Math.sin(entity.wander * .7) * 3; entity.x = clamp(entity.x + drift * dt, 90, map.width - 90); }
+      if (entity.boss) updateBoss(entity, dt);
     });
+  }
+
+  function updateBoss(boss, dt) {
+    const map = activeMap();
+    const hpRatio = boss.hp / boss.maxHp;
+    const def = map.boss;
+    let newPhase = 1;
+    if (def.phases >= 3) {
+      newPhase = hpRatio > def.phase1Trigger ? 1 : (hpRatio > def.phase2Trigger ? 2 : 3);
+    } else if (def.phases === 2) {
+      newPhase = hpRatio > def.phase1Trigger ? 1 : 2;
+    }
+    if (newPhase !== boss.phase) {
+      boss.phase = newPhase;
+      const phaseName = def.phases >= 3 ? (newPhase === 2 ? "地裂逼迫移动" : "吞噬技能书幻影") : (map.id === "pine_forest" ? "落木狂暴" : map.id === "red_sand_desert" ? "水井净化" : "狂暴");
+      log(`<b>${boss.name}</b> 进入阶段 ${newPhase}：${phaseName}。`, "warn");
+      showToast(`${boss.name} 阶段 ${newPhase}：${phaseName}`);
+      spark(boss.x, boss.y, "#e7b36b", 24);
+    }
+    // 召唤腐工（坑道尸皇阶段1）
+    if (def.summonMob !== undefined && boss.phase === 1) {
+      boss.summonTimer -= dt;
+      if (boss.summonTimer <= 0) {
+        boss.summonTimer = def.summonInterval;
+        const aliveMobs = state.entities.filter((e) => e.alive && !e.boss).length;
+        if (aliveMobs < def.summonMax + 8) {
+          const type = map.monsterTypes[def.summonMob];
+          const id = `summon-${Date.now()}-${Math.random()}`;
+          state.entities.push({ id, ...type, x: boss.x + rand(-80, 80), y: boss.y + rand(-60, 60), maxHp: type.hp, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
+          log(`<b>${boss.name}</b> 召唤了一只 ${type.name}。`, "warn");
+          spark(boss.x + 60, boss.y, "#7a5a3a", 8);
+        }
+      }
+    }
+    // 危险区技能
+    boss.specialTimer -= dt;
+    if (boss.specialTimer <= 0 && boss.phase >= 2) {
+      boss.specialTimer = Math.max(2, def.specialInterval - boss.phase * 0.8);
+      spawnHazard(boss);
+    }
+  }
+
+  function spawnHazard(boss) {
+    const map = activeMap();
+    const def = map.boss;
+    const radius = def.specialKind === "logs" ? 50 : def.specialKind === "devour" ? 70 : 55;
+    const damage = Math.round(boss.attack * 1.4);
+    let target;
+    if (def.specialKind === "logs") {
+      // 森林巨猿：在玩家附近随机落木
+      target = { x: state.player.x + rand(-100, 100), y: state.player.y + rand(-100, 100) };
+    } else if (def.specialKind === "sting") {
+      // 沙蝎王：尾刺方向
+      target = { x: state.player.x, y: state.player.y };
+    } else {
+      // 坑道尸皇：地裂/吞噬在前方
+      const angle = rand(0, Math.PI * 2);
+      target = { x: boss.x + Math.cos(angle) * rand(80, 200), y: boss.y + Math.sin(angle) * rand(80, 200) };
+    }
+    target.r = radius;
+    target.life = 1.2;
+    target.snap = false;
+    target.fade = 0.5;
+    target.damage = damage;
+    state.hazards.push(target);
+    if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
   }
 
   function update(dt) {
@@ -360,44 +670,103 @@
   function roundedRect(x, y, width, height, radius) { ctx.beginPath(); ctx.roundRect(x, y, width, height, radius); }
 
   function drawWorld() {
+    const map = activeMap();
     const scale = getViewScale(); const view = getCamera(); const width = canvas.clientWidth / scale; const height = canvas.clientHeight / scale;
     ctx.save(); ctx.scale(scale, scale); ctx.translate(-view.x, -view.y);
     ctx.fillStyle = "#1a2c23"; ctx.fillRect(view.x, view.y, width, height);
-    // Ground bands and the mining road create readable navigation without relying on a texture.
-    ctx.fillStyle = "#21362a"; ctx.fillRect(0, 0, WORLD.width, WORLD.height);
-    ctx.strokeStyle = "rgba(173, 147, 90, .12)"; ctx.lineWidth = 70; ctx.beginPath(); ctx.moveTo(240, 1120); ctx.bezierCurveTo(780, 1040, 870, 760, 1270, 790); ctx.bezierCurveTo(1620, 820, 1650, 500, 2190, 330); ctx.stroke();
-    ctx.strokeStyle = "rgba(232, 206, 139, .15)"; ctx.lineWidth = 30; ctx.beginPath(); ctx.moveTo(240, 1120); ctx.bezierCurveTo(780, 1040, 870, 760, 1270, 790); ctx.bezierCurveTo(1620, 820, 1650, 500, 2190, 330); ctx.stroke();
-    // Town perimeter, mine entrance and water line.
-    ctx.fillStyle = "rgba(98, 213, 198, .08)"; ctx.fillRect(150, 950, 360, 300); ctx.strokeStyle = "rgba(98, 213, 198, .22)"; ctx.lineWidth = 3; ctx.strokeRect(150, 950, 360, 300);
-    ctx.fillStyle = "rgba(34, 64, 65, .42)"; ctx.fillRect(1760, 230, 440, 370); ctx.strokeStyle = "rgba(231, 179, 107, .22)"; ctx.strokeRect(1760, 230, 440, 370);
-    ctx.strokeStyle = "rgba(114, 173, 178, .16)"; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(20, 300); ctx.bezierCurveTo(500, 420, 680, 250, 1050, 390); ctx.bezierCurveTo(1470, 550, 1660, 210, 2390, 280); ctx.stroke();
-    // Grid gives the scene a deliberate tactical quality.
-    ctx.strokeStyle = "rgba(205, 219, 183, .035)"; ctx.lineWidth = 1; for (let x = 0; x < WORLD.width; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.height); ctx.stroke(); } for (let y = 0; y < WORLD.height; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD.width, y); ctx.stroke(); }
-    drawLandmarks();
+    const p = map.palette;
+    ctx.fillStyle = p.ground; ctx.fillRect(0, 0, map.width, map.height);
+    // 道路
+    ctx.strokeStyle = p.road; ctx.lineWidth = 70; map.paths.forEach((path) => { ctx.beginPath(); ctx.moveTo(path[0], path[1]); ctx.bezierCurveTo(path[2], path[3], path[4], path[5], path[6], path[7]); if (path[8] !== undefined) ctx.bezierCurveTo(path[8], path[9], path[10], path[11], path[12], path[13]); ctx.stroke(); });
+    ctx.strokeStyle = p.roadHi; ctx.lineWidth = 30; map.paths.forEach((path) => { ctx.beginPath(); ctx.moveTo(path[0], path[1]); ctx.bezierCurveTo(path[2], path[3], path[4], path[5], path[6], path[7]); if (path[8] !== undefined) ctx.bezierCurveTo(path[8], path[9], path[10], path[11], path[12], path[13]); ctx.stroke(); });
+    // 城镇与特殊区
+    if (map.townRect) { ctx.fillStyle = p.town; ctx.fillRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); ctx.strokeStyle = p.townBorder; ctx.lineWidth = 3; ctx.strokeRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); }
+    if (map.specialRect) { ctx.fillStyle = p.special; ctx.fillRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); ctx.strokeStyle = p.specialBorder; ctx.strokeRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); }
+    // 水道
+    ctx.strokeStyle = p.water; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(20, 300); ctx.bezierCurveTo(500, 420, 680, 250, 1050, 390); ctx.bezierCurveTo(1470, 550, 1660, 210, map.width - 10, 280); ctx.stroke();
+    // 网格
+    ctx.strokeStyle = p.grid; ctx.lineWidth = 1; for (let x = 0; x < map.width; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, map.height); ctx.stroke(); } for (let y = 0; y < map.height; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(map.width, y); ctx.stroke(); }
+    drawLandmarks(map);
+    drawExits(map);
+    drawHazards();
     state.drops.forEach(drawDrop); state.entities.filter((entity) => entity.alive).forEach(drawEntity); drawPlayer(); state.particles.forEach(drawParticle); state.texts.forEach(drawText);
     if (moveTarget) { ctx.strokeStyle = "rgba(98, 213, 198, .7)"; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.arc(moveTarget.x, moveTarget.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
     ctx.restore();
   }
 
-  function drawLandmarks() {
+  function drawLandmarks(map) {
     ctx.save();
-    [[218, 1016], [282, 1100], [388, 1060], [1870, 326], [2020, 394], [2150, 310]].forEach(([x, y], index) => { ctx.fillStyle = index < 3 ? "#4b6b55" : "#354d4c"; ctx.beginPath(); ctx.arc(x, y, index < 3 ? 18 : 25, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "rgba(236, 202, 134, .35)"; ctx.fillRect(x - 3, y - 28, 6, 13); });
-    ctx.fillStyle = "rgba(231, 179, 107, .55)"; ctx.font = "12px Georgia"; ctx.fillText("村口篝火", 214, 1190); ctx.fillText("裂碑矿道", 1908, 565);
+    map.landmarks.forEach((l) => {
+      ctx.fillStyle = l.color; ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2); ctx.fill();
+      if (l.type === "tower" || l.type === "tree" || l.type === "beam" || l.type === "dune" || l.type === "ruin") { ctx.fillStyle = "rgba(236, 202, 134, .35)"; ctx.fillRect(l.x - 3, l.y - l.r - 15, 6, 13); }
+      if (l.type === "lantern") { ctx.fillStyle = "rgba(255, 180, 90, .65)"; ctx.beginPath(); ctx.arc(l.x, l.y, l.r + 6, 0, Math.PI * 2); ctx.fill(); }
+      if (l.type === "well") { ctx.fillStyle = "rgba(120, 160, 200, .55)"; ctx.beginPath(); ctx.arc(l.x, l.y, l.r - 4, 0, Math.PI * 2); ctx.fill(); }
+    });
+    ctx.fillStyle = "rgba(231, 179, 107, .55)"; ctx.font = "12px Georgia";
+    map.landmarkLabels.forEach((l) => ctx.fillText(l.text, l.x, l.y));
+    ctx.restore();
+  }
+
+  function drawExits(map) {
+    ctx.save();
+    map.exits.forEach((exit) => {
+      const target = MAPS[exit.target];
+      const pulse = 0.4 + Math.sin(Date.now() / 400) * 0.2;
+      ctx.fillStyle = `rgba(98, 213, 198, ${pulse * 0.35})`;
+      ctx.fillRect(exit.x, exit.y, exit.w, exit.h);
+      ctx.strokeStyle = `rgba(98, 213, 198, ${0.5 + pulse * 0.3})`;
+      ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.strokeRect(exit.x, exit.y, exit.w, exit.h); ctx.setLineDash([]);
+      // 标签
+      ctx.fillStyle = "rgba(9, 16, 19, .8)";
+      const labelW = 110, labelH = 38;
+      const lx = exit.x + exit.w / 2 - labelW / 2;
+      const ly = exit.y + exit.h / 2 - labelH / 2;
+      roundedRect(lx, ly, labelW, labelH, 4); ctx.fill();
+      ctx.strokeStyle = "rgba(98, 213, 198, .5)"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#62d5c6"; ctx.font = "600 12px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`→ ${exit.label}`, exit.x + exit.w / 2, ly + 16);
+      ctx.fillStyle = "#8d9ca0"; ctx.font = "10px sans-serif";
+      ctx.fillText(exit.sub, exit.x + exit.w / 2, ly + 30);
+      ctx.textAlign = "start";
+    });
+    ctx.restore();
+  }
+
+  function drawHazards() {
+    ctx.save();
+    state.hazards.forEach((h) => {
+      const alpha = h.snap ? Math.max(0, h.fade * 2) : (1.2 - h.life) / 1.2;
+      if (h.snap) {
+        // 爆发瞬间
+        ctx.fillStyle = `rgba(241, 109, 102, ${alpha * 0.7})`;
+        ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(255, 200, 100, ${alpha})`; ctx.lineWidth = 3; ctx.stroke();
+      } else {
+        // 蓄力预警
+        ctx.fillStyle = `rgba(241, 109, 102, ${alpha * 0.25})`;
+        ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(241, 109, 102, ${alpha * 0.8})`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+        // 倒计时圆环
+        const progress = h.life / 1.2;
+        ctx.strokeStyle = `rgba(255, 180, 90, ${alpha})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(h.x, h.y, h.r - 4, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2); ctx.stroke();
+      }
+    });
     ctx.restore();
   }
 
   function drawEntity(entity) {
     ctx.save(); const selected = entity.id === state.player.targetId; const scale = entity.boss ? 1.22 : 1; if (selected) { ctx.strokeStyle = activeHero().color; ctx.globalAlpha = .8; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius + 9, 0, Math.PI * 2); ctx.stroke(); } if (entity.hitFlash > 0) ctx.globalAlpha = .45;
-    ctx.fillStyle = entity.boss ? "#bf654f" : entity.color; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)"; ctx.beginPath(); ctx.arc(entity.x - entity.radius * .28, entity.y - entity.radius * .3, entity.boss ? 6 : 4, 0, Math.PI * 2); ctx.fill(); if (entity.boss) { ctx.strokeStyle = "rgba(241, 109, 102, .65)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius * scale + 8, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = entity.boss ? entity.color : entity.color; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)"; ctx.beginPath(); ctx.arc(entity.x - entity.radius * .28, entity.y - entity.radius * .3, entity.boss ? 6 : 4, 0, Math.PI * 2); ctx.fill(); if (entity.boss) { ctx.strokeStyle = "rgba(241, 109, 102, .65)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius * scale + 8, 0, Math.PI * 2); ctx.stroke(); if (entity.phase >= 2) { ctx.strokeStyle = "rgba(255, 180, 90, .8)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(entity.x, entity.y, entity.radius * scale + 14, 0, Math.PI * 2); ctx.stroke(); } }
     ctx.restore(); drawNameplate(entity);
   }
 
   function drawNameplate(entity) {
-    const width = entity.boss ? 134 : 92; const left = entity.x - width / 2; const top = entity.y - entity.radius - (entity.boss ? 40 : 27); ctx.fillStyle = "rgba(9, 16, 19, .76)"; roundedRect(left, top, width, entity.boss ? 22 : 17, 3); ctx.fill(); ctx.fillStyle = entity.boss ? "#f3b1a8" : "#c7d2cb"; ctx.font = `${entity.boss ? 11 : 9}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(entity.name, entity.x, top + (entity.boss ? 14 : 11)); ctx.fillStyle = "#0c1518"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), width - 14, 3); ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), (width - 14) * (entity.hp / entity.maxHp), 3); ctx.textAlign = "start";
+    const width = entity.boss ? 134 : 92; const left = entity.x - width / 2; const top = entity.y - entity.radius - (entity.boss ? 40 : 27); ctx.fillStyle = "rgba(9, 16, 19, .76)"; roundedRect(left, top, width, entity.boss ? 22 : 17, 3); ctx.fill(); ctx.fillStyle = entity.boss ? "#f3b1a8" : "#c7d2cb"; ctx.font = `${entity.boss ? 11 : 9}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(entity.name + (entity.boss ? ` · P${entity.phase}` : ""), entity.x, top + (entity.boss ? 14 : 11)); ctx.fillStyle = "#0c1518"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), width - 14, 3); ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2"; ctx.fillRect(left + 7, top + (entity.boss ? 25 : 20), (width - 14) * (entity.hp / entity.maxHp), 3); ctx.textAlign = "start";
   }
 
   function drawDrop(drop) { ctx.save(); ctx.translate(drop.x, drop.y); ctx.rotate(Math.PI / 4); ctx.fillStyle = drop.color; ctx.globalAlpha = .9; ctx.fillRect(-6, -6, 12, 12); ctx.globalAlpha = .28; ctx.fillRect(-11, -11, 22, 22); ctx.restore(); }
-  function drawPlayer() { const hero = activeHero(); ctx.save(); ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? .45 : 1; ctx.fillStyle = hero.color; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#102027"; ctx.beginPath(); ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  function drawPlayer() { const hero = activeHero(); ctx.save(); ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? .45 : 1; ctx.fillStyle = hero.color; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#102027"; ctx.beginPath(); ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2); ctx.fill(); if (state.player.poison > 0) { ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 28, 0, Math.PI * 2); ctx.fill(); } if (state.player.charge >= 100) { ctx.strokeStyle = "#e7b36b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 30, 0, Math.PI * 2); ctx.stroke(); } ctx.restore(); }
   function drawParticle(particle) { ctx.save(); ctx.globalAlpha = clamp(particle.life * 2, 0, 1); ctx.fillStyle = particle.color; ctx.fillRect(particle.x, particle.y, particle.size, particle.size); ctx.restore(); }
   function drawText(text) { ctx.save(); ctx.globalAlpha = clamp(text.life * 2, 0, 1); ctx.fillStyle = text.color; ctx.font = `700 ${text.size}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(text.message, text.x, text.y); ctx.restore(); }
 
@@ -410,20 +779,78 @@
     const questProgress = state.quest.kills / state.quest.need * 100; $("questBar").style.width = `${questProgress}%`; $("questText").textContent = state.quest.completed ? "已完成 · 领取奖励" : `${state.quest.kills} / ${state.quest.need} 击杀`;
   }
 
+  function renderMapHeader() {
+    const map = activeMap();
+    $("mapTitle").textContent = `${map.name} · ${map.subtitle}`;
+    $("mapLevelRange").textContent = `推荐 Lv.${map.levelMin}-${map.levelMax}`;
+    const dangerEl = $("mapDanger");
+    dangerEl.textContent = map.dangerLabel;
+    dangerEl.className = `pill ${map.danger === "safe" ? "safe" : map.danger === "danger" || map.danger === "desolate" ? "danger" : ""}`;
+    // 区域动态
+    const dynamics = [];
+    if (state.boss.defeated) dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(state.boss.respawn)}s 后刷新</span>`);
+    else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${state.entities.find((e) => e.boss)?.phase || 1}</span>`);
+    dynamics.push(`<span class="world-event"><i class="gold"></i> 出口可通往 ${map.exits.map((e) => e.label).join("、")}</span>`);
+    $("mapDynamics").innerHTML = dynamics.join("");
+  }
+
+  function renderRegion() {
+    const map = activeMap();
+    const idx = MAP_ORDER.indexOf(map.id);
+    const html = MAP_ORDER.map((id, i) => {
+      const m = MAPS[id];
+      const isCurrent = id === map.id;
+      const isVisited = state.player.visitedMaps[id];
+      const accessible = Math.abs(i - idx) <= 1;
+      const dangerCls = m.danger === "safe" ? "safe" : m.danger === "danger" || m.danger === "desolate" ? "danger" : "";
+      return `<button class="region-node ${isCurrent ? "current" : ""} ${isVisited ? "visited" : ""} ${accessible ? "accessible" : ""}" data-map-id="${id}" title="${m.name}：推荐 Lv.${m.levelMin}-${m.levelMax}，${m.dangerLabel}${isVisited ? "" : "（未到访）"}">
+        <span class="region-name">${m.name}</span>
+        <span class="region-level">Lv.${m.levelMin}-${m.levelMax}</span>
+        <span class="region-danger ${dangerCls}">${m.dangerLabel}</span>
+      </button>`;
+    }).join("");
+    $("regionList").innerHTML = html;
+    $("regionList").querySelectorAll("[data-map-id]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.mapId;
+        if (id === map.id) return;
+        const target = MAPS[id];
+        const exit = map.exits.find((e) => e.target === id);
+        if (!exit) { showToast(`${target.name} 不相邻，需要先走到相邻地图`); return; }
+        showToast(`${target.name} 在场景边缘的发光出口处，请走到出口触发切换`);
+      });
+    });
+  }
+
   function renderSkills() { const hero = activeHero(); $("skillBar").innerHTML = hero.skills.map((skill, index) => `<button class="skill-button" data-skill="${index}" title="${skill.name} · ${skill.kind}"><span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>${state.player.cooldowns[index] > 0 ? `<span class="cooldown">${Math.ceil(state.player.cooldowns[index])}</span>` : ""}</button>`).join(""); $("skillBar").querySelectorAll("button").forEach((button) => { button.disabled = state.player.cooldowns[Number(button.dataset.skill)] > 0; }); }
 
   function renderEquipment() { const labels = { weapon: "武器", neck: "项链", boots: "靴子" }; $("equipmentGrid").innerHTML = Object.keys(labels).map((slot) => { const item = state.player.equipment[slot]; return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`; }).join(""); }
   function renderInventory() { const inventory = state.inventory || []; $("inventoryCount").textContent = `${inventory.length}/12`; $("inventoryGrid").innerHTML = Array.from({ length: 12 }, (_, index) => { const item = inventory[index]; return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`; }).join(""); $("inventoryGrid").querySelectorAll("[data-item-index]").forEach((button) => { button.addEventListener("click", () => equipItem(inventory[Number(button.dataset.itemIndex)])); }); }
-  function renderBoss() { const boss = state.entities.find((entity) => entity.id === "boss-1"); $("bossAlertText").textContent = boss.alive ? `裂碑领主 · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
-  function renderAll() { if (!state) return; drawWorld(); renderPlayer(); renderTarget(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
+  function renderBoss() { const boss = state.entities.find((entity) => entity.boss); if (!boss) return; $("bossAlertText").textContent = boss.alive ? `${boss.name} · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命 · 阶段 ${boss.phase}/${activeMap().boss.phases}` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
+  function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderRegion(); renderPlayer(); renderTarget(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
 
-  function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, quest: state.quest })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业与装备。", "loot"); }
-  function loadGame() { try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (!saved || !CLASSES[saved.classId]) return false; state = createState(saved.classId); Object.assign(state.player, saved.player); state.player.equipment = saved.equipment || saved.player.equipment || {}; state.inventory = saved.inventory || []; state.quest = saved.quest || state.quest; $("classModal").classList.add("hidden"); log("已恢复本机进度：服务器规则仍以当前版本为准。", "loot"); return true; } catch { return false; } }
+  function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, quest: state.quest })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与所在地图。", "loot"); }
+  function loadGame() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!saved || !CLASSES[saved.classId]) return false;
+      state = createState(saved.classId);
+      Object.assign(state.player, saved.player);
+      state.player.equipment = saved.equipment || saved.player.equipment || {};
+      state.inventory = saved.inventory || [];
+      state.quest = saved.quest || state.quest;
+      const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
+      loadMap(startMap, state.player.x || 480, state.player.y || 780, true);
+      $("classModal").classList.add("hidden");
+      log("已恢复本机进度：服务器规则仍以当前版本为准。", "loot");
+      return true;
+    } catch { return false; }
+  }
   function resetGame() { localStorage.removeItem(STORAGE_KEY); state = null; $("classModal").classList.remove("hidden"); showToast("请选择职业开始新的边境旅程"); }
   function setupClasses() { $("classOptions").innerHTML = Object.entries(CLASSES).map(([id, hero]) => `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`).join(""); $("classOptions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => chooseClass(button.dataset.class))); }
 
   function setupInput() {
-    window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
+    window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const map = activeMap(); if (map.exits[0]) tryTravel(map.exits[0]); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
     canvas.addEventListener("pointerdown", (event) => { pointer.down = true; const point = canvasPoint(event); const target = state?.entities.find((entity) => entity.alive && distance(point, entity) < entity.radius + 22); if (target) selectTarget(target); else moveTarget = point; }); canvas.addEventListener("pointerup", () => { pointer.down = false; });
     $("skillBar").addEventListener("click", (event) => { const button = event.target.closest("[data-skill]"); if (button) castSkill(Number(button.dataset.skill)); }); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
   }
