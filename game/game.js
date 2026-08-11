@@ -535,8 +535,9 @@
     spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
     const dropRolls = target.boss ? 2 : (Math.random() < .42 ? 1 : 0);
     for (let roll = 0; roll < dropRolls; roll += 1) spawnDrop(target, roll);
-    checkMapCompletion();
+    const mapJustCompleted = checkMapCompletion();
     levelCheck();
+    if (mapJustCompleted) autoSaveProgress(activeMap().name);
     state.player.targetId = null;
     moveTarget = null;
   }
@@ -553,7 +554,7 @@
       }
     }
     progress.completed = progress.kills >= progress.need && progress.bossDefeated;
-    if (!progress.completed || progress.completionAnnounced) return;
+    if (!progress.completed || progress.completionAnnounced) return false;
     progress.completionAnnounced = true;
     if (!progress.rewardClaimed) {
       progress.rewardClaimed = true;
@@ -568,6 +569,7 @@
       log("<b>纵向切片完成</b>：四张地图全部通关，沙蝎王已被击败。", "loot");
       showToast("恭喜通关：一刀999 纵向切片完成");
     }
+    return true;
   }
 
   function spawnDrop(source, roll = 0) {
@@ -1180,7 +1182,19 @@
   function renderBoss() { const boss = state.entities.find((entity) => entity.boss); if (!boss) return; $("bossAlertText").textContent = boss.alive ? `${boss.name} · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命 · 阶段 ${boss.phase}/${activeMap().boss.phases}` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
   function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderMapObjective(); renderRegion(); renderPlayer(); renderTarget(); renderNormalAttack(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
 
-  function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, mapProgress: state.mapProgress })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与地图通关状态。", "loot"); }
+  function persistGame() {
+    if (!state) return false;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, mapProgress: state.mapProgress }));
+    return true;
+  }
+
+  function autoSaveProgress(mapName) {
+    if (!persistGame()) return;
+    log(`<b>${mapName}通关进度已自动保存</b>：刷新或任务中断后会从当前地图恢复。`, "loot");
+    showToast(`${mapName}已通关并自动保存`);
+  }
+
+  function saveGame() { if (!persistGame()) return; showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与地图通关状态。", "loot"); }
   function loadGame() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));

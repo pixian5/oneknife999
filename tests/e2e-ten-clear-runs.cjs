@@ -167,6 +167,16 @@ async function clearMap(page, mapId) {
   if (!snap.progress[mapId]?.completed) throw new Error(`${mapId} 未进入完成状态：${JSON.stringify(snap)}`);
 }
 
+async function assertAutoSaveCheckpoint(page, mapId) {
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v2") || "null"));
+  if (!saved?.mapProgress?.[mapId]?.completed) throw new Error(`${mapId} 通关后未自动保存：${JSON.stringify(saved?.mapProgress?.[mapId])}`);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await advance(page, 200);
+  const restored = await snapshot(page);
+  if (restored?.currentMapId !== mapId || !restored.progress?.[mapId]?.completed) throw new Error(`${mapId} 刷新后未恢复通关进度：${JSON.stringify(restored)}`);
+  process.stdout.write(`CHECKPOINT ${mapId} SAVED+RESTORED\n`);
+}
+
 async function runJourney(browser, runIndex) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
@@ -185,6 +195,7 @@ async function runJourney(browser, runIndex) {
   for (let mapIndex = 0; mapIndex < MAP_ORDER.length; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
     await clearMap(page, mapId);
+    await assertAutoSaveCheckpoint(page, mapId);
     if (mapIndex < MAP_ORDER.length - 1) {
       await page.keyboard.press("t");
       await advance(page, 250);
