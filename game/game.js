@@ -327,6 +327,25 @@
       w: 520,
       h: 440
     };
+    const occupied = [start, boss, ...monsterSpawns.map(([x, y]) => ({ x, y }))];
+    const freePoint = (base, minDistance = 120) => {
+      const candidates = [
+        base,
+        { x: base.x + 120, y: base.y - 86 },
+        { x: base.x - 140, y: base.y + 92 },
+        { x: base.x + 166, y: base.y + 118 },
+        { x: base.x - 176, y: base.y - 104 }
+      ];
+      const normalized = candidates.map((point) => ({ x: Math.round(Math.max(410, Math.min(2160, point.x))), y: Math.round(Math.max(120, Math.min(1380, point.y))) }));
+      return normalized.find((point) => occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance)) || normalized[0];
+    };
+    const restPoint = freePoint({ x: path[4], y: path[5] }, 100);
+    occupied.push(restPoint);
+    const cachePoint = freePoint({ x: path[8], y: path[9] }, 120);
+    const tacticalPoints = [
+      { id: `rest-${stageNumber}`, kind: "rest", x: restPoint.x, y: restPoint.y, radius: 62, name: `${chapter.short}前线篝火`, detail: "靠近篝火可恢复生命、资源并净化毒层" },
+      { id: `cache-${stageNumber}`, kind: "resource", x: cachePoint.x, y: cachePoint.y, radius: 70, name: `${chapter.short}秘藏补给箱`, detail: "靠近后按 F 搜索一次，获得药水、金币与首领印记" }
+    ];
     const paths = [path];
     if (site.road === "fork" || site.road === "radial") {
       const forkX = path[6];
@@ -334,7 +353,7 @@
       const edgeY = Math.max(140, Math.min(1360, forkY + (stageNumber % 2 ? 390 : -390)));
       paths.push([forkX, forkY, forkX + 160, forkY, forkX + 260, edgeY, forkX + 430, edgeY, forkX + 560, edgeY, boss.x - 180, boss.y, boss.x, boss.y]);
     }
-    return { townRect, boss, monsterSpawns, paths, landmarks, specialRect, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
+    return { townRect, boss, monsterSpawns, paths, landmarks, specialRect, tacticalPoints, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
   }
 
   function generatedMap(stageNumber) {
@@ -378,6 +397,7 @@
       specialRect: layout.specialRect,
       paths: layout.paths,
       landmarks: layout.landmarks,
+      tacticalPoints: layout.tacticalPoints,
       siteStyle: layout.siteStyle,
       landmarkLabels: [{ text: `${chapter.short}补给营`, x: layout.townRect.x + 70, y: layout.townRect.y + layout.townRect.h + 25 }, { text: `${bossName}领域`, x: layout.boss.x - 80, y: layout.boss.y + 95 }],
       monsterTypes,
@@ -424,6 +444,7 @@
       spawns: map.monsterSpawns,
       paths: map.paths,
       landmarks: map.landmarks.map(({ type, x, y }) => [type, x, y]),
+      tacticalPoints: (map.tacticalPoints || []).map(({ kind, x, y, radius }) => [kind, x, y, radius]),
       site: map.siteStyle?.arena || "handcrafted"
     });
   }
@@ -448,6 +469,12 @@
     map.story ||= storyForStage(index + 1);
     map.levelMin = campaignGrowth(index).level;
     map.levelMax = map.levelMin + 1;
+    if (!map.tacticalPoints) {
+      map.tacticalPoints = [
+        { id: `rest-${map.id}`, kind: "rest", x: map.townRect.x + map.townRect.w + 210, y: map.townRect.y + map.townRect.h / 2, radius: 62, name: "前线篝火", detail: "靠近篝火可恢复生命、资源并净化毒层" },
+        { id: `cache-${map.id}`, kind: "resource", x: Math.max(520, map.boss.x - 280), y: Math.min(1280, map.boss.y + 180), radius: 70, name: "遗落补给箱", detail: "靠近后按 F 搜索一次，获得药水、金币与首领印记" }
+      ];
+    }
     const exits = [];
     if (index > 0) {
       const previous = MAPS[MAP_ORDER[index - 1]];
@@ -630,12 +657,13 @@
   function mapProgress(mapId = state.currentMapId) {
     const rule = MAP_CLEAR_RULES[mapId];
     state.mapProgress ||= {};
-    state.mapProgress[mapId] ||= { kills: 0, need: rule.kills, bossDefeated: false, completed: false, rewardClaimed: false, completionAnnounced: false };
+    state.mapProgress[mapId] ||= { kills: 0, need: rule.kills, bossDefeated: false, completed: false, rewardClaimed: false, completionAnnounced: false, resourceClaimed: false };
     const progress = state.mapProgress[mapId];
     progress.need = rule.kills;
     progress.kills = clamp(Number(progress.kills) || 0, 0, rule.kills);
     progress.bossDefeated = Boolean(progress.bossDefeated);
     progress.completed = progress.kills >= rule.kills && progress.bossDefeated;
+    progress.resourceClaimed = Boolean(progress.resourceClaimed);
     return progress;
   }
 
@@ -940,7 +968,24 @@
 
   function collectDrops() {
     const nearby = state.drops.filter((drop) => distance(state.player, drop) < 85);
-    if (!nearby.length) { showToast("附近没有可拾取物品"); return; }
+    if (!nearby.length) {
+      const cache = (activeMap().tacticalPoints || []).find((point) => point.kind === "resource" && distance(state.player, point) < point.radius);
+      const progress = mapProgress();
+      if (cache && !progress.resourceClaimed) {
+        progress.resourceClaimed = true;
+        const gold = 80 + activeMap().stageNumber * 4;
+        state.player.gold += gold;
+        state.player.potion += 1;
+        state.player.marks += 2;
+        log(`<b>${cache.name}</b>已搜索：生命药水 +1、金币 +${gold}、首领印记 +2。`, "loot");
+        showToast(`${cache.name}已开启，奖励已自动保存`);
+        persistGame();
+        renderAll();
+        return;
+      }
+      showToast(cache ? "秘藏补给箱已被搜索" : "附近没有可拾取物品");
+      return;
+    }
     state.inventory = state.inventory || [];
     let collected = 0;
     nearby.forEach((drop) => {
@@ -1011,6 +1056,10 @@
     return map.id === "red_sand_desert" && map.landmarks.some((landmark) => landmark.type === "well" && distance(state.player, landmark) < 70);
   }
 
+  function nearRestPoint() {
+    return (activeMap().tacticalPoints || []).some((point) => point.kind === "rest" && distance(state.player, point) < point.radius);
+  }
+
   function nearTown() {
     const town = activeMap().townRect;
     return Boolean(town && state.player.x >= town.x + 28 && state.player.x <= town.x + town.w - 28 && state.player.y >= town.y + 28 && state.player.y <= town.y + town.h - 28);
@@ -1019,7 +1068,8 @@
   function playerDamage(dt) {
     if (state.player.invulnerable > 0) return;
     const atWell = nearWaterWell();
-    const atSanctuary = atWell || nearTown();
+    const atRestPoint = nearRestPoint();
+    const atSanctuary = atWell || atRestPoint || nearTown();
     const attacker = state.entities.filter((entity) => entity.alive && distance(state.player, entity) < entity.radius + 70).sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
     if (!atSanctuary && attacker && Math.random() <= dt * (attacker.boss ? .6 : .32)) {
       const amount = Math.max(1, Math.round(attacker.attack * (1 - activeHero().defense / (activeHero().defense + 100))));
@@ -1058,7 +1108,7 @@
     } else if (atSanctuary && state.player.poison > 0) {
       state.player.poison = Math.max(0, state.player.poison - Math.max(1, Math.ceil(dt * (atWell ? 2 : 1))));
       state.player.poisonTimer = 1.2;
-      textAt(atWell ? "净化" : "安全区", state.player.x, state.player.y - 40, atWell ? "#5a7090" : "#62d5c6", 14);
+      textAt(atWell ? "净化" : atRestPoint ? "篝火" : "安全区", state.player.x, state.player.y - 40, atWell ? "#5a7090" : "#62d5c6", 14);
     }
     if (atSanctuary && state.player.hp < playerMaxHp()) {
       state.player.hp = clamp(state.player.hp + Math.max(1, Math.round(playerMaxHp() * .1 * dt)), 0, playerMaxHp());
@@ -1232,6 +1282,7 @@
     if (map.townRect) { ctx.fillStyle = p.town; ctx.fillRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); ctx.strokeStyle = p.townBorder; ctx.lineWidth = 3; ctx.strokeRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); }
     if (map.specialRect) { ctx.fillStyle = p.special; ctx.fillRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); ctx.strokeStyle = p.specialBorder; ctx.strokeRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); }
     drawSiteDetails(map);
+    drawTacticalPoints(map);
     // 水道
     ctx.strokeStyle = p.water; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(20, 300); ctx.bezierCurveTo(500, 420, 680, 250, 1050, 390); ctx.bezierCurveTo(1470, 550, 1660, 210, map.width - 10, 280); ctx.stroke();
     // 网格
@@ -1275,6 +1326,38 @@
     } else if (map.siteStyle.arena === "throne") {
       ring(190); for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 3) post(boss.x + Math.cos(angle) * 170, boss.y + Math.sin(angle) * 170, 24, 82); ctx.strokeRect(boss.x - 55, boss.y - 46, 110, 92);
     }
+    ctx.restore();
+  }
+
+  function drawTacticalPoints(map) {
+    const progress = mapProgress(map.id);
+    const pulse = 0.55 + Math.sin(Date.now() / 520) * 0.18;
+    ctx.save();
+    (map.tacticalPoints || []).forEach((point) => {
+      const claimed = point.kind === "resource" && progress.resourceClaimed;
+      const accent = point.kind === "rest" ? "98, 213, 198" : "231, 179, 107";
+      ctx.globalAlpha = claimed ? .34 : 1;
+      ctx.fillStyle = `rgba(${accent}, ${point.kind === "rest" ? .12 : .16})`;
+      ctx.strokeStyle = `rgba(${accent}, ${point.kind === "rest" ? .48 : pulse})`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(point.kind === "rest" ? [7, 5] : []);
+      ctx.beginPath(); ctx.arc(point.x, point.y, point.kind === "rest" ? 34 : 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.setLineDash([]);
+      if (point.kind === "rest") {
+        ctx.fillStyle = "rgba(98, 213, 198, .78)";
+        ctx.beginPath(); ctx.moveTo(point.x, point.y - 18); ctx.lineTo(point.x - 13, point.y + 10); ctx.lineTo(point.x + 13, point.y + 10); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(231, 179, 107, .9)"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(point.x, point.y + 6); ctx.lineTo(point.x, point.y - 9); ctx.stroke();
+      } else {
+        ctx.fillStyle = claimed ? "rgba(120, 140, 140, .55)" : "rgba(231, 179, 107, .9)";
+        ctx.beginPath(); ctx.moveTo(point.x, point.y - 13); ctx.lineTo(point.x + 15, point.y); ctx.lineTo(point.x, point.y + 13); ctx.lineTo(point.x - 15, point.y); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(35, 45, 47, .8)"; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.fillStyle = claimed ? "rgba(160, 170, 170, .55)" : "rgba(244, 234, 201, .72)";
+      ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(claimed ? `${point.name}（已搜空）` : point.name, point.x, point.y + 49);
+    });
+    ctx.textAlign = "start";
     ctx.restore();
   }
 
@@ -1527,6 +1610,9 @@
     const progress = mapProgress();
     if (!rule.next && progress.completed) dynamics.push(`<span class="world-event ready"><i class="gold"></i> 100/100 通关 · 百图征途完成</span>`);
     else if (rule.next) dynamics.push(`<span class="world-event ${progress.completed ? "ready" : "locked"}"><i class="gold"></i> ${rule.exit}${progress.completed ? `已开启 · 前往 ${MAPS[rule.next].name}` : "未开启 · 完成清怪与首领目标"}</span>`);
+    const restCount = (map.tacticalPoints || []).filter((point) => point.kind === "rest").length;
+    const cache = (map.tacticalPoints || []).find((point) => point.kind === "resource");
+    dynamics.push(`<span class="world-event"><i class="gold"></i> ${restCount} 处篝火 · ${cache && progress.resourceClaimed ? "秘藏已搜空" : "F 搜寻秘藏补给箱"}</span>`);
     $("mapDynamics").innerHTML = dynamics.join("");
   }
 
@@ -1658,7 +1744,7 @@
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
   if (TEST_MODE) {
     window.__ONEKNIFE_E2E__ = {
-      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
+      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, tacticalPoints: (MAPS[id].tacticalPoints || []).map(({ kind, x, y, radius, name, detail }) => ({ kind, x, y, radius, name, detail })), safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
       snapshot: () => state ? JSON.parse(JSON.stringify({
         currentMapId: state.currentMapId,
         stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,

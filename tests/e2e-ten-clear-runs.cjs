@@ -227,6 +227,7 @@ async function runJourney(browser, runIndex) {
   if (new Set(catalog.map((entry) => entry.layoutSignature)).size !== 100) throw new Error("地图实际构图重复");
   if (new Set(catalog.slice(4).map((entry) => entry.siteArchetype)).size !== 10 || catalog.some((entry) => !entry.siteDetail)) throw new Error("地图场所母题缺失");
   if (catalog.slice(4).some((entry) => entry.monsterProfiles.some((monster) => !monster.intro || !Array.isArray(monster.skills) || monster.skills.length < 2 || monster.intro.includes("游荡在当前区域")))) throw new Error("后期普通怪资料缺失");
+  if (catalog.some((entry) => !Array.isArray(entry.tacticalPoints) || entry.tacticalPoints.length !== 2 || entry.tacticalPoints.filter((point) => point.kind === "rest").length !== 1 || entry.tacticalPoints.filter((point) => point.kind === "resource").length !== 1 || entry.tacticalPoints.some((point) => !point.name || !point.detail || point.radius < 50))) throw new Error("地图战术节点缺失或字段不完整");
   const roadRules = { direct: { pathCount: 1 }, fork: { pathCount: 2 }, zigzag: { pathCount: 1, minTurns: 2 }, radial: { pathCount: 2 } };
   for (const entry of catalog.slice(4)) {
     const expected = roadRules[entry.road];
@@ -239,6 +240,16 @@ async function runJourney(browser, runIndex) {
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
   await page.locator(`[data-class="${classId}"]`).click();
   await advance(page, 200);
+
+  const firstMap = catalog.find((entry) => entry.id === MAP_ORDER[0]);
+  const cache = firstMap.tacticalPoints.find((point) => point.kind === "resource");
+  if (!await moveToPoint(page, cache, MAP_ORDER[0], 48)) throw new Error("无法抵达首张地图秘藏补给箱");
+  await page.keyboard.press("f");
+  await advance(page, 160);
+  const cacheSnapshot = await snapshot(page);
+  if (!cacheSnapshot.progress[MAP_ORDER[0]]?.resourceClaimed) throw new Error(`秘藏补给箱未完成一次性搜索：${JSON.stringify(cacheSnapshot)}`);
+  const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  if (!cacheSave?.mapProgress?.[MAP_ORDER[0]]?.resourceClaimed) throw new Error("秘藏搜索结果未自动保存");
 
   await page.keyboard.press("t");
   await advance(page, 200);
