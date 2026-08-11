@@ -1,9 +1,11 @@
 const { chromium } = require("playwright");
 
 const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1&fast=1";
+const FAST_RUN = new URL(BASE_URL).searchParams.has("fast");
 let MAP_ORDER = [];
 let MAP_NEEDS = {};
 let SAFE_POINTS = {};
+let MAP_BOSS_PHASES = {};
 const CLASSES = ["warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior"];
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
 const TOTAL_RUNS = Number(process.env.ONEKNIFE_RUNS || 1);
@@ -93,6 +95,16 @@ async function returnToMap(page, mapId) {
 }
 
 async function defeatEntity(page, entityId, mapId) {
+  const isBoss = entityId.startsWith("boss-");
+  const observedPhases = new Set();
+  let hazardObserved = false;
+  const assertBossMechanics = () => {
+    if (!isBoss) return;
+    const expectedPhases = MAP_BOSS_PHASES[mapId];
+    const missingPhases = Array.from({ length: expectedPhases }, (_, index) => index + 1).filter((phase) => !observedPhases.has(phase));
+    if (missingPhases.length) throw new Error(`${mapId} Boss 未经历阶段 ${missingPhases.join(",")}；已观察 ${[...observedPhases].join(",")}`);
+    if (expectedPhases >= 2 && !hazardObserved) throw new Error(`${mapId} Boss 未生成危险技能`);
+  };
   for (let guard = 0; guard < 1400; guard += 1) {
     let snap = await snapshot(page);
     if (snap.currentMapId !== mapId) {
@@ -100,12 +112,15 @@ async function defeatEntity(page, entityId, mapId) {
       continue;
     }
     const entity = snap.entities.find((item) => item.id === entityId);
-    if (entityId.startsWith("boss-") && guard % 100 === 0) process.stdout.write(`FIGHT ${entityId} guard=${guard} hp=${entity ? Math.ceil(entity.hp) : "gone"} player=${Math.ceil(snap.player.hp)} poison=${snap.player.poison} pos=${Math.round(snap.player.x)},${Math.round(snap.player.y)}\n`);
+    if (entity?.boss && entity.alive) observedPhases.add(entity.phase);
+    if (snap.hazardsSpawned > 0) hazardObserved = true;
+    if (isBoss && guard % 100 === 0) process.stdout.write(`FIGHT ${entityId} guard=${guard} hp=${entity ? Math.ceil(entity.hp) : "gone"} player=${Math.ceil(snap.player.hp)} poison=${snap.player.poison} pos=${Math.round(snap.player.x)},${Math.round(snap.player.y)}\n`);
     if (!entity || !entity.alive) {
-      if (entityId.startsWith("boss-") && !snap.progress[mapId]?.bossDefeated) {
+      if (isBoss && !snap.progress[mapId]?.bossDefeated) {
         await advance(page, 1000);
         continue;
       }
+      assertBossMechanics();
       return;
     }
     const movedIntoView = await moveEntityIntoView(page, entityId, mapId);
@@ -114,13 +129,15 @@ async function defeatEntity(page, entityId, mapId) {
     if (snap.currentMapId !== mapId) continue;
     const current = snap.entities.find((item) => item.id === entityId && item.alive);
     if (!current) {
-      if (entityId.startsWith("boss-") && !snap.progress[mapId]?.bossDefeated) continue;
+      if (isBoss && !snap.progress[mapId]?.bossDefeated) continue;
+      assertBossMechanics();
       return;
     }
     const safePoint = SAFE_POINTS[mapId];
     const nearSafePoint = Math.hypot(snap.player.x - safePoint.x, snap.player.y - safePoint.y) <= 54;
     const maxHp = BASE_HP[snap.classId] + snap.player.level * 18;
-    if (current.boss && !nearSafePoint && (snap.player.poison >= 2 || snap.player.hp < maxHp * .85)) {
+    const needsRecovery = FAST_RUN ? snap.player.poison >= 4 || snap.player.hp < maxHp * .45 : snap.player.poison >= 2 || snap.player.hp < maxHp * .85;
+    if (current.boss && !nearSafePoint && needsRecovery) {
       const reachedSanctuary = await moveToPoint(page, safePoint, mapId);
       if (reachedSanctuary) {
         await advance(page, 1800);
@@ -129,25 +146,23 @@ async function defeatEntity(page, entityId, mapId) {
     }
     const geometry = await canvasGeometry(page, current);
     await page.mouse.click(geometry.x, geometry.y);
-    await page.keyboard.press("j");
-    await page.keyboard.press("1");
-    await page.keyboard.press("2");
-    await page.keyboard.press("3");
-    await page.keyboard.press("4");
-    await page.keyboard.press("r");
+    if (current.boss) {
+      const bossActions = ["j", "1", "2", "4", "r"];
+      await page.keyboard.press(bossActions[guard % bossActions.length]);
+    } else await page.keyboard.press("j");
     const baseHp = { warrior: 350, mage: 235, taoist: 280 }[snap.classId] || 280;
     if (current.boss && guard % 12 === 0 && snap.player.hp < baseHp + snap.player.level * 18 * .75) await page.keyboard.press("q");
     await page.keyboard.press("f");
     const attackRange = { warrior: 70, mage: 220, taoist: 185 }[snap.classId] || 160;
     const inAttackRange = Math.hypot(current.x - snap.player.x, current.y - snap.player.y) <= attackRange + 18;
-    if (current.boss && inAttackRange) {
+    if (current.boss && inAttackRange && !FAST_RUN) {
       const dx = current.x - snap.player.x;
       const dy = current.y - snap.player.y;
       const key = Math.abs(dx) > Math.abs(dy) * .45 ? (dx < 0 ? "a" : "d") : (dy < 0 ? "w" : "s");
       await page.keyboard.down(key);
       await advance(page, 620);
       await page.keyboard.up(key);
-    } else await advance(page, current.boss ? 300 : 650);
+    } else await advance(page, current.boss ? 420 : 650);
   }
   throw new Error(`击败 ${entityId} 超时：${JSON.stringify(await snapshot(page))}`);
 }
@@ -164,7 +179,8 @@ async function clearMap(page, mapId) {
   }
   const boss = snap.entities.find((entity) => entity.alive && entity.boss);
   process.stdout.write(`BOSS ${mapId} hp=${boss ? Math.ceil(boss.hp) : "gone"} lv=${snap.player.level} hpPlayer=${Math.ceil(snap.player.hp)} poison=${snap.player.poison}\n`);
-  if (!snap.progress[mapId]?.bossDefeated && boss) await defeatEntity(page, boss.id, mapId);
+  if (snap.progress[mapId]?.bossDefeated || !boss) throw new Error(`${mapId} Boss 在清怪阶段被提前击杀`);
+  await defeatEntity(page, boss.id, mapId);
   snap = await snapshot(page);
   if (!snap.progress[mapId]?.completed) throw new Error(`${mapId} 未进入完成状态：${JSON.stringify(snap)}`);
 }
@@ -192,9 +208,15 @@ async function runJourney(browser, runIndex) {
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
   const catalog = await page.evaluate(() => window.__ONEKNIFE_E2E__?.catalog());
   if (!Array.isArray(catalog) || catalog.length !== 100) throw new Error(`地图目录数量错误：${catalog?.length}`);
+  if (new Set(catalog.map((entry) => entry.id)).size !== 100) throw new Error("地图 ID 不唯一");
+  if (new Set(catalog.map((entry) => entry.layoutId)).size !== 100) throw new Error("地图布局签名不唯一");
+  if (new Set(catalog.map((entry) => entry.layoutSignature)).size !== 100) throw new Error("地图实际构图重复");
+  if (new Set(catalog.slice(4).map((entry) => entry.siteArchetype)).size !== 10 || catalog.some((entry) => !entry.siteDetail)) throw new Error("地图场所母题缺失");
+  if (new Set(catalog.map((entry) => entry.storyBeat)).size !== 100 || catalog.some((entry) => !entry.storyObjective)) throw new Error("百图剧情节点缺失或重复");
   MAP_ORDER = catalog.map((entry) => entry.id);
   MAP_NEEDS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.need]));
   SAFE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.safePoint]));
+  MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
   await page.locator(`[data-class="${CLASSES[runIndex]}"]`).click();
   await advance(page, 200);
 
@@ -224,10 +246,45 @@ async function runJourney(browser, runIndex) {
   return { run: runIndex + 1, classId: CLASSES[runIndex], level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
 }
 
+async function assertLegacyMigration(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.removeItem("oneknife999-prototype-save-v3");
+    localStorage.setItem("oneknife999-prototype-save-v2", JSON.stringify({
+      classId: "warrior",
+      currentMapId: "red_sand_desert",
+      player: { x: 180, y: 1120, level: 16, exp: 0, nextExp: 500, gold: 999, marks: 100, potion: 8 },
+      inventory: [],
+      equipment: {},
+      mapProgress: {
+        ash_outskirts: { kills: 8, bossDefeated: true, completed: true, rewardClaimed: true },
+        pine_forest: { kills: 10, bossDefeated: true, completed: true, rewardClaimed: true },
+        black_rock_mine: { kills: 10, bossDefeated: true, completed: true, rewardClaimed: true },
+        red_sand_desert: { kills: 10, bossDefeated: true, completed: true, rewardClaimed: true }
+      }
+    }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await advance(page, 200);
+  const snap = await snapshot(page);
+  const stored = await page.evaluate(() => ({
+    v2: localStorage.getItem("oneknife999-prototype-save-v2"),
+    v3: JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null")
+  }));
+  if (snap?.currentMapId !== "red_sand_desert" || snap.player.level !== 16 || !snap.progress.red_sand_desert?.completed) throw new Error(`v2 迁移状态错误：${JSON.stringify(snap)}`);
+  if (!stored.v2 || stored.v3?.saveVersion !== 3 || stored.v3?.player?.migrationLevelFloor !== 16) throw new Error(`v2 迁移存储错误：${JSON.stringify(stored)}`);
+  process.stdout.write("MIGRATION v2->v3 SAVED+RESTORED\n");
+  await context.close();
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const results = [];
   try {
+    await assertLegacyMigration(browser);
     const concurrency = Math.min(2, TOTAL_RUNS);
     for (let offset = 0; offset < TOTAL_RUNS; offset += concurrency) {
       const batch = Array.from({ length: Math.min(concurrency, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));

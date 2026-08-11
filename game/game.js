@@ -5,8 +5,11 @@
   const ctx = canvas.getContext("2d");
   const wrap = document.querySelector("#canvasWrap");
   const STORAGE_KEY = "oneknife999-prototype-save-v3";
+  const LEGACY_STORAGE_KEY = "oneknife999-prototype-save-v2";
   const URL_FLAGS = new URLSearchParams(window.location.search);
-  const FAST_FORWARD = URL_FLAGS.has("fast");
+  const LOCAL_TEST_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+  const TEST_MODE = LOCAL_TEST_HOSTS.has(window.location.hostname) && URL_FLAGS.has("e2e");
+  const FAST_FORWARD = TEST_MODE && URL_FLAGS.has("fast");
 
   const CLASSES = {
     warrior: {
@@ -204,6 +207,60 @@
   ];
   const STAGE_SITES = ["前哨", "荒径", "古寨", "深谷", "祭坛", "迷宫", "王庭", "禁门", "圣台", "终殿"];
   const FIXED_MAP_IDS = ["ash_outskirts", "pine_forest", "black_rock_mine", "red_sand_desert"];
+  const SITE_LAYOUTS = [
+    { arena: "outpost", road: "direct", landmarks: ["watchtower", "barricade", "lantern", "cart"], detail: "警戒塔、拒马与补给车组成边境防线" },
+    { arena: "trail", road: "fork", landmarks: ["signpost", "tree", "rock", "lantern"], detail: "岔路、路标与散落营火标记追踪路线" },
+    { arena: "stockade", road: "direct", landmarks: ["palisade", "watchtower", "cart", "lantern"], detail: "寨墙、角楼和辎重围出可辨识的古寨轮廓" },
+    { arena: "ravine", road: "zigzag", landmarks: ["cliff", "rock", "bridgepost", "ruin"], detail: "崖柱与桥桩把道路压缩成峡谷通道" },
+    { arena: "altar", road: "radial", landmarks: ["shrine", "obelisk", "lantern", "rune"], detail: "同心祭环、方尖碑与符文围绕仪式中心" },
+    { arena: "maze", road: "fork", landmarks: ["mazewall", "ruin", "obelisk", "lantern"], detail: "断墙和错位路口形成残缺迷宫" },
+    { arena: "court", road: "direct", landmarks: ["courtpost", "banner", "lantern", "statue"], detail: "对称柱阵、战旗与石像构成王庭轴线" },
+    { arena: "gate", road: "zigzag", landmarks: ["gatepost", "barricade", "obelisk", "beam"], detail: "巨型门柱、封锁线与引火梁强调破门目标" },
+    { arena: "sanctum", road: "radial", landmarks: ["rune", "shrine", "lantern", "beam"], detail: "浮光符文与圣火灯环绕高台" },
+    { arena: "throne", road: "direct", landmarks: ["throne", "courtpost", "banner", "obelisk"], detail: "王座、环柱与章主徽记构成终殿决战场" }
+  ];
+  const STORY_BEATS = [
+    { title: "异兆", action: "调查异象", text: "疆域信标忽然熄灭，地底传来与玄烬心脏同频的震动。" },
+    { title: "遗痕", action: "追踪残留", text: "敌人留下被刻意抹去的军印，线索指向更深处的旧王朝密道。" },
+    { title: "盟约", action: "接应盟友", text: "一名掌握禁忌史的幸存者提出合作，却隐瞒了自己与首领的关系。" },
+    { title: "代价", action: "夺回补给", text: "前路被封，救援百姓与追击魂火车队只能在同一场战斗中完成。" },
+    { title: "夺印", action: "破坏仪式", text: "首领正以生灵记忆铸造玄烬之印，失败者会被从所有人的记忆中抹去。" },
+    { title: "潜城", action: "潜入核心", text: "密道通向一座仍在运转的古代城机，真正的战争并非始于今日。" },
+    { title: "裂盟", action: "识破背叛", text: "同行者交出半枚钥印，承认此前的引路也在替幕后者筛选合格容器。" },
+    { title: "破门", action: "开启禁门", text: "门后封存着上一代守烬人的证词：玄烬既是灾祸，也是大陆火种。" },
+    { title: "真相", action: "守住证据", text: "敌军试图销毁真相，玩家必须决定公开代价，还是独自背负秘密。" },
+    { title: "章决", action: "击败章主", text: "章主以自身为祭开启下一重疆域，遗言将此前敌我关系彻底改写。" }
+  ];
+  const CHAPTER_STORIES = [
+    { premise: "灰烬矿脉复燃，失踪多年的守碑军开始袭击故乡。", ally: "巡碑少女阿禾", foe: "边军统领赫连烬", relic: "裂碑钥印", truth: "守碑军并未叛变，他们在阻止矿脉吞噬村民记忆。", climax: "赫连烬自愿成为灰烬霸主，只为封住第一道烬门。" },
+    { premise: "苍月潮汐倒流，沉船载着百年前未送达的求援信归来。", ally: "潮语者洛汐", foe: "沧海妖皇", relic: "月潮罗盘", truth: "群岛海妖曾是护送火种的水军，诅咒来自王朝灭口。", climax: "妖皇交出航路，要求玩家替被抹去的水军向大陆作证。" },
+    { premise: "龙脉地宫重新计数活人，石俑把玩家称为失踪的第九位皇嗣。", ally: "盗陵医师顾七", foe: "地宫龙君", relic: "龙骨玉册", truth: "皇嗣并非血脉，而是能够承受玄烬的九个容器编号。", climax: "龙君确认玩家是最后仍保有人性的容器，并开启北境逃生门。" },
+    { premise: "北境长夜冻结时间，失踪者仍在冰层中重复战争最后一天。", ally: "雪哨长宁霜", foe: "玄冰魔王", relic: "停时冰镜", truth: "宁霜早在百年前战死，如今只是冰镜为完成军令保存的记忆。", climax: "玩家击碎冰镜让亡军解脱，也释放了被时间囚禁的烬火。" },
+    { premise: "烬火魔域吞噬北境，魔族却宣称自己才是玄烬最初的看守者。", ally: "魔匠赤鸢", foe: "焚天魔尊", relic: "初火炉心", truth: "人族王朝曾夺走初火并篡改史书，魔域战争是一场千年追索。", climax: "魔尊败后拒绝复仇，将炉心托付玩家检验其是否仍会选择人族。" },
+    { premise: "幽冥河出现无名亡魂，他们没有死因，只留下被删去的人生。", ally: "摆渡人无咎", foe: "幽冥鬼帝", relic: "万名生死簿", truth: "玄烬每次稳定都要消耗一座城的记忆，鬼帝一直保存被献祭者姓名。", climax: "玩家夺回生死簿，第一次听见玄烬内部无数人的求救。" },
+    { premise: "天穹遗迹从云层坠落，古代机关宣告大陆将在三十日后重置。", ally: "机关师弥星", foe: "天穹圣主", relic: "重置星盘", truth: "重置会毁灭文明却保住大陆躯壳，是历代守烬人留下的保险。", climax: "圣主要求玩家选择执行重置，或承担寻找第三条道路的责任。" },
+    { premise: "星陨禁区记录所有失败未来，每块陨晶都映出玩家不同的死亡。", ally: "未来残影九歌", foe: "星陨邪神", relic: "逆命星核", truth: "九歌是未来玩家主动切下的人性，用来阻止自己成为新帝尊。", climax: "玩家收回九歌，获得改写一次结局的力量，也继承成为暴君的可能。" },
+    { premise: "神魔战场重新开战，双方都持有证明对方先背叛的真实史书。", ally: "停战使苏烈", foe: "神魔战皇", relic: "双史战旗", truth: "两部史书都是真的：玄烬让两个时间分支重叠，以战争持续供能。", climax: "玩家斩断战旗合并时间线，百万战魂终于看到同一个黎明。" },
+    { premise: "帝陵终境开启，玄烬帝尊以玩家的面容等待最后一位容器归位。", ally: "历代同伴的记忆回声", foe: "玄烬帝尊", relic: "完整玄烬之心", truth: "帝尊是每次轮回选择独自承担一切的玩家，世界已重复九百九十九次。", climax: "第千次轮回中，玩家让大陆共同记住代价并分担火种，终止独自封印。" }
+  ];
+
+  function storyForStage(stageNumber) {
+    const chapterIndex = Math.floor((stageNumber - 1) / 10);
+    const slot = (stageNumber - 1) % 10;
+    const chapter = CHAPTERS[chapterIndex];
+    const arc = CHAPTER_STORIES[chapterIndex];
+    const beat = STORY_BEATS[slot];
+    return {
+      chapterTitle: `第${chapterIndex + 1}章 · ${chapter.name}`,
+      beatTitle: `${String(stageNumber).padStart(3, "0")} · ${beat.title}`,
+      premise: arc.premise,
+      objective: `${beat.action}，夺回${arc.relic}`,
+      summary: beat.text,
+      speaker: slot < 7 ? arc.ally : slot === 9 ? arc.foe : "守烬回声",
+      dialogue: slot === 9 ? `「打败我，然后带着${arc.relic}去见下一段真相。」` : slot === 7 ? `「${arc.truth}」` : `「${beat.text}」`,
+      reveal: slot === 9 ? arc.climax : slot >= 7 ? arc.truth : `线索继续指向${arc.foe}`
+    };
+  }
 
   function mapsPerLevel(stageNumber) {
     if (stageNumber <= 10) return 1;
@@ -220,6 +277,58 @@
     return { level: 31 + Math.floor((cleared - 60) / 4), exp: ((cleared - 60) % 4) * 25, nextExp: 100, mapsPerLevel: 4 };
   }
 
+  function seededRandom(seed) {
+    let value = seed >>> 0;
+    return () => {
+      value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
+      return value / 4294967296;
+    };
+  }
+
+  function generatedLayout(stageNumber, chapter) {
+    const random = seededRandom(stageNumber * 982451653 + 104729);
+    const site = SITE_LAYOUTS[(stageNumber - 1) % 10];
+    const townY = [180, 565, 950][stageNumber % 3];
+    const townRect = { x: 80, y: townY, w: 280, h: 280 };
+    const boss = { x: Math.round(1810 + random() * 380), y: Math.round(260 + random() * 840) };
+    const monsterSpawns = Array.from({ length: 12 }, (_, index) => {
+      const column = index % 4;
+      const row = Math.floor(index / 4);
+      const x = Math.round(560 + column * 410 + (random() - .5) * 180);
+      const y = Math.round(250 + row * 420 + (random() - .5) * 190);
+      return [Math.max(430, Math.min(2100, x)), Math.max(130, Math.min(1370, y)), (index + stageNumber) % 4];
+    });
+    const start = { x: townRect.x + townRect.w / 2, y: townRect.y + townRect.h / 2 };
+    const path = [start.x, start.y];
+    for (let point = 1; point <= 5; point += 1) {
+      const ratio = point / 6;
+      path.push(Math.round(start.x + (boss.x - start.x) * ratio + (random() - .5) * 230));
+      path.push(Math.round(start.y + (boss.y - start.y) * ratio + (random() - .5) * 270));
+    }
+    path.push(boss.x, boss.y);
+    const landmarks = Array.from({ length: 10 }, (_, index) => ({
+      type: site.landmarks[(index + stageNumber) % site.landmarks.length],
+      x: Math.round(420 + random() * 1740),
+      y: Math.round(150 + random() * 1180),
+      r: Math.round(14 + random() * 16),
+      color: index % 2 ? chapter.special : chapter.accent
+    }));
+    const specialRect = {
+      x: Math.max(1380, Math.min(1780, boss.x - 260)),
+      y: Math.max(90, Math.min(930, boss.y - 220)),
+      w: 520,
+      h: 440
+    };
+    const paths = [path];
+    if (site.road === "fork" || site.road === "radial") {
+      const forkX = path[6];
+      const forkY = path[7];
+      const edgeY = Math.max(140, Math.min(1360, forkY + (stageNumber % 2 ? 390 : -390)));
+      paths.push([forkX, forkY, forkX + 160, forkY, forkX + 260, edgeY, forkX + 430, edgeY, forkX + 560, edgeY, boss.x - 180, boss.y, boss.x, boss.y]);
+    }
+    return { townRect, boss, monsterSpawns, paths, landmarks, specialRect, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
+  }
+
   function generatedMap(stageNumber) {
     const chapterIndex = Math.floor((stageNumber - 1) / 10);
     const chapter = CHAPTERS[chapterIndex];
@@ -227,7 +336,7 @@
     const expectedLevel = campaignGrowth(stageNumber - 1).level;
     const scale = 1 + stageNumber * 0.085;
     const id = `stage_${String(stageNumber).padStart(3, "0")}`;
-    const monsterSpawns = [[600, 620, 0], [790, 850, 1], [980, 530, 2], [1180, 760, 3], [1370, 480, 0], [1530, 900, 1], [1710, 710, 2], [1880, 530, 3], [810, 1110, 0], [1110, 1100, 1], [1490, 1140, 2], [2020, 950, 3]];
+    const layout = generatedLayout(stageNumber, chapter);
     const monsterTypes = chapter.monsters.map((name, typeIndex) => ({
       name: `${chapter.short}${name}`,
       color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72"][typeIndex],
@@ -244,27 +353,25 @@
       stageNumber,
       chapter: chapterIndex + 1,
       chapterName: chapter.name,
+      story: storyForStage(stageNumber),
       name: `${chapter.short}${STAGE_SITES[slot]}`,
       subtitle: `${chapter.name} · 第 ${slot + 1} 战区`,
       levelMin: expectedLevel,
       levelMax: expectedLevel + 1,
       danger: chapter.danger,
       dangerLabel: chapter.dangerLabel,
+      layoutId: layout.layoutId,
       width: 2400,
       height: 1500,
       palette: { ground: chapter.ground, road: "rgba(210, 184, 125, .12)", roadHi: "rgba(235, 210, 150, .16)", grid: "rgba(220, 230, 220, .035)", town: "rgba(98, 213, 198, .08)", townBorder: "rgba(98, 213, 198, .22)", special: chapter.special, specialBorder: `${chapter.accent}66`, water: "rgba(100, 150, 170, .14)" },
-      townRect: { x: 80, y: 950, w: 280, h: 280 },
-      specialRect: { x: 1660, y: 220, w: 570, h: 470 },
-      paths: [[180, 1080, 620, 1100, 870, 790, 1270, 810, 1640, 740, 2070, 470]],
-      landmarks: [
-        { type: "tower", x: 210, y: 1030, r: 18, color: chapter.accent },
-        { type: "rock", x: 1760, y: 300, r: 24, color: chapter.special },
-        { type: "rock", x: 1970, y: 360, r: 27, color: chapter.special },
-        { type: "ruin", x: 2150, y: 470, r: 22, color: chapter.accent }
-      ],
-      landmarkLabels: [{ text: `${chapter.short}补给营`, x: 150, y: 1255 }, { text: `${bossName}领域`, x: 1900, y: 700 }],
+      townRect: layout.townRect,
+      specialRect: layout.specialRect,
+      paths: layout.paths,
+      landmarks: layout.landmarks,
+      siteStyle: layout.siteStyle,
+      landmarkLabels: [{ text: `${chapter.short}补给营`, x: layout.townRect.x + 70, y: layout.townRect.y + layout.townRect.h + 25 }, { text: `${bossName}领域`, x: layout.boss.x - 80, y: layout.boss.y + 95 }],
       monsterTypes,
-      monsterSpawns,
+      monsterSpawns: layout.monsterSpawns,
       boss: {
         id: `boss-${id}`,
         name: bossName,
@@ -275,8 +382,8 @@
         exp: 0,
         gold: Math.round(120 + stageNumber * 16),
         radius: 34 + Math.min(6, Math.floor(stageNumber / 20)),
-        x: 2050,
-        y: 680,
+        x: layout.boss.x,
+        y: layout.boss.y,
         phases: stageNumber % 10 === 0 ? 3 : 2,
         phase1Trigger: stageNumber % 10 === 0 ? 0.68 : 0.5,
         phase2Trigger: stageNumber % 10 === 0 ? 0.34 : undefined,
@@ -300,11 +407,22 @@
   }
 
   const MAP_ORDER = [...FIXED_MAP_IDS, ...Array.from({ length: 96 }, (_, index) => `stage_${String(index + 5).padStart(3, "0")}`)];
+  function mapLayoutSignature(map) {
+    return JSON.stringify({
+      town: map.townRect,
+      boss: [map.boss.x, map.boss.y],
+      spawns: map.monsterSpawns,
+      paths: map.paths,
+      landmarks: map.landmarks.map(({ type, x, y }) => [type, x, y]),
+      site: map.siteStyle?.arena || "handcrafted"
+    });
+  }
   MAP_ORDER.forEach((id, index) => {
     const map = MAPS[id];
     map.stageNumber = index + 1;
     map.chapter = Math.floor(index / 10) + 1;
     map.chapterName ||= CHAPTERS[map.chapter - 1].name;
+    map.story ||= storyForStage(index + 1);
     map.levelMin = campaignGrowth(index).level;
     map.levelMax = map.levelMin + 1;
     const exits = [];
@@ -411,6 +529,7 @@
       quest: { kills: 0, need: 8, completed: false },
       mapProgress: {},
       hazards: [],
+      hazardsSpawned: 0,
       hoveredEntityId: null
     };
   }
@@ -444,7 +563,7 @@
       result.push({ id: `mob-${index}`, ...type, level, x: spawn[0], y: spawn[1], maxHp: type.hp, respawn: 0, alive: true, hitFlash: 0, wander: Math.random() * 6, poisonTimer: 0 });
     });
     const b = map.boss;
-    result.push({ id: b.id, name: b.name, level: map.levelMax + 2, color: b.color, hp: b.hp, maxHp: b.hp, attack: b.attack, defense: b.defense, exp: b.exp, gold: b.gold, radius: b.radius, x: b.x, y: b.y, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0, phaseTimer: 0, specialTimer: b.specialInterval, summonTimer: b.summonInterval || 0 });
+    result.push({ id: b.id, name: b.name, level: map.levelMax + 2, color: b.color, hp: b.hp, maxHp: b.hp, attack: b.attack, defense: b.defense, exp: b.exp, gold: b.gold, radius: b.radius, x: b.x, y: b.y, alive: true, boss: true, hitFlash: 0, phase: 1, respawn: 0, phaseTimer: 0, specialTimer: FAST_FORWARD ? .25 : b.specialInterval, summonTimer: b.summonInterval || 0 });
     return result;
   }
 
@@ -466,12 +585,15 @@
     state.particles = [];
     state.texts = [];
     state.hazards = [];
+    state.hazardsSpawned = 0;
     state.hoveredEntityId = null;
     state.boss = { active: true, defeated: false, respawn: 0 };
     state.quest = mapProgress(mapId);
     state.player.visitedMaps[mapId] = true;
     if (!silent) {
       log(`进入 <b>${map.name} · ${map.subtitle}</b>：推荐等级 Lv.${map.levelMin}-${map.levelMax}，${map.dangerLabel}。`, "loot");
+      log(`<b>${map.story.chapterTitle} · ${map.story.beatTitle}</b>：${map.story.summary}`, "loot");
+      log(`${map.story.speaker}：${map.story.dialogue}`);
       showToast(`${map.name} · ${map.subtitle}（Lv.${map.levelMin}-${map.levelMax}）`);
       if (map.danger === "danger" || map.danger === "desolate") log(`本区为<b style="color:#ee9b91">危险区</b>：实际游戏会按规则结算 PK 爆装，本原型仅作地图切换演示。`, "warn");
       const progress = mapProgress(mapId);
@@ -569,7 +691,7 @@
     let damage = Math.max(1, Math.round(base * multiplier * variance * (1 - reduction)));
     if (kind === "爆发" && state.player.charge >= 100) damage = Math.round(damage * 1.55);
     if (FAST_FORWARD) damage *= 25;
-    if (target.boss) damage = Math.min(damage, Math.ceil(target.maxHp * (FAST_FORWARD ? 1 : .035)));
+    if (target.boss) damage = Math.min(damage, Math.ceil(target.maxHp * (FAST_FORWARD ? .18 : .035)));
     target.hp = Math.max(0, target.hp - damage);
     target.hitFlash = .12;
     state.player.charge = clamp(state.player.charge + (target.boss ? 7 : 10), 0, 100);
@@ -693,6 +815,7 @@
       state.player.marks += 8;
     }
     syncCampaignGrowth();
+    log(`<b>剧情揭示</b>：${map.story.reveal}`, "loot");
     if (rule.next) {
       const nextMap = MAPS[rule.next];
       log(`<b>${map.name}通关</b>：60 金币、8 首领印记已发放。前往${rule.exit}进入<b>${nextMap.name}</b>。`, "loot");
@@ -767,9 +890,12 @@
     const completedMaps = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
     const growth = campaignGrowth(completedMaps);
     const previousLevel = state.player.level;
-    state.player.level = growth.level;
-    state.player.exp = growth.exp;
+    const migrationFloor = Math.max(0, Number(state.player.migrationLevelFloor) || 0);
+    const floorActive = migrationFloor > growth.level;
+    state.player.level = floorActive ? migrationFloor : growth.level;
+    state.player.exp = floorActive ? 0 : growth.exp;
     state.player.nextExp = growth.nextExp;
+    if (!floorActive && migrationFloor) delete state.player.migrationLevelFloor;
     if (growth.level > previousLevel && !silent) {
       state.player.hp = playerMaxHp();
       state.player.resource = activeHero().resource;
@@ -843,9 +969,11 @@
 
   function die() {
     const mapId = state.currentMapId;
+    const town = activeMap().townRect;
+    const safeSpawn = { x: town.x + town.w / 2, y: town.y + town.h / 2 };
     state.player.hp = Math.round(playerMaxHp() * .55); state.player.resource = activeHero().resource * .45; state.player.invulnerable = 3; state.player.targetId = null; state.player.poison = 0; moveTarget = null;
     log(`<b>你在野外倒下</b>，已返回${activeMap().name}安全营地；当前关卡进度保留。`, "warn"); showToast("已在当前地图安全区复活");
-    loadMap(mapId, 180, 1160, true);
+    loadMap(mapId, safeSpawn.x, safeSpawn.y, true);
   }
 
   function movePlayer(dt) {
@@ -972,6 +1100,7 @@
     target.fade = 0.5;
     target.damage = damage;
     state.hazards.push(target);
+    state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
     if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
   }
 
@@ -1002,6 +1131,7 @@
     // 城镇与特殊区
     if (map.townRect) { ctx.fillStyle = p.town; ctx.fillRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); ctx.strokeStyle = p.townBorder; ctx.lineWidth = 3; ctx.strokeRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); }
     if (map.specialRect) { ctx.fillStyle = p.special; ctx.fillRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); ctx.strokeStyle = p.specialBorder; ctx.strokeRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); }
+    drawSiteDetails(map);
     // 水道
     ctx.strokeStyle = p.water; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(20, 300); ctx.bezierCurveTo(500, 420, 680, 250, 1050, 390); ctx.bezierCurveTo(1470, 550, 1660, 210, map.width - 10, 280); ctx.stroke();
     // 网格
@@ -1014,11 +1144,50 @@
     ctx.restore();
   }
 
+  function drawSiteDetails(map) {
+    if (!map.siteStyle) return;
+    const boss = map.boss;
+    const rect = map.specialRect;
+    ctx.save();
+    ctx.strokeStyle = map.palette.specialBorder;
+    ctx.fillStyle = map.palette.roadHi;
+    ctx.lineWidth = 5;
+    const post = (x, y, width = 18, height = 64) => { ctx.fillRect(x - width / 2, y - height / 2, width, height); ctx.strokeRect(x - width / 2, y - height / 2, width, height); };
+    const ring = (radius) => { ctx.beginPath(); ctx.arc(boss.x, boss.y, radius, 0, Math.PI * 2); ctx.stroke(); };
+    if (map.siteStyle.arena === "outpost") {
+      [[rect.x + 35, rect.y + 35], [rect.x + rect.w - 35, rect.y + 35], [rect.x + 35, rect.y + rect.h - 35], [rect.x + rect.w - 35, rect.y + rect.h - 35]].forEach(([x, y]) => post(x, y, 24, 80));
+    } else if (map.siteStyle.arena === "trail") {
+      ctx.setLineDash([18, 14]); ring(118); ctx.setLineDash([]);
+    } else if (map.siteStyle.arena === "stockade") {
+      ctx.setLineDash([28, 10]); ctx.strokeRect(rect.x + 22, rect.y + 22, rect.w - 44, rect.h - 44); ctx.setLineDash([]);
+    } else if (map.siteStyle.arena === "ravine") {
+      for (let offset = -150; offset <= 150; offset += 75) { post(boss.x + offset, rect.y + 32, 34, 82); post(boss.x + offset, rect.y + rect.h - 32, 34, 82); }
+    } else if (map.siteStyle.arena === "altar") {
+      [74, 126, 184].forEach(ring);
+    } else if (map.siteStyle.arena === "maze") {
+      [[-180, -120, 190, 22], [20, -55, 190, 22], [-145, 45, 190, 22], [55, 115, 180, 22]].forEach(([dx, dy, width, height]) => { ctx.fillRect(boss.x + dx, boss.y + dy, width, height); ctx.strokeRect(boss.x + dx, boss.y + dy, width, height); });
+    } else if (map.siteStyle.arena === "court") {
+      [-155, -80, 80, 155].forEach((offset) => { post(boss.x + offset, boss.y - 135, 20, 72); post(boss.x + offset, boss.y + 135, 20, 72); });
+    } else if (map.siteStyle.arena === "gate") {
+      post(boss.x - 105, boss.y, 40, 230); post(boss.x + 105, boss.y, 40, 230); ctx.fillRect(boss.x - 105, boss.y - 118, 210, 24);
+    } else if (map.siteStyle.arena === "sanctum") {
+      [62, 122, 180].forEach(ring); for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) post(boss.x + Math.cos(angle) * 150, boss.y + Math.sin(angle) * 150, 13, 38);
+    } else if (map.siteStyle.arena === "throne") {
+      ring(190); for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 3) post(boss.x + Math.cos(angle) * 170, boss.y + Math.sin(angle) * 170, 24, 82); ctx.strokeRect(boss.x - 55, boss.y - 46, 110, 92);
+    }
+    ctx.restore();
+  }
+
   function drawLandmarks(map) {
     ctx.save();
     map.landmarks.forEach((l) => {
-      ctx.fillStyle = l.color; ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2); ctx.fill();
-      if (l.type === "tower" || l.type === "tree" || l.type === "beam" || l.type === "dune" || l.type === "ruin") { ctx.fillStyle = "rgba(236, 202, 134, .35)"; ctx.fillRect(l.x - 3, l.y - l.r - 15, 6, 13); }
+      ctx.fillStyle = l.color; ctx.strokeStyle = "rgba(236, 202, 134, .35)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2); ctx.fill();
+      if (["tower", "tree", "beam", "dune", "ruin", "watchtower", "bridgepost", "obelisk", "courtpost", "gatepost"].includes(l.type)) ctx.fillRect(l.x - 3, l.y - l.r - 15, 6, 13);
+      if (["barricade", "palisade", "mazewall", "cliff"].includes(l.type)) { ctx.fillRect(l.x - l.r * 1.5, l.y - 5, l.r * 3, 10); ctx.strokeRect(l.x - l.r * 1.5, l.y - 5, l.r * 3, 10); }
+      if (["shrine", "rune"].includes(l.type)) { ctx.beginPath(); ctx.arc(l.x, l.y, l.r + 8, 0, Math.PI * 2); ctx.stroke(); }
+      if (["signpost", "banner"].includes(l.type)) { ctx.fillRect(l.x - 2, l.y - l.r - 18, 4, l.r + 18); ctx.fillRect(l.x + 2, l.y - l.r - 16, l.r + 10, 12); }
+      if (l.type === "throne" || l.type === "statue") ctx.strokeRect(l.x - l.r * .65, l.y - l.r, l.r * 1.3, l.r * 2);
       if (l.type === "lantern") { ctx.fillStyle = "rgba(255, 180, 90, .65)"; ctx.beginPath(); ctx.arc(l.x, l.y, l.r + 6, 0, Math.PI * 2); ctx.fill(); }
       if (l.type === "well") { ctx.fillStyle = "rgba(120, 160, 200, .55)"; ctx.beginPath(); ctx.arc(l.x, l.y, l.r - 4, 0, Math.PI * 2); ctx.fill(); }
     });
@@ -1237,8 +1406,8 @@
     $("mapObjectiveTitle").textContent = view.title;
     $("mapObjectiveText").textContent = view.text;
     $("mapObjectiveChecks").innerHTML = `<span class="${progress.kills >= progress.need ? "done" : "current"}">${progress.kills >= progress.need ? "✓" : "○"} 普通怪 ${progress.kills}/${progress.need}</span><span class="${progress.bossDefeated ? "done" : progress.kills >= progress.need ? "current" : ""}">${progress.bossDefeated ? "✓" : "○"} ${rule.boss}</span>${rule.next ? `<span class="${progress.completed ? "current" : ""}">${progress.completed ? "→" : "○"} ${rule.exit}</span>` : `<span class="${progress.completed ? "done" : ""}">${progress.completed ? "✓" : "○"} 最终结算</span>`}`;
-    $("questTitle").textContent = `肃清${map.name}`;
-    $("questDescription").textContent = rule.next ? `第 ${rule.stageNumber}/100 关：完成清怪与首领目标，进入${MAPS[rule.next].name}。` : "完成清怪与首领目标，结束百图征途。";
+    $("questTitle").textContent = `${map.story.beatTitle} · ${map.name}`;
+    $("questDescription").textContent = rule.next ? `${map.story.objective}；完成清怪与首领目标后进入${MAPS[rule.next].name}。` : `${map.story.objective}；击败玄烬帝尊，结束第千次轮回。`;
     $("questTag").textContent = progress.completed ? (rule.next ? "出口已开启" : "已通关") : "进行中";
     $("questReward").textContent = progress.rewardClaimed ? "通关奖励已领取" : "通关奖励：60 金币 · 8 印记";
   }
@@ -1340,10 +1509,14 @@
   function saveGame() { if (!persistGame()) return; showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与地图通关状态。", "loot"); }
   function loadGame() {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      const currentRaw = localStorage.getItem(STORAGE_KEY);
+      const legacyRaw = currentRaw ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
+      const saved = JSON.parse(currentRaw || legacyRaw);
       if (!saved || !CLASSES[saved.classId]) return false;
+      const migratedFromV2 = !currentRaw && Boolean(legacyRaw);
       state = createState(saved.classId);
       Object.assign(state.player, saved.player);
+      if (migratedFromV2) state.player.migrationLevelFloor = Math.max(1, Number(saved.player?.level) || 1);
       state.player.previewSkill = null;
       state.player.equipment = saved.equipment || saved.player.equipment || {};
       state.inventory = saved.inventory || [];
@@ -1353,7 +1526,10 @@
       const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
       loadMap(startMap, state.player.x || 480, state.player.y || 780, true);
       $("classModal").classList.add("hidden");
-      log("已恢复本机进度：服务器规则仍以当前版本为准。", "loot");
+      if (migratedFromV2) {
+        persistGame();
+        log("已将 v2 存档迁移到 v3：旧存档保留，地图、装备和原等级已继续使用。", "loot");
+      } else log("已恢复本机进度：服务器规则仍以当前版本为准。", "loot");
       return true;
     } catch { return false; }
   }
@@ -1374,15 +1550,16 @@
   function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = playerMaxHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); }
 
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
-  if (URL_FLAGS.has("e2e")) {
+  if (TEST_MODE) {
     window.__ONEKNIFE_E2E__ = {
-      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, safePoint: { x: MAPS[id].townRect.x + 100, y: MAPS[id].townRect.y + 170 } })))),
+      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
       snapshot: () => state ? JSON.parse(JSON.stringify({
         currentMapId: state.currentMapId,
         stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,
         classId: state.classId,
-        player: { x: state.player.x, y: state.player.y, hp: state.player.hp, resource: state.player.resource, poison: state.player.poison, level: state.player.level, exp: state.player.exp, nextExp: state.player.nextExp, potion: state.player.potion, targetId: state.player.targetId },
-        entities: state.entities.map((entity) => ({ id: entity.id, x: entity.x, y: entity.y, hp: entity.hp, alive: entity.alive, boss: Boolean(entity.boss) })),
+        player: { x: state.player.x, y: state.player.y, hp: state.player.hp, resource: state.player.resource, poison: state.player.poison, level: state.player.level, exp: state.player.exp, nextExp: state.player.nextExp, potion: state.player.potion, targetId: state.player.targetId, previewSkill: state.player.previewSkill },
+        entities: state.entities.map((entity) => ({ id: entity.id, x: entity.x, y: entity.y, hp: entity.hp, alive: entity.alive, boss: Boolean(entity.boss), phase: entity.phase || 0 })),
+        hazardsSpawned: state.hazardsSpawned || 0,
         progress: state.mapProgress,
         logs: state.logs.slice(-6).map((entry) => entry.message)
       })) : null
