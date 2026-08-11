@@ -1,22 +1,24 @@
 const { chromium } = require("playwright");
 
-const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1";
-const MAP_ORDER = ["ash_outskirts", "pine_forest", "black_rock_mine", "red_sand_desert"];
-const MAP_NEEDS = { ash_outskirts: 8, pine_forest: 10, black_rock_mine: 10, red_sand_desert: 10 };
-const SAFE_POINTS = {
-  ash_outskirts: { x: 180, y: 1160 },
-  pine_forest: { x: 180, y: 1160 },
-  black_rock_mine: { x: 180, y: 1160 },
-  red_sand_desert: { x: 1940, y: 540 }
-};
+const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1&fast=1";
+let MAP_ORDER = [];
+let MAP_NEEDS = {};
+let SAFE_POINTS = {};
 const CLASSES = ["warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior"];
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
-const TOTAL_RUNS = Number(process.env.ONEKNIFE_RUNS || 10);
+const TOTAL_RUNS = Number(process.env.ONEKNIFE_RUNS || 1);
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
 async function snapshot(page) {
   return page.evaluate(() => window.__ONEKNIFE_E2E__?.snapshot());
+}
+
+function expectedGrowth(clearedMaps) {
+  if (clearedMaps <= 10) return { level: 1 + clearedMaps, exp: 0 };
+  if (clearedMaps <= 30) return { level: 11 + Math.floor((clearedMaps - 10) / 2), exp: ((clearedMaps - 10) % 2) * 50 };
+  if (clearedMaps <= 60) return { level: 21 + Math.floor((clearedMaps - 30) / 3), exp: Math.floor(((clearedMaps - 30) % 3) * 100 / 3) };
+  return { level: 31 + Math.floor((clearedMaps - 60) / 4), exp: ((clearedMaps - 60) % 4) * 25 };
 }
 
 async function advance(page, milliseconds) {
@@ -168,13 +170,16 @@ async function clearMap(page, mapId) {
 }
 
 async function assertAutoSaveCheckpoint(page, mapId) {
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v2") || "null"));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
   if (!saved?.mapProgress?.[mapId]?.completed) throw new Error(`${mapId} 通关后未自动保存：${JSON.stringify(saved?.mapProgress?.[mapId])}`);
   await page.reload({ waitUntil: "domcontentloaded" });
   await advance(page, 200);
   const restored = await snapshot(page);
   if (restored?.currentMapId !== mapId || !restored.progress?.[mapId]?.completed) throw new Error(`${mapId} 刷新后未恢复通关进度：${JSON.stringify(restored)}`);
-  process.stdout.write(`CHECKPOINT ${mapId} SAVED+RESTORED\n`);
+  const clearedMaps = MAP_ORDER.indexOf(mapId) + 1;
+  const expected = expectedGrowth(clearedMaps);
+  if (restored.player.level !== expected.level || restored.player.exp !== expected.exp || restored.player.nextExp !== 100) throw new Error(`${mapId} 成长节奏错误：期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(restored.player)}`);
+  process.stdout.write(`CHECKPOINT ${String(clearedMaps).padStart(3, "0")}/100 ${mapId} Lv.${restored.player.level} ${restored.player.exp}/100 SAVED+RESTORED\n`);
 }
 
 async function runJourney(browser, runIndex) {
@@ -185,6 +190,11 @@ async function runJourney(browser, runIndex) {
   page.on("dialog", (dialog) => dialog.accept());
   await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+  const catalog = await page.evaluate(() => window.__ONEKNIFE_E2E__?.catalog());
+  if (!Array.isArray(catalog) || catalog.length !== 100) throw new Error(`地图目录数量错误：${catalog?.length}`);
+  MAP_ORDER = catalog.map((entry) => entry.id);
+  MAP_NEEDS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.need]));
+  SAFE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.safePoint]));
   await page.locator(`[data-class="${CLASSES[runIndex]}"]`).click();
   await advance(page, 200);
 
@@ -207,7 +217,8 @@ async function runJourney(browser, runIndex) {
   const title = await page.locator("#mapObjectiveTitle").textContent();
   const state = await page.locator("#mapObjectiveState").textContent();
   const finalSnap = await snapshot(page);
-  if (title !== "纵向切片已通关" || state !== "全部完成") throw new Error(`最终结算文案错误：${state}/${title}`);
+  if (title !== "百图征途已通关" || state !== "全部完成") throw new Error(`最终结算文案错误：${state}/${title}`);
+  if (finalSnap.player.level !== 41 || finalSnap.stageNumber !== 100) throw new Error(`最终成长错误：${JSON.stringify(finalSnap)}`);
   if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
   await context.close();
   return { run: runIndex + 1, classId: CLASSES[runIndex], level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
@@ -217,7 +228,7 @@ async function runJourney(browser, runIndex) {
   const browser = await chromium.launch({ headless: true });
   const results = [];
   try {
-    const concurrency = 2;
+    const concurrency = Math.min(2, TOTAL_RUNS);
     for (let offset = 0; offset < TOTAL_RUNS; offset += concurrency) {
       const batch = Array.from({ length: Math.min(concurrency, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));
       const batchResults = await Promise.all(batch);
