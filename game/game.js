@@ -302,8 +302,16 @@
     const path = [start.x, start.y];
     for (let point = 1; point <= 5; point += 1) {
       const ratio = point / 6;
-      path.push(Math.round(start.x + (boss.x - start.x) * ratio + (random() - .5) * 230));
-      path.push(Math.round(start.y + (boss.y - start.y) * ratio + (random() - .5) * 270));
+      let x = start.x + (boss.x - start.x) * ratio + (random() - .5) * 230;
+      let y = start.y + (boss.y - start.y) * ratio + (random() - .5) * 270;
+      if (site.road === "zigzag") {
+        // 折返道路必须在控制点上产生实际回摆，而不是只换一个标签。
+        const fold = 320 + (stageNumber % 3) * 20;
+        x += point % 2 ? fold : -fold;
+        y += point % 2 ? 210 : -210;
+      }
+      path.push(Math.round(Math.max(120, Math.min(2240, x))));
+      path.push(Math.round(Math.max(100, Math.min(1400, y))));
     }
     path.push(boss.x, boss.y);
     const landmarks = Array.from({ length: 10 }, (_, index) => ({
@@ -345,7 +353,9 @@
       defense: Math.round(3 + stageNumber * 0.42 + typeIndex * 2),
       exp: 0,
       gold: Math.round(8 + stageNumber * 1.4 + typeIndex * 2),
-      radius: 16 + typeIndex
+      radius: 16 + typeIndex,
+      intro: `${chapter.name}中负责巡逻的${name}，会根据玩家距离选择攻击方式。`,
+      skills: [`${name}攻击：基础伤害 ${Math.round(11 + stageNumber * 1.05 + typeIndex * 2)}`, `${name}本能：受到伤害后继续追击`]
     }));
     const bossName = slot === 9 ? chapter.boss : `${chapter.short}${STAGE_SITES[slot]}领主`;
     return {
@@ -417,6 +427,19 @@
       site: map.siteStyle?.arena || "handcrafted"
     });
   }
+  function pathTurnCount(path) {
+    const xPoints = Array.from({ length: path.length / 2 }, (_, index) => path[index * 2]);
+    let previousDirection = 0;
+    let turns = 0;
+    for (let index = 1; index < xPoints.length; index += 1) {
+      const delta = xPoints[index] - xPoints[index - 1];
+      if (Math.abs(delta) < 20) continue;
+      const direction = Math.sign(delta);
+      if (previousDirection && direction !== previousDirection) turns += 1;
+      previousDirection = direction;
+    }
+    return turns;
+  }
   MAP_ORDER.forEach((id, index) => {
     const map = MAPS[id];
     map.stageNumber = index + 1;
@@ -466,6 +489,75 @@
     "沙蝎王": "赤砂大漠的高危首领，尾刺会锁定玩家，并可叠加毒层。"
   };
 
+  const MONSTER_BEHAVIORS = {
+    "腐烬矿工": ["矿镐重击：近身造成高额物理伤害", "矿尘护体：短暂提高防御"],
+    "赤牙猎犬": ["撕咬：连续两次快速攻击", "嗜血追踪：玩家低血时移速提高"],
+    "裂脊尸卫": ["残甲冲撞：命中后短暂减速", "尸甲：受到的首次伤害降低"],
+    "灰烬侦察者": ["投掷火石：远距离小范围伤害", "警戒号角：附近怪物短暂加攻"],
+    "灰鬃狼": ["群猎撕咬：附近同类越多伤害越高", "跃袭：快速贴近目标"],
+    "林皮蛛": ["毒牙：叠加一层中毒", "蛛网：降低玩家移动速度"],
+    "松鸦盗": ["背刺：从侧后方攻击时增伤", "掷刃：中距离投掷飞刀"],
+    "枯木菇人": ["孢子爆裂：死亡时留下短暂毒区", "木甲：防御较高"],
+    "黑岩矿工": ["重锤：蓄力后造成震退", "落石警告：召唤小范围落石"],
+    "落石魔": ["岩拳：高伤害近战攻击", "碎岩皮肤：受到暴击伤害降低"],
+    "矿脉蝙蝠": ["俯冲：从空中快速突袭", "尖啸：短暂打断玩家动作"],
+    "腐毒僵尸": ["腐毒抓：叠加持续伤害", "尸气：靠近时降低治疗效果"],
+    "赤砂蝎": ["尾针：叠加毒层", "钻沙：短暂脱离锁定"],
+    "沙虫": ["地底突袭：从玩家脚下出现", "沙甲：正面减伤"],
+    "沙盗斥候": ["连射：连续发射三枚弩箭", "撤步：受伤后向后位移"],
+    "枯骨游魂": ["魂火：远程追踪弹", "无形：短暂降低受到的物理伤害"],
+    "腐烬战奴": { intro: "被守碑军遗留烬纹控制的战俑，仍重复执行百年前的封锁命令。", skills: ["烬纹重击：命中后留下灼热印记", "守碑姿态：低血时提高防御"] },
+    "赤牙猎兽": { intro: "边境驯兽场逃出的猎兽，嗅到玄烬气息后会追击携印者。", skills: ["撕裂突进：快速扑向目标", "血腥嗅觉：玩家低血时伤害提高"] },
+    "残甲尸兵": { intro: "穿着断裂军甲的守碑尸兵，胸甲上还刻着未完成的撤退令。", skills: ["断甲劈砍：造成高额近战伤害", "残军意志：首次受到致命伤害时保留少量生命"] },
+    "荒道斥候": { intro: "沿魂火车队巡逻的边境斥候，熟悉所有补给营的暗号。", skills: ["火石投掷：远程制造小范围灼烧", "警戒哨音：短暂强化附近敌人"] },
+    "潮骨水鬼": { intro: "被倒流潮水送回陆地的旧水军，骨甲里仍藏着未送达的军函。", skills: ["潮刃：近战附带缓速", "回潮：受伤后向水域方向退回"] },
+    "蓝鳞海妖": { intro: "替王朝守住海底档案的蓝鳞妖族，歌声会扰乱入侵者记忆。", skills: ["潮歌：降低玩家资源回复", "鳞光：短暂反射部分远程伤害"] },
+    "礁甲兽": { intro: "盘踞沉船航道的礁石巨兽，外壳记录着被抹掉的海战日期。", skills: ["礁壳冲撞：命中后击退", "潮甲：背部受到的伤害降低"] },
+    "逐浪刀客": { intro: "追随洛汐寻找水军姓名的亡命刀客，出手节奏随潮汐变化。", skills: ["逐浪三斩：连续三段攻击", "踏潮：短暂提高移动速度"] },
+    "石俑卫": { intro: "龙脉地宫的计数守卫，只对烬纹容器和盗取玉册者拔刀。", skills: ["石戟横扫：扇形近战伤害", "俑身固守：短暂免疫击退"] },
+    "龙脉毒虫": { intro: "吸食龙脉渗液的地宫毒虫，会把失败容器的编号刻进毒刺。", skills: ["龙毒：叠加持续伤害", "钻脉：短暂遁入地下"] },
+    "铜甲尸": { intro: "被司烬院封存在铜棺中的失败容器，听见玩家脚步便重新醒来。", skills: ["铜棺砸击：高额近战伤害", "铜甲反震：近战命中者受到反伤"] },
+    "寻宝恶徒": { intro: "追踪龙骨玉册的盗陵者，愿意用同伴的生命换取一块结晶。", skills: ["夺宝飞刃：中距离投掷", "贪婪护符：拾取附近能量后提高攻击"] },
+    "霜牙狼": { intro: "冰镜边缘的群猎狼，脚印会在同一分钟内反复出现。", skills: ["霜牙撕咬：命中后降低移速", "雪线围猎：同伴越多伤害越高"] },
+    "冻尸兵": { intro: "停时冰镜保存的亡军，胸前军令永远停在撤退前一刻。", skills: ["冻刃：附带寒冷减速", "冰躯：低血时受到伤害降低"] },
+    "冰壳魔": { intro: "以冻结记忆为食的冰壳魔物，会把活人的体温当作火种。", skills: ["冰壳震荡：范围伤害并减速", "寒甲：周期获得护盾"] },
+    "雪原猎手": { intro: "守护雪哨最后军令的猎手，拒绝让任何活人再被冰镜保存。", skills: ["冰弩：远程追踪攻击", "雪隐：短暂降低被命中概率"] },
+    "熔岩奴": { intro: "烬火炉心外环的熔岩奴，曾是被人族夺走初火的第一批守炉者。", skills: ["熔岩拳：命中后留下灼烧", "炉渣护体：受到伤害时反弹火星"] },
+    "火翼魔": { intro: "替赤鸢巡查魔域上空的火翼族，记得每一座被篡改的炉门。", skills: ["火翼俯冲：快速突袭", "焰羽：向周围散射火羽"] },
+    "焦骨卫": { intro: "在夺火战争中被烧焦的守卫，仍把入侵者误认作王朝军。", skills: ["焦骨劈：高额近战伤害", "余烬复燃：低血时恢复少量生命"] },
+    "炼狱行刑者": { intro: "魔域旧刑场的执行者，专门惩罚试图独占初火的容器。", skills: ["锁链拖拽：将目标拉近", "刑火印：目标越孤立伤害越高"] },
+    "摄魂鬼": { intro: "幽冥河边收集无名记忆的鬼影，每一张脸都来自被献祭的城民。", skills: ["摄魂：降低玩家最大资源", "无名雾：短暂隐藏自身轮廓"] },
+    "冥甲尸": { intro: "穿戴亡者姓名铸成的冥甲尸，拒绝让生死簿上的名字消失。", skills: ["冥甲重击：命中后造成持续伤害", "死者护佑：附近亡魂越多防御越高"] },
+    "渡魂妖": { intro: "替无咎摆渡亡魂的渡魂妖，迷失后会把活人也当成乘客。", skills: ["引魂灯：召来追踪鬼火", "摆渡步：短暂闪到玩家侧面"] },
+    "黄泉守卫": { intro: "看守万名生死簿的黄泉守卫，只允许记住真名的人通过。", skills: ["黄泉戟：扇形攻击", "名册封锁：短暂禁止药水回复"] },
+    "遗迹傀儡": { intro: "天穹遗迹坠落后仍在执行重置协议的古代傀儡。", skills: ["机关拳：命中后短暂眩晕", "协议护盾：周期生成正面护盾"] },
+    "雷羽妖": { intro: "盘旋在坠落遗迹上空的雷羽妖，负责监视重置星盘的读数。", skills: ["雷羽：远程落雷", "风暴翼：短暂提高移速并免疫减速"] },
+    "巡天卫": { intro: "维护双史天空航道的巡天卫，把所有接近星盘者登记为异常。", skills: ["天矛：直线穿透攻击", "巡天标记：提高后续受到的伤害"] },
+    "断界法师": { intro: "掌握重置边界的古代法师，认为毁灭文明是最小损失方案。", skills: ["断界弹：追踪魔法弹", "裂隙：在脚下生成延迟爆发区"] },
+    "陨晶兽": { intro: "吞食失败未来结晶的陨兽，体内映出玩家尚未经历的死亡。", skills: ["晶角冲锋：直线冲撞", "陨晶甲：受到技能伤害降低"] },
+    "虚空影": { intro: "从被删去的未来投下的影子，会模仿玩家最近一次攻击。", skills: ["影袭：复制基础攻击", "虚空步：短暂无敌并位移"] },
+    "星骸兵": { intro: "由失败轮回遗骸拼成的星骸兵，胸甲上刻着不同版本的终局。", skills: ["星骸斩：多段近战", "残星复起：死亡后短暂复原"] },
+    "禁区猎杀者": { intro: "专门清除未来证人的猎杀者，优先追击携带逆命星核者。", skills: ["猎杀箭：远程追踪", "处决：玩家低血时造成额外伤害"] },
+    "堕神卫": { intro: "两条时间线重叠后失去神名的堕神卫，仍守着不存在的神殿。", skills: ["神陨锤：范围震击", "堕神甲：周期降低受到的伤害"] },
+    "魔血骑": { intro: "以魔血维持停战誓约的骑士，误把双方的真实史书都当成敌书。", skills: ["魔血冲锋：冲向目标并击退", "血誓：低血时提高攻击"] },
+    "战场怨魂": { intro: "神魔战场的未名怨魂，记得两条历史中互相矛盾的死亡。", skills: ["怨火：追踪玩家位置", "战忆：附近同类死亡时提高伤害"] },
+    "破军修罗": { intro: "拒绝停战的破军修罗，相信只有继续战争才能证明自己的历史。", skills: ["破军连斩：连续近战攻击", "修罗怒：攻击命中后叠加攻速"] },
+    "帝陵禁卫": { intro: "玄烬帝陵最后的禁卫，把第千次轮回的容器视为归位者。", skills: ["帝陵戟：高额扇形伤害", "禁卫阵：附近同伴获得减伤"] },
+    "金甲尸王": { intro: "以历代容器金甲拼成的尸王，身体里保存着九百九十九段失败记忆。", skills: ["金甲重踏：范围震退", "尸王再起：低血时召回一名禁卫"] },
+    "镇国妖师": { intro: "替旧王朝维持双史封锁的妖师，知道帝尊真正的第一张脸。", skills: ["镇国符：封锁玩家技能冷却", "妖火阵：以目标为中心生成火圈"] },
+    "不灭战魂": { intro: "帝陵终殿永不熄灭的战魂，拒绝承认第千次轮回可以选择不同答案。", skills: ["不灭斩：生命越低伤害越高", "战魂回响：复制最近一次危险技能"] }
+  };
+
+  Object.values(MAPS).forEach((map) => {
+    map.monsterTypes.forEach((type) => {
+      const base = Object.keys(MONSTER_BEHAVIORS).find((name) => type.name.endsWith(name));
+      if (!base) return;
+      const behavior = MONSTER_BEHAVIORS[base];
+      type.intro = behavior.intro || MONSTER_FLAVOR[base] || type.intro;
+      type.skills = behavior.skills || behavior;
+    });
+  });
+
   const COMMON_DROPS = [
     { name: "生命药水", kind: "health_potion", slot: "consumable", quality: "blue", glyph: "药", color: "#f16d66", desc: "拾取后增加 1 瓶生命药水", weight: 36 },
     { name: "回元露", kind: "resource_potion", slot: "consumable", quality: "blue", glyph: "露", color: "#78b6ec", desc: "拾取后恢复 35% 职业资源", weight: 24 },
@@ -502,9 +594,10 @@
 
   function monsterProfile(entity) {
     if (!entity.boss) {
+      const behavior = MONSTER_BEHAVIORS[entity.name];
       return {
-        intro: MONSTER_FLAVOR[entity.name] || "游荡在当前区域的敌对生物。",
-        skills: [`近身攻击：基础伤害 ${entity.attack}`, `护甲：防御 ${entity.defense}`]
+        intro: entity.intro || behavior?.intro || MONSTER_FLAVOR[entity.name] || "游荡在当前区域的敌对生物。",
+        skills: entity.skills || (Array.isArray(behavior) ? behavior : behavior?.skills) || [`近身攻击：基础伤害 ${entity.attack}`, `护甲：防御 ${entity.defense}`]
       };
     }
     const kind = activeMap().boss.specialKind;
@@ -718,8 +811,13 @@
       showToast(`正在接近 ${target.name}`);
       return;
     }
+    const normalAttackCost = state.classId === "mage" ? 8 : 0;
+    if (normalAttackCost > 0 && state.player.resource < normalAttackCost) {
+      showToast(`${hero.resourceName}不足，普攻需要 ${normalAttackCost} 点${hero.resourceName}`);
+      return;
+    }
     state.player.attackTimer = hero.cooldown;
-    state.player.resource = clamp(state.player.resource + (state.classId === "warrior" ? 6 : state.classId === "taoist" ? 4 : -8), 0, hero.resource);
+    state.player.resource = clamp(state.player.resource + (state.classId === "warrior" ? 6 : state.classId === "taoist" ? 4 : -normalAttackCost), 0, hero.resource);
     resolveDamage(target, 1, "普攻", "普通");
   }
 
@@ -871,6 +969,7 @@
       }
     });
     if (!collected) showToast("背包已满，装备仍保留在地面");
+    if (collected) persistGame();
     renderPlayer();
     renderInventory();
   }
@@ -883,6 +982,7 @@
     if (previous) state.inventory.push(previous);
     log(`穿戴 <b style="color:${item.color}">${item.name}</b>，战力提升 ${item.power}。`, "loot");
     showToast(`${item.name} 已装备，死亡掉落资格仍按绑定与区域规则判定`);
+    persistGame();
     renderAll();
   }
 
@@ -1533,7 +1633,13 @@
       return true;
     } catch { return false; }
   }
-  function resetGame() { localStorage.removeItem(STORAGE_KEY); state = null; $("classModal").classList.remove("hidden"); showToast("请选择职业开始新的边境旅程"); }
+  function resetGame() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    state = null;
+    $("classModal").classList.remove("hidden");
+    showToast("旧存档已清除，请选择职业开始新的边境旅程");
+  }
   function setupClasses() { $("classOptions").innerHTML = Object.entries(CLASSES).map(([id, hero]) => `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`).join(""); $("classOptions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => chooseClass(button.dataset.class))); }
 
   function setupInput() {
@@ -1547,12 +1653,12 @@
     $("normalAttackBtn").addEventListener("click", normalAttack); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
   }
 
-  function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = playerMaxHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); }
+  function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = playerMaxHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); persistGame(); }
 
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
   if (TEST_MODE) {
     window.__ONEKNIFE_E2E__ = {
-      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
+      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
       snapshot: () => state ? JSON.parse(JSON.stringify({
         currentMapId: state.currentMapId,
         stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,

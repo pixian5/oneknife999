@@ -6,9 +6,22 @@ let MAP_ORDER = [];
 let MAP_NEEDS = {};
 let SAFE_POINTS = {};
 let MAP_BOSS_PHASES = {};
-const CLASSES = ["warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior", "mage", "taoist", "warrior"];
+const VALID_CLASSES = ["warrior", "mage", "taoist"];
+const DEFAULT_CLASS_SEQUENCE = VALID_CLASSES;
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
-const TOTAL_RUNS = Number(process.env.ONEKNIFE_RUNS || 1);
+const requestedClasses = (process.env.ONEKNIFE_CLASSES || "").split(",").map((value) => value.trim()).filter(Boolean);
+const totalRunsValue = process.env.ONEKNIFE_RUNS === undefined ? (requestedClasses.length || 1) : Number(process.env.ONEKNIFE_RUNS);
+const TOTAL_RUNS = totalRunsValue;
+const CONCURRENCY = Number(process.env.ONEKNIFE_CONCURRENCY || Math.min(3, TOTAL_RUNS));
+
+if (!Number.isInteger(TOTAL_RUNS) || TOTAL_RUNS < 1) throw new Error(`ONEKNIFE_RUNS 必须是大于 0 的整数，实际为 ${process.env.ONEKNIFE_RUNS}`);
+if (!Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 3) throw new Error(`ONEKNIFE_CONCURRENCY 必须是 1-3，实际为 ${process.env.ONEKNIFE_CONCURRENCY}`);
+if (requestedClasses.some((classId) => !VALID_CLASSES.includes(classId))) throw new Error(`ONEKNIFE_CLASSES 包含未知职业：${requestedClasses.join(",")}`);
+const CLASS_SEQUENCE = requestedClasses.length ? requestedClasses : DEFAULT_CLASS_SEQUENCE;
+
+function classForRun(runIndex) {
+  return CLASS_SEQUENCE[runIndex % CLASS_SEQUENCE.length];
+}
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
@@ -199,6 +212,7 @@ async function assertAutoSaveCheckpoint(page, mapId) {
 }
 
 async function runJourney(browser, runIndex) {
+  const classId = classForRun(runIndex);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   const errors = [];
@@ -212,12 +226,18 @@ async function runJourney(browser, runIndex) {
   if (new Set(catalog.map((entry) => entry.layoutId)).size !== 100) throw new Error("地图布局签名不唯一");
   if (new Set(catalog.map((entry) => entry.layoutSignature)).size !== 100) throw new Error("地图实际构图重复");
   if (new Set(catalog.slice(4).map((entry) => entry.siteArchetype)).size !== 10 || catalog.some((entry) => !entry.siteDetail)) throw new Error("地图场所母题缺失");
+  if (catalog.slice(4).some((entry) => entry.monsterProfiles.some((monster) => !monster.intro || !Array.isArray(monster.skills) || monster.skills.length < 2 || monster.intro.includes("游荡在当前区域")))) throw new Error("后期普通怪资料缺失");
+  const roadRules = { direct: { pathCount: 1 }, fork: { pathCount: 2 }, zigzag: { pathCount: 1, minTurns: 2 }, radial: { pathCount: 2 } };
+  for (const entry of catalog.slice(4)) {
+    const expected = roadRules[entry.road];
+    if (!expected || entry.pathCount !== expected.pathCount || (expected.minTurns && entry.pathTurnCount < expected.minTurns)) throw new Error(`地图道路几何不符合 ${entry.id}：${JSON.stringify(entry)}`);
+  }
   if (new Set(catalog.map((entry) => entry.storyBeat)).size !== 100 || catalog.some((entry) => !entry.storyObjective)) throw new Error("百图剧情节点缺失或重复");
   MAP_ORDER = catalog.map((entry) => entry.id);
   MAP_NEEDS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.need]));
   SAFE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.safePoint]));
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
-  await page.locator(`[data-class="${CLASSES[runIndex]}"]`).click();
+  await page.locator(`[data-class="${classId}"]`).click();
   await advance(page, 200);
 
   await page.keyboard.press("t");
@@ -243,7 +263,7 @@ async function runJourney(browser, runIndex) {
   if (finalSnap.player.level !== 41 || finalSnap.stageNumber !== 100) throw new Error(`最终成长错误：${JSON.stringify(finalSnap)}`);
   if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
   await context.close();
-  return { run: runIndex + 1, classId: CLASSES[runIndex], level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
+  return { run: runIndex + 1, classId, level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
 }
 
 async function assertLegacyMigration(browser) {
@@ -277,6 +297,49 @@ async function assertLegacyMigration(browser) {
   if (snap?.currentMapId !== "red_sand_desert" || snap.player.level !== 16 || !snap.progress.red_sand_desert?.completed) throw new Error(`v2 迁移状态错误：${JSON.stringify(snap)}`);
   if (!stored.v2 || stored.v3?.saveVersion !== 3 || stored.v3?.player?.migrationLevelFloor !== 16) throw new Error(`v2 迁移存储错误：${JSON.stringify(stored)}`);
   process.stdout.write("MIGRATION v2->v3 SAVED+RESTORED\n");
+  await page.locator("#resetBtn").click();
+  const resetStorage = await page.evaluate(() => ({
+    v2: localStorage.getItem("oneknife999-prototype-save-v2"),
+    v3: localStorage.getItem("oneknife999-prototype-save-v3")
+  }));
+  if (resetStorage.v2 || resetStorage.v3) throw new Error(`重置后旧存档仍存在：${JSON.stringify(resetStorage)}`);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await advance(page, 200);
+  if (await snapshot(page)) throw new Error(`重置后刷新不应自动恢复存档：${JSON.stringify(await snapshot(page))}`);
+  process.stdout.write("RESET v2+v3 CLEARED+RESTORED\n");
+  await context.close();
+}
+
+async function assertAssetAutosave(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("oneknife999-prototype-save-v3", JSON.stringify({
+      saveVersion: 3,
+      classId: "warrior",
+      currentMapId: "ash_outskirts",
+      player: { x: 480, y: 780, level: 1, exp: 0, nextExp: 100, gold: 40, marks: 0, potion: 3, equipment: { weapon: null, neck: null, boots: null } },
+      inventory: [{ id: "asset-test-weapon", name: "测试矿刃", slot: "weapon", quality: "blue", glyph: "刃", power: 12, value: 20, color: "#78b6ec", desc: "资产保存回归" }],
+      equipment: { weapon: null, neck: null, boots: null },
+      mapProgress: {}
+    }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await advance(page, 200);
+  // 背包每帧会随角色状态重绘，使用当前 DOM 节点触发真实 click 事件，
+  // 避免 Playwright 在 actionability 检查期间拿到已被下一帧替换的节点。
+  await page.evaluate(() => {
+    const item = document.querySelector('#inventoryGrid [data-item-index="0"]');
+    if (!item) throw new Error("装备测试物品未渲染");
+    item.click();
+  });
+  await advance(page, 100);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  if (saved?.player?.equipment?.weapon?.id !== "asset-test-weapon" || saved.inventory?.length !== 0) throw new Error(`装备变更未自动保存：${JSON.stringify(saved)}`);
+  process.stdout.write("ASSET EQUIP SAVED+RESTORED\n");
   await context.close();
 }
 
@@ -285,9 +348,9 @@ async function assertLegacyMigration(browser) {
   const results = [];
   try {
     await assertLegacyMigration(browser);
-    const concurrency = Math.min(2, TOTAL_RUNS);
-    for (let offset = 0; offset < TOTAL_RUNS; offset += concurrency) {
-      const batch = Array.from({ length: Math.min(concurrency, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));
+    await assertAssetAutosave(browser);
+    for (let offset = 0; offset < TOTAL_RUNS; offset += CONCURRENCY) {
+      const batch = Array.from({ length: Math.min(CONCURRENCY, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));
       const batchResults = await Promise.all(batch);
       results.push(...batchResults);
       for (const result of batchResults) process.stdout.write(`RUN ${result.run}/${TOTAL_RUNS} ${result.classId} Lv.${result.level}: ${result.result}\n`);
