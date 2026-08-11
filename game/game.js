@@ -63,7 +63,7 @@
         { name: "灰烬侦察者", color: "#b49b61", hp: 104, attack: 22, defense: 4, exp: 48, gold: 18, radius: 16 }
       ],
       monsterSpawns: [[820, 560, 0], [1010, 700, 1], [1180, 510, 2], [1360, 820, 3], [1550, 610, 0], [1740, 510, 1], [1930, 690, 2], [2100, 850, 3], [920, 1040, 0], [1140, 1120, 1], [1430, 1040, 2], [1700, 1060, 3], [2010, 1110, 0], [690, 1140, 1], [1510, 420, 2], [1880, 390, 3]],
-      boss: { id: "boss-ash", name: "裂碑领主", color: "#e99b5f", hp: 2100, attack: 36, defense: 18, exp: 480, gold: 260, radius: 34, x: 1980, y: 760, phases: 2, phase1Trigger: 0.55, specialInterval: 7, specialKind: "crack" },
+      boss: { id: "boss-ash", name: "裂碑领主", color: "#e99b5f", hp: 900, attack: 36, defense: 18, exp: 480, gold: 260, radius: 34, x: 1980, y: 760, phases: 2, phase1Trigger: 0.55, specialInterval: 7, specialKind: "crack" },
       drops: [
         { name: "矿道旧刃", slot: "weapon", quality: "blue", glyph: "刀", power: 12, value: 22, color: "#78b6ec", desc: "攻击 12 · 破甲斩伤害 +3%" },
         { name: "灰烬护符", slot: "neck", quality: "purple", glyph: "玉", power: 18, value: 46, color: "#a88ce3", desc: "生命 +45 · 一刀充能 +4%" },
@@ -99,7 +99,7 @@
         { name: "枯木菇人", color: "#a07b54", hp: 232, attack: 22, defense: 14, exp: 96, gold: 20, radius: 19 }
       ],
       monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 760, 2], [780, 1080, 3], [1100, 280, 0], [1900, 980, 1]],
-      boss: { id: "boss-pine", name: "森林巨猿", color: "#5c7d52", hp: 3600, attack: 52, defense: 28, exp: 820, gold: 420, radius: 36, x: 1980, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 5.5, specialKind: "logs" },
+      boss: { id: "boss-pine", name: "森林巨猿", color: "#5c7d52", hp: 1400, attack: 52, defense: 28, exp: 820, gold: 420, radius: 36, x: 1980, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 5.5, specialKind: "logs" },
       drops: [
         { name: "狼皮护腕", slot: "weapon", quality: "blue", glyph: "腕", power: 18, value: 36, color: "#78b6ec", desc: "攻击 18 · 灰鬃狼掉落" },
         { name: "蛛丝项链", slot: "neck", quality: "blue", glyph: "玉", power: 14, value: 32, color: "#78b6ec", desc: "生命 +35 · 暴击 +2%" },
@@ -136,7 +136,7 @@
         { name: "腐毒僵尸", color: "#5a7050", hp: 380, attack: 50, defense: 14, exp: 158, gold: 28, radius: 19 }
       ],
       monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 540, 2], [780, 1080, 3], [1100, 280, 0], [2080, 980, 1]],
-      boss: { id: "boss-mine", name: "坑道尸皇", color: "#7a5a3a", hp: 6400, attack: 78, defense: 42, exp: 1600, gold: 760, radius: 38, x: 2080, y: 700, phases: 3, phase1Trigger: 0.7, phase2Trigger: 0.35, specialInterval: 5, specialKind: "devour", summonInterval: 8, summonMob: 0, summonMax: 4 },
+      boss: { id: "boss-mine", name: "坑道尸皇", color: "#7a5a3a", hp: 2100, attack: 78, defense: 42, exp: 1600, gold: 760, radius: 38, x: 2080, y: 700, phases: 3, phase1Trigger: 0.7, phase2Trigger: 0.35, specialInterval: 5, specialKind: "devour", summonInterval: 8, summonMob: 0, summonMax: 4 },
       drops: [
         { name: "黑铁长剑", slot: "weapon", quality: "purple", glyph: "剑", power: 32, value: 110, color: "#a88ce3", desc: "攻击 32 · 破甲斩伤害 +6%" },
         { name: "矿主项链", slot: "neck", quality: "purple", glyph: "玉", power: 28, value: 96, color: "#a88ce3", desc: "生命 +90 · 怒气 +5" },
@@ -175,7 +175,7 @@
         { name: "枯骨游魂", color: "#9ab0a0", hp: 560, attack: 84, defense: 16, exp: 250, gold: 42, radius: 18 }
       ],
       monsterSpawns: [[600, 620, 0], [820, 820, 1], [980, 540, 2], [1180, 740, 0], [1360, 480, 1], [1500, 880, 3], [1700, 700, 0], [1840, 540, 2], [1260, 1020, 3], [1480, 1180, 0], [1720, 1080, 1], [1980, 540, 2], [780, 1080, 3], [1100, 280, 0], [2080, 980, 1]],
-      boss: { id: "boss-desert", name: "沙蝎王", color: "#d09050", hp: 10000, attack: 112, defense: 60, exp: 2400, gold: 1100, radius: 40, x: 2080, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 4.5, specialKind: "sting", poisonStacks: true },
+      boss: { id: "boss-desert", name: "沙蝎王", color: "#d09050", hp: 3000, attack: 112, defense: 60, exp: 2400, gold: 1100, radius: 40, x: 2080, y: 700, phases: 2, phase1Trigger: 0.5, specialInterval: 4.5, specialKind: "sting", poisonStacks: true },
       drops: [
         { name: "蝎尾匕首", slot: "weapon", quality: "orange", glyph: "匕", power: 56, value: 280, color: "#e7b36b", desc: "攻击 56 · 暴击 +6% · 沙蝎王掉落" },
         { name: "沙漠之星", slot: "neck", quality: "orange", glyph: "玉", power: 48, value: 240, color: "#e7b36b", desc: "生命 +160 · 毒抗 +12%" },
@@ -189,6 +189,13 @@
   };
 
   const MAP_ORDER = ["ash_outskirts", "pine_forest", "black_rock_mine", "red_sand_desert"];
+
+  const MAP_CLEAR_RULES = {
+    ash_outskirts: { kills: 8, boss: "裂碑领主", next: "pine_forest", exit: "东侧出口" },
+    pine_forest: { kills: 10, boss: "森林巨猿", next: "black_rock_mine", exit: "东侧出口" },
+    black_rock_mine: { kills: 10, boss: "坑道尸皇", next: "red_sand_desert", exit: "东侧出口" },
+    red_sand_desert: { kills: 10, boss: "沙蝎王", next: null, exit: null }
+  };
 
   const MONSTER_FLAVOR = {
     "腐烬矿工": "被矿尘侵蚀的旧矿工，会挥动沉重矿镐追击闯入者。",
@@ -274,9 +281,31 @@
       boss: { active: true, defeated: false, respawn: 0 },
       startedAt: Date.now(),
       quest: { kills: 0, need: 8, completed: false },
+      mapProgress: {},
       hazards: [],
       hoveredEntityId: null
     };
+  }
+
+  function mapProgress(mapId = state.currentMapId) {
+    const rule = MAP_CLEAR_RULES[mapId];
+    state.mapProgress ||= {};
+    state.mapProgress[mapId] ||= { kills: 0, need: rule.kills, bossDefeated: false, completed: false, rewardClaimed: false, completionAnnounced: false };
+    const progress = state.mapProgress[mapId];
+    progress.need = rule.kills;
+    progress.kills = clamp(Number(progress.kills) || 0, 0, rule.kills);
+    progress.bossDefeated = Boolean(progress.bossDefeated);
+    progress.completed = progress.kills >= rule.kills && progress.bossDefeated;
+    return progress;
+  }
+
+  function isForwardExit(exit, mapId = state.currentMapId) {
+    return MAP_ORDER.indexOf(exit.target) > MAP_ORDER.indexOf(mapId);
+  }
+
+  function primaryExit() {
+    const map = activeMap();
+    return map.exits.find((exit) => isForwardExit(exit)) || null;
   }
 
   function createEntities(map) {
@@ -297,10 +326,13 @@
     state.currentMapId = mapId;
     state.player.x = spawnX;
     state.player.y = spawnY;
+    // Each map entry starts in a protected buffer so a death never creates an unrecoverable low-health loop.
+    state.player.hp = playerMaxHp();
+    state.player.resource = activeHero().resource;
     state.player.targetId = null;
+    moveTarget = null;
     state.player.invulnerable = 3;
     state.player.poison = 0;
-    moveTarget = null;
     state.entities = createEntities(map);
     state.drops = [];
     state.particles = [];
@@ -308,12 +340,14 @@
     state.hazards = [];
     state.hoveredEntityId = null;
     state.boss = { active: true, defeated: false, respawn: 0 };
-    state.quest = { kills: 0, need: map.id === "ash_outskirts" ? 8 : 10, completed: false };
+    state.quest = mapProgress(mapId);
     state.player.visitedMaps[mapId] = true;
     if (!silent) {
       log(`进入 <b>${map.name} · ${map.subtitle}</b>：推荐等级 Lv.${map.levelMin}-${map.levelMax}，${map.dangerLabel}。`, "loot");
       showToast(`${map.name} · ${map.subtitle}（Lv.${map.levelMin}-${map.levelMax}）`);
       if (map.danger === "danger" || map.danger === "desolate") log(`本区为<b style="color:#ee9b91">危险区</b>：实际游戏会按规则结算 PK 爆装，本原型仅作地图切换演示。`, "warn");
+      const progress = mapProgress(mapId);
+      if (!progress.completed) log(`关卡目标：击败 <b>${progress.need} 只普通怪物</b>并击破<b>${MAP_CLEAR_RULES[mapId].boss}</b>。`, "loot");
     }
     renderAll();
   }
@@ -373,8 +407,8 @@
     loadMap("ash_outskirts", 480, 780, true);
     $("classModal").classList.add("hidden");
     log(`你选择了 <b>${CLASSES[classId].name}</b>，矿道深处传来石碑碎裂声。`);
-    log("短目标：击败 8 只矿道怪物，找到第一件可用装备。", "loot");
-    log("地图右侧的<b>发光出口</b>可前往<b>雾松林</b>，沿线路探索 4 张首发地图。", "loot");
+    log("关卡目标：击败 <b>8 只普通怪物</b>并击破<b>裂碑领主</b>。", "loot");
+    log("完成两项目标后，前往地图东侧的<b>发光出口</b>进入雾松林。", "loot");
     showToast("出城后会自动记录目标，点击怪物即可锁定");
     renderAll();
   }
@@ -447,7 +481,7 @@
     const target = findTarget();
     if (skill.kind === "治疗") {
       state.player.resource -= skill.cost;
-      state.player.hp = clamp(state.player.hp + Math.round(hero.hp * .28), 0, hero.hp + equipmentHp());
+      state.player.hp = clamp(state.player.hp + Math.round(hero.hp * .28), 0, playerMaxHp());
       state.player.cooldowns[index] = skill.cd;
       textAt(`+${Math.round(hero.hp * .28)}`, state.player.x, state.player.y - 30, "#a88ce3", 15);
       log("生息法阵恢复生命，并为一刀时刻积累势能。", "loot");
@@ -487,7 +521,7 @@
     const expGain = target.exp + state.player.level * (target.boss ? 8 : 2);
     state.player.exp += expGain; state.player.gold += target.gold;
     state.player.totalKills += 1; state.player.kills += 1;
-    state.quest.kills = Math.min(state.quest.need, state.quest.kills + (target.boss ? 3 : 1));
+    if (!target.boss) state.quest.kills = Math.min(state.quest.need, state.quest.kills + 1);
     state.player.resource = clamp(state.player.resource + hero.resource * .08, 0, hero.resource);
     state.player.charge = clamp(state.player.charge + (target.boss ? 32 : 12), 0, 100);
     if (target.boss) {
@@ -496,16 +530,44 @@
       log(`<b>首领击破</b>：${target.name} 倒下，个人获得 35 首领印记。`, "loot");
       showToast("首领结算完成：贡献快照已锁定");
       state.boss.defeated = true;
+      state.quest.bossDefeated = true;
     } else log(`${target.name} 被击败，获得 ${expGain} 经验与 ${target.gold} 金币。`);
     spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
     const dropRolls = target.boss ? 2 : (Math.random() < .42 ? 1 : 0);
     for (let roll = 0; roll < dropRolls; roll += 1) spawnDrop(target, roll);
-    if (state.quest.kills >= state.quest.need && !state.quest.completed) {
-      state.quest.completed = true; state.player.gold += 60; state.player.marks += 8;
-      log("<b>委托完成</b>：黑铁 ×3、60 金币、8 首领印记已发放。", "loot"); showToast("委托完成：你的第一件橙装距离更近了");
-    }
+    checkMapCompletion();
     levelCheck();
     state.player.targetId = null;
+    moveTarget = null;
+  }
+
+  function checkMapCompletion() {
+    const map = activeMap();
+    const rule = MAP_CLEAR_RULES[map.id];
+    const progress = mapProgress();
+    if (progress.kills >= progress.need && !progress.killAnnounced) {
+      progress.killAnnounced = true;
+      if (!progress.bossDefeated) {
+        log(`清剿完成：下一步击败区域首领 <b>${rule.boss}</b>。`, "loot");
+        showToast(`清剿完成，下一步：击败 ${rule.boss}`);
+      }
+    }
+    progress.completed = progress.kills >= progress.need && progress.bossDefeated;
+    if (!progress.completed || progress.completionAnnounced) return;
+    progress.completionAnnounced = true;
+    if (!progress.rewardClaimed) {
+      progress.rewardClaimed = true;
+      state.player.gold += 60;
+      state.player.marks += 8;
+    }
+    if (rule.next) {
+      const nextMap = MAPS[rule.next];
+      log(`<b>${map.name}通关</b>：60 金币、8 首领印记已发放。前往${rule.exit}进入<b>${nextMap.name}</b>。`, "loot");
+      showToast(`${map.name}已通关：前往${rule.exit}进入${nextMap.name}`);
+    } else {
+      log("<b>纵向切片完成</b>：四张地图全部通关，沙蝎王已被击败。", "loot");
+      showToast("恭喜通关：一刀999 纵向切片完成");
+    }
   }
 
   function spawnDrop(source, roll = 0) {
@@ -571,16 +633,30 @@
     const hero = activeHero();
     while (state.player.exp >= state.player.nextExp && state.player.level < 30) {
       state.player.exp -= state.player.nextExp; state.player.level += 1; state.player.nextExp = Math.round(state.player.nextExp * 1.22);
-      state.player.hp = hero.hp + equipmentHp(); state.player.resource = hero.resource;
+      state.player.hp = playerMaxHp(); state.player.resource = hero.resource;
       log(`<b>等级提升</b>：你已达到 Lv.${state.player.level}，新的地图和装备目标正在解锁。`, "loot");
       showToast(`升级成功：Lv.${state.player.level}`);
     }
   }
 
+  function playerMaxHp() { return activeHero().hp + state.player.level * 18 + equipmentHp(); }
+
+  function nearWaterWell() {
+    const map = activeMap();
+    return map.id === "red_sand_desert" && map.landmarks.some((landmark) => landmark.type === "well" && distance(state.player, landmark) < 70);
+  }
+
+  function nearTown() {
+    const town = activeMap().townRect;
+    return Boolean(town && state.player.x >= town.x + 28 && state.player.x <= town.x + town.w - 28 && state.player.y >= town.y + 28 && state.player.y <= town.y + town.h - 28);
+  }
+
   function playerDamage(dt) {
     if (state.player.invulnerable > 0) return;
+    const atWell = nearWaterWell();
+    const atSanctuary = atWell || nearTown();
     const attacker = state.entities.filter((entity) => entity.alive && distance(state.player, entity) < entity.radius + 70).sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
-    if (attacker && Math.random() <= dt * (attacker.boss ? .6 : .32)) {
+    if (!atSanctuary && attacker && Math.random() <= dt * (attacker.boss ? .6 : .32)) {
       const amount = Math.max(1, Math.round(attacker.attack * (1 - activeHero().defense / (activeHero().defense + 100))));
       state.player.hp = Math.max(0, state.player.hp - amount);
       textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13); spark(state.player.x, state.player.y, "#f16d66", 4);
@@ -595,7 +671,7 @@
       h.life -= dt;
       if (h.life <= 0) {
         h.snap = true;
-        if (distance(state.player, h) < h.r) {
+        if (!atSanctuary && distance(state.player, h) < h.r) {
           const amount = Math.max(1, Math.round(h.damage * (1 - activeHero().defense / (activeHero().defense + 100))));
           state.player.hp = Math.max(0, state.player.hp - amount);
           textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
@@ -606,7 +682,7 @@
     state.hazards = state.hazards.filter((h) => !h.snap || h.fade > 0);
     state.hazards.forEach((h) => { if (h.snap) h.fade -= dt; });
     // 中毒持续伤害
-    if (state.player.poison > 0) {
+    if (state.player.poison > 0 && !atSanctuary) {
       state.player.poisonTimer = (state.player.poisonTimer || 0) - dt;
       if (state.player.poisonTimer <= 0) {
         state.player.poisonTimer = 1.2;
@@ -614,21 +690,20 @@
         state.player.hp = Math.max(0, state.player.hp - amount);
         textAt(`-${amount}`, state.player.x, state.player.y - 30, "#a88ce3", 12);
       }
-      // 在水井旁净化
-      const map = activeMap();
-      if (map.id === "red_sand_desert") {
-        const nearWell = map.landmarks.some((l) => l.type === "well" && distance(state.player, l) < 60);
-        if (nearWell && state.player.poison > 0) {
-          state.player.poison = Math.max(0, state.player.poison - 1);
-          textAt("净化", state.player.x, state.player.y - 40, "#5a7090", 14);
-        }
-      }
+    } else if (atSanctuary && state.player.poison > 0) {
+      state.player.poison = Math.max(0, state.player.poison - Math.max(1, Math.ceil(dt * (atWell ? 2 : 1))));
+      state.player.poisonTimer = 1.2;
+      textAt(atWell ? "净化" : "安全区", state.player.x, state.player.y - 40, atWell ? "#5a7090" : "#62d5c6", 14);
+    }
+    if (atSanctuary && state.player.hp < playerMaxHp()) {
+      state.player.hp = clamp(state.player.hp + Math.max(1, Math.round(playerMaxHp() * .1 * dt)), 0, playerMaxHp());
+      state.player.resource = clamp(state.player.resource + Math.max(1, Math.round(activeHero().resource * .08 * dt)), 0, activeHero().resource);
     }
     if (state.player.hp <= 0) die();
   }
 
   function die() {
-    state.player.hp = Math.round((activeHero().hp + equipmentHp()) * .55); state.player.resource = activeHero().resource * .45; state.player.x = 480; state.player.y = 780; state.player.invulnerable = 3; state.player.targetId = null; state.player.poison = 0; moveTarget = null;
+    state.player.hp = Math.round(playerMaxHp() * .55); state.player.resource = activeHero().resource * .45; state.player.x = 480; state.player.y = 780; state.player.invulnerable = 3; state.player.targetId = null; state.player.poison = 0; moveTarget = null;
     log("<b>你在野外倒下</b>，已传送回灰烬村。本原型保留成长资产，实际游戏会按区域与名字状态结算爆装。", "warn"); showToast("已在灰烬村复活：重新整理状态后再出发");
     if (state.currentMapId !== "ash_outskirts") loadMap("ash_outskirts", 480, 780, true);
   }
@@ -652,6 +727,18 @@
 
   function tryTravel(exit) {
     if (pendingTravel && pendingTravel.target === exit.target) return;
+    if (isForwardExit(exit) && !mapProgress().completed) {
+      const rule = MAP_CLEAR_RULES[state.currentMapId];
+      const progress = mapProgress();
+      const missing = [];
+      if (progress.kills < progress.need) missing.push(`再击败 ${progress.need - progress.kills} 只普通怪物`);
+      if (!progress.bossDefeated) missing.push(`击败 ${rule.boss}`);
+      const message = `前进出口尚未开启：${missing.join("，")}`;
+      showToast(message);
+      log(message, "warn");
+      state.player.x = exit.x < activeMap().width / 2 ? exit.x + exit.w + 70 : exit.x - 70;
+      return;
+    }
     const target = MAPS[exit.target];
     if (state.player.level < target.levelMin - 2) {
       pendingTravel = exit;
@@ -804,10 +891,13 @@
     ctx.save();
     map.exits.forEach((exit) => {
       const target = MAPS[exit.target];
+      const forward = isForwardExit(exit, map.id);
+      const unlocked = !forward || mapProgress(map.id).completed;
       const pulse = 0.4 + Math.sin(Date.now() / 400) * 0.2;
-      ctx.fillStyle = `rgba(98, 213, 198, ${pulse * 0.35})`;
+      const color = unlocked ? (forward ? "231, 179, 107" : "98, 213, 198") : "241, 109, 102";
+      ctx.fillStyle = `rgba(${color}, ${unlocked ? pulse * 0.35 : 0.12})`;
       ctx.fillRect(exit.x, exit.y, exit.w, exit.h);
-      ctx.strokeStyle = `rgba(98, 213, 198, ${0.5 + pulse * 0.3})`;
+      ctx.strokeStyle = `rgba(${color}, ${unlocked ? 0.5 + pulse * 0.3 : 0.55})`;
       ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.strokeRect(exit.x, exit.y, exit.w, exit.h); ctx.setLineDash([]);
       // 标签
       ctx.fillStyle = "rgba(9, 16, 19, .8)";
@@ -815,11 +905,11 @@
       const lx = exit.x + exit.w / 2 - labelW / 2;
       const ly = exit.y + exit.h / 2 - labelH / 2;
       roundedRect(lx, ly, labelW, labelH, 4); ctx.fill();
-      ctx.strokeStyle = "rgba(98, 213, 198, .5)"; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = "#62d5c6"; ctx.font = "600 12px sans-serif"; ctx.textAlign = "center";
-      ctx.fillText(`→ ${exit.label}`, exit.x + exit.w / 2, ly + 16);
+      ctx.strokeStyle = `rgba(${color}, .5)`; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = unlocked ? (forward ? "#e7b36b" : "#62d5c6") : "#ee9b91"; ctx.font = "600 12px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`${forward ? "→" : "←"} ${exit.label}`, exit.x + exit.w / 2, ly + 16);
       ctx.fillStyle = "#8d9ca0"; ctx.font = "10px sans-serif";
-      ctx.fillText(exit.sub, exit.x + exit.w / 2, ly + 30);
+      ctx.fillText(unlocked ? (forward ? "已开启 · 进入下一关" : "返回上一关") : "未开启 · 完成当前关卡", exit.x + exit.w / 2, ly + 30);
       ctx.textAlign = "start";
     });
     ctx.restore();
@@ -931,7 +1021,7 @@
 
   function drawPlayer() {
     const hero = activeHero();
-    const maxHp = hero.hp + equipmentHp();
+    const maxHp = playerMaxHp();
     const left = state.player.x - 44;
     const top = state.player.y - 56;
     ctx.save();
@@ -982,9 +1072,35 @@
   function renderLog() { $("eventLog").innerHTML = state.logs.slice().reverse().map((entry) => `<div class="event-entry ${entry.type}">${entry.message}</div>`).join(""); }
 
   function renderPlayer() {
-    const hero = activeHero(); const maxHp = hero.hp + equipmentHp(); const maxResource = hero.resource; const power = hero.attack + state.player.level * 4 + Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) + hero.defense * 2;
+    const hero = activeHero(); const maxHp = playerMaxHp(); const maxResource = hero.resource; const power = hero.attack + state.player.level * 4 + Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) + hero.defense * 2;
     $("avatar").textContent = hero.glyph; $("avatar").style.color = hero.color; $("avatar").style.borderColor = hero.color; $("className").textContent = hero.name; $("playerName").textContent = `${hero.name} · 灰烬旅人`; $("powerText").textContent = formatNumber(power); $("actionResourceName").textContent = hero.resourceName; $("actionResourceText").textContent = `${Math.ceil(state.player.resource)} / ${maxResource}`; $("actionResourceBar").style.width = `${clamp(state.player.resource / maxResource * 100, 0, 100)}%`; $("expText").textContent = `${state.player.exp} / ${state.player.nextExp}`; $("expBar").style.width = `${clamp(state.player.exp / state.player.nextExp * 100, 0, 100)}%`; $("goldText").textContent = formatNumber(state.player.gold); $("markText").textContent = `${state.player.marks} / 800`; $("potionCount").textContent = state.player.potion;
-    const questProgress = state.quest.kills / state.quest.need * 100; $("questBar").style.width = `${questProgress}%`; $("questText").textContent = state.quest.completed ? "已完成 · 领取奖励" : `${state.quest.kills} / ${state.quest.need} 击杀`;
+    const questProgress = state.quest.completed ? 100 : state.quest.kills / state.quest.need * 70 + (state.quest.bossDefeated ? 30 : 0); $("questBar").style.width = `${questProgress}%`; $("questText").textContent = `${state.quest.kills} / ${state.quest.need} 普通怪 · Boss ${state.quest.bossDefeated ? "已击败" : "未击败"}`;
+  }
+
+  function objectiveView() {
+    const map = activeMap();
+    const rule = MAP_CLEAR_RULES[map.id];
+    const progress = mapProgress();
+    if (progress.completed && !rule.next) return { step: "全部完成", title: "纵向切片已通关", text: "四张地图与四名区域首领均已完成。", complete: true };
+    if (progress.completed) return { step: "步骤 3 / 3", title: `前往${rule.exit}`, text: `走入金色出口，进入下一关 ${MAPS[rule.next].name}。`, complete: true };
+    if (progress.kills < progress.need) return { step: "步骤 1 / 3", title: "清剿区域怪物", text: `击败 ${progress.need} 只普通怪物，当前 ${progress.kills}/${progress.need}。`, complete: false };
+    return { step: "步骤 2 / 3", title: `击败 ${rule.boss}`, text: "普通怪清剿已完成，前往首领区域完成关卡。", complete: false };
+  }
+
+  function renderMapObjective() {
+    const map = activeMap();
+    const rule = MAP_CLEAR_RULES[map.id];
+    const progress = mapProgress();
+    const view = objectiveView();
+    $("mapObjective").classList.toggle("complete", view.complete);
+    $("mapObjectiveState").textContent = view.step;
+    $("mapObjectiveTitle").textContent = view.title;
+    $("mapObjectiveText").textContent = view.text;
+    $("mapObjectiveChecks").innerHTML = `<span class="${progress.kills >= progress.need ? "done" : "current"}">${progress.kills >= progress.need ? "✓" : "○"} 普通怪 ${progress.kills}/${progress.need}</span><span class="${progress.bossDefeated ? "done" : progress.kills >= progress.need ? "current" : ""}">${progress.bossDefeated ? "✓" : "○"} ${rule.boss}</span>${rule.next ? `<span class="${progress.completed ? "current" : ""}">${progress.completed ? "→" : "○"} ${rule.exit}</span>` : `<span class="${progress.completed ? "done" : ""}">${progress.completed ? "✓" : "○"} 最终结算</span>`}`;
+    $("questTitle").textContent = `肃清${map.name}`;
+    $("questDescription").textContent = rule.next ? `完成清怪与首领目标，解锁${rule.exit}并进入${MAPS[rule.next].name}。` : "完成清怪与首领目标，结束本次四图纵向切片。";
+    $("questTag").textContent = progress.completed ? (rule.next ? "出口已开启" : "已通关") : "进行中";
+    $("questReward").textContent = progress.rewardClaimed ? "通关奖励已领取" : "通关奖励：60 金币 · 8 印记";
   }
 
   function renderMapHeader() {
@@ -998,7 +1114,10 @@
     const dynamics = [];
     if (state.boss.defeated) dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(state.boss.respawn)}s 后刷新</span>`);
     else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${state.entities.find((e) => e.boss)?.phase || 1}</span>`);
-    dynamics.push(`<span class="world-event"><i class="gold"></i> 出口可通往 ${map.exits.map((e) => e.label).join("、")}</span>`);
+    const rule = MAP_CLEAR_RULES[map.id];
+    const progress = mapProgress();
+    if (!rule.next && progress.completed) dynamics.push(`<span class="world-event ready"><i class="gold"></i> 四图通关 · 纵向切片完成</span>`);
+    else if (rule.next) dynamics.push(`<span class="world-event ${progress.completed ? "ready" : "locked"}"><i class="gold"></i> ${rule.exit}${progress.completed ? `已开启 · 前往 ${MAPS[rule.next].name}` : "未开启 · 完成清怪与首领目标"}</span>`);
     $("mapDynamics").innerHTML = dynamics.join("");
   }
 
@@ -1010,11 +1129,14 @@
       const isCurrent = id === map.id;
       const isVisited = state.player.visitedMaps[id];
       const accessible = Math.abs(i - idx) <= 1;
+      const progress = mapProgress(id);
+      const progressLabel = progress.completed ? "已通关" : isCurrent || progress.kills > 0 || progress.bossDefeated ? `进行中 ${progress.kills}/${progress.need}` : "未开始";
       const dangerCls = m.danger === "safe" ? "safe" : m.danger === "danger" || m.danger === "desolate" ? "danger" : "";
       return `<button class="region-node ${isCurrent ? "current" : ""} ${isVisited ? "visited" : ""} ${accessible ? "accessible" : ""}" data-map-id="${id}" title="${m.name}：推荐 Lv.${m.levelMin}-${m.levelMax}，${m.dangerLabel}${isVisited ? "" : "（未到访）"}">
         <span class="region-name">${m.name}</span>
         <span class="region-level">Lv.${m.levelMin}-${m.levelMax}</span>
         <span class="region-danger ${dangerCls}">${m.dangerLabel}</span>
+        <span class="region-progress ${progress.completed ? "done" : ""}">${progressLabel}</span>
       </button>`;
     }).join("");
     $("regionList").innerHTML = html;
@@ -1025,6 +1147,12 @@
         const target = MAPS[id];
         const exit = map.exits.find((e) => e.target === id);
         if (!exit) { showToast(`${target.name} 不相邻，需要先走到相邻地图`); return; }
+        if (isForwardExit(exit) && !mapProgress().completed) {
+          const progress = mapProgress();
+          const rule = MAP_CLEAR_RULES[map.id];
+          showToast(`尚未通关：普通怪 ${progress.kills}/${progress.need}，${rule.boss}${progress.bossDefeated ? "已击败" : "未击败"}`);
+          return;
+        }
         showToast(`${target.name} 在场景边缘的发光出口处，请走到出口触发切换`);
       });
     });
@@ -1050,9 +1178,9 @@
   function renderEquipment() { const labels = { weapon: "武器", neck: "项链", boots: "靴子" }; $("equipmentGrid").innerHTML = Object.keys(labels).map((slot) => { const item = state.player.equipment[slot]; return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`; }).join(""); }
   function renderInventory() { const inventory = state.inventory || []; $("inventoryCount").textContent = `${inventory.length}/12`; $("inventoryGrid").innerHTML = Array.from({ length: 12 }, (_, index) => { const item = inventory[index]; return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`; }).join(""); $("inventoryGrid").querySelectorAll("[data-item-index]").forEach((button) => { button.addEventListener("click", () => equipItem(inventory[Number(button.dataset.itemIndex)])); }); }
   function renderBoss() { const boss = state.entities.find((entity) => entity.boss); if (!boss) return; $("bossAlertText").textContent = boss.alive ? `${boss.name} · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命 · 阶段 ${boss.phase}/${activeMap().boss.phases}` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
-  function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderRegion(); renderPlayer(); renderTarget(); renderNormalAttack(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
+  function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderMapObjective(); renderRegion(); renderPlayer(); renderTarget(); renderNormalAttack(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
 
-  function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, quest: state.quest })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与所在地图。", "loot"); }
+  function saveGame() { if (!state) return; localStorage.setItem(STORAGE_KEY, JSON.stringify({ classId: state.classId, currentMapId: state.currentMapId, player: state.player, inventory: state.inventory || [], equipment: state.player.equipment, mapProgress: state.mapProgress })); showToast("进度已保存在本机浏览器"); log("进度已保存：下次打开可继续当前职业、装备与地图通关状态。", "loot"); }
   function loadGame() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -1062,7 +1190,8 @@
       state.player.previewSkill = null;
       state.player.equipment = saved.equipment || saved.player.equipment || {};
       state.inventory = saved.inventory || [];
-      state.quest = saved.quest || state.quest;
+      state.mapProgress = saved.mapProgress || {};
+      if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
       const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
       loadMap(startMap, state.player.x || 480, state.player.y || 780, true);
       $("classModal").classList.add("hidden");
@@ -1074,7 +1203,7 @@
   function setupClasses() { $("classOptions").innerHTML = Object.entries(CLASSES).map(([id, hero]) => `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`).join(""); $("classOptions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => chooseClass(button.dataset.class))); }
 
   function setupInput() {
-    window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const map = activeMap(); if (map.exits[0]) tryTravel(map.exits[0]); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
+    window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const exit = primaryExit(); if (exit) tryTravel(exit); else showToast(mapProgress().completed ? "四张地图已全部通关" : objectiveView().text); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
     canvas.addEventListener("pointerdown", (event) => { pointer.down = true; const point = canvasPoint(event); const target = state?.entities.find((entity) => entity.alive && distance(point, entity) < entity.radius + 22); if (target) selectTarget(target); else moveTarget = point; }); canvas.addEventListener("pointerup", () => { pointer.down = false; });
     canvas.addEventListener("pointermove", (event) => { if (!state) return; const point = canvasPoint(event); pointer.x = point.x; pointer.y = point.y; const hovered = state.entities.filter((entity) => entity.alive).sort((a, b) => Number(b.boss) - Number(a.boss)).find((entity) => distance(point, entity) < entity.radius + 18); state.hoveredEntityId = hovered?.id || null; });
     canvas.addEventListener("pointerleave", () => { if (state) state.hoveredEntityId = null; });
@@ -1084,8 +1213,20 @@
     $("normalAttackBtn").addEventListener("click", normalAttack); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
   }
 
-  function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = activeHero().hp + equipmentHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); }
+  function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = playerMaxHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); }
 
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
+  if (new URLSearchParams(window.location.search).has("e2e")) {
+    window.__ONEKNIFE_E2E__ = {
+      snapshot: () => state ? JSON.parse(JSON.stringify({
+        currentMapId: state.currentMapId,
+        classId: state.classId,
+        player: { x: state.player.x, y: state.player.y, hp: state.player.hp, resource: state.player.resource, poison: state.player.poison, level: state.player.level, potion: state.player.potion, targetId: state.player.targetId },
+        entities: state.entities.map((entity) => ({ id: entity.id, x: entity.x, y: entity.y, hp: entity.hp, alive: entity.alive, boss: Boolean(entity.boss) })),
+        progress: state.mapProgress,
+        logs: state.logs.slice(-6).map((entry) => entry.message)
+      })) : null
+    };
+  }
   setupClasses(); setupInput(); resizeCanvas(); window.addEventListener("resize", resizeCanvas); if (!loadGame()) { $("classModal").classList.remove("hidden"); } requestAnimationFrame(frame);
 })();

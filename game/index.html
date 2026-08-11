@@ -39,7 +39,13 @@
               <span class="boss-pulse"></span>
               <span><b>首领情报</b><small id="bossAlertText">裂碑领主正在苏醒</small></span>
             </div>
-            <div class="combat-hint" id="combatHint">WASD 移动 · J 普攻 · 1-4 技能 · F 拾取 · T 前往出口 · 走入发光出口切换地图</div>
+            <div class="map-objective" id="mapObjective" aria-live="polite">
+              <span class="objective-step" id="mapObjectiveState">步骤 1 / 3</span>
+              <strong id="mapObjectiveTitle">清剿区域怪物</strong>
+              <span id="mapObjectiveText">击败 8 只普通怪物</span>
+              <div class="objective-checks" id="mapObjectiveChecks"></div>
+            </div>
+            <div class="combat-hint" id="combatHint">WASD 移动 · J 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡</div>
           </div>
           <div class="world-footer">
             <div class="mini-objectives" id="mapDynamics">
@@ -66,11 +72,11 @@
           </section>
 
           <section class="quest-card panel-block">
-            <div class="section-heading"><span><i class="section-icon">01</i> 当前委托</span><span class="quest-tag">进行中</span></div>
-            <h2>清理腐烬矿道</h2>
-            <p>击败矿道中的怪物，找到一件可以改变战局的装备。</p>
+            <div class="section-heading"><span><i class="section-icon">01</i> 当前关卡</span><span class="quest-tag" id="questTag">进行中</span></div>
+            <h2 id="questTitle">肃清灰烬村外</h2>
+            <p id="questDescription">先清剿普通怪物，再击败区域首领，最后从前进出口离开。</p>
             <div class="quest-progress"><span id="questBar"></span></div>
-            <div class="quest-meta"><span id="questText">0 / 8 击杀</span><b id="questReward">奖励：黑铁 ×3 · 经验</b></div>
+            <div class="quest-meta"><span id="questText">0 / 8 普通怪</span><b id="questReward">通关奖励：60 金币 · 8 印记</b></div>
           </section>
 
           <section class="region-card panel-block">
