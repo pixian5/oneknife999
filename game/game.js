@@ -219,6 +219,25 @@
     { arena: "sanctum", road: "radial", landmarks: ["rune", "shrine", "lantern", "beam"], detail: "浮光符文与圣火灯环绕高台" },
     { arena: "throne", road: "direct", landmarks: ["throne", "courtpost", "banner", "obelisk"], detail: "王座、环柱与章主徽记构成终殿决战场" }
   ];
+  // 每种场所母题都有一个一次性场景节点。节点不改变通关条件，但让玩家
+  // 在安全路线、补给路线和首领路线之间做出有即时收益的选择。
+  const SITE_NODE_EFFECTS = [
+    { effect: "rally", name: "点燃警戒塔", detail: "按 F 点燃警戒塔，立即充满破势槽，准备下一轮爆发。" },
+    { effect: "scout", name: "标记追迹路标", detail: "按 F 标记追迹路标，恢复 25% 职业资源并锁定最近敌人。" },
+    { effect: "fortify", name: "加固拒马", detail: "按 F 加固拒马，恢复 35% 最大生命并获得 4 秒免伤。" },
+    { effect: "bridge", name: "稳固桥桩", detail: "按 F 稳固桥桩，清除场上危险区与毒层，并获得 3 秒免伤。" },
+    { effect: "resonance", name: "启动共鸣祭坛", detail: "按 F 启动祭坛，恢复 50% 职业资源并增加 30 点破势。" },
+    { effect: "compass", name: "启动迷宫罗盘", detail: "按 F 启动罗盘，优先锁定当前区域首领或最近敌人。" },
+    { effect: "banner", name: "夺下战旗", detail: "按 F 夺下战旗，恢复 20% 最大生命并增加 50 点破势。" },
+    { effect: "breach", name: "燃烧破门火油", detail: "按 F 点燃火油，增加 75 点破势并恢复 20% 职业资源。" },
+    { effect: "purify", name: "圣台净光", detail: "按 F 接受圣台净光，清除毒层并补满职业资源。" },
+    { effect: "decree", name: "宣告王座遗诏", detail: "按 F 宣告遗诏，生命、职业资源与破势槽全部补满。" }
+  ];
+
+  function siteNodeDefinition(stageNumber, shortName = "场景") {
+    const definition = SITE_NODE_EFFECTS[(Math.max(1, stageNumber) - 1) % SITE_NODE_EFFECTS.length];
+    return { ...definition, id: `site-${stageNumber}`, kind: "site", name: `${shortName}${definition.name}` };
+  }
   const STORY_BEATS = [
     { title: "异兆", action: "调查异象", text: "疆域信标忽然熄灭，地底传来与玄烬心脏同频的震动。" },
     { title: "遗痕", action: "追踪残留", text: "敌人留下被刻意抹去的军印，线索指向更深处的旧王朝密道。" },
@@ -285,6 +304,28 @@
     };
   }
 
+  function cubicPoint(startX, startY, control1X, control1Y, control2X, control2Y, endX, endY, t) {
+    const inverse = 1 - t;
+    return {
+      x: inverse ** 3 * startX + 3 * inverse ** 2 * t * control1X + 3 * inverse * t ** 2 * control2X + t ** 3 * endX,
+      y: inverse ** 3 * startY + 3 * inverse ** 2 * t * control1Y + 3 * inverse * t ** 2 * control2Y + t ** 3 * endY
+    };
+  }
+
+  function distanceToPath(point, path) {
+    if (!path?.length) return Infinity;
+    let best = Infinity;
+    const segments = [[0, 2, 4, 6], [6, 8, 10, 12]];
+    segments.forEach(([start, control1, control2, end]) => {
+      if (path[end] === undefined) return;
+      for (let step = 0; step <= 24; step += 1) {
+        const sample = cubicPoint(path[start], path[start + 1], path[control1], path[control1 + 1], path[control2], path[control2 + 1], path[end], path[end + 1], step / 24);
+        best = Math.min(best, Math.hypot(point.x - sample.x, point.y - sample.y));
+      }
+    });
+    return best;
+  }
+
   function generatedLayout(stageNumber, chapter) {
     const random = seededRandom(stageNumber * 982451653 + 104729);
     const site = SITE_LAYOUTS[(stageNumber - 1) % 10];
@@ -327,33 +368,60 @@
       w: 520,
       h: 440
     };
-    const occupied = [start, boss, ...monsterSpawns.map(([x, y]) => ({ x, y }))];
-    const freePoint = (base, minDistance = 120) => {
-      const candidates = [
-        base,
-        { x: base.x + 120, y: base.y - 86 },
-        { x: base.x - 140, y: base.y + 92 },
-        { x: base.x + 166, y: base.y + 118 },
-        { x: base.x - 176, y: base.y - 104 }
-      ];
-      const normalized = candidates.map((point) => ({ x: Math.round(Math.max(410, Math.min(2160, point.x))), y: Math.round(Math.max(120, Math.min(1380, point.y))) }));
-      return normalized.find((point) => occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance)) || normalized[0];
-    };
-    const restPoint = freePoint({ x: path[4], y: path[5] }, 100);
-    occupied.push(restPoint);
-    const cachePoint = freePoint({ x: path[8], y: path[9] }, 120);
-    const tacticalPoints = [
-      { id: `rest-${stageNumber}`, kind: "rest", x: restPoint.x, y: restPoint.y, radius: 62, name: `${chapter.short}前线篝火`, detail: "靠近篝火可恢复生命、资源并净化毒层" },
-      { id: `cache-${stageNumber}`, kind: "resource", x: cachePoint.x, y: cachePoint.y, radius: 70, name: `${chapter.short}秘藏补给箱`, detail: "靠近后按 F 搜索一次，获得药水、金币与首领印记" }
-    ];
     const paths = [path];
+    let branchPath = null;
     if (site.road === "fork" || site.road === "radial") {
       const forkX = path[6];
       const forkY = path[7];
       const edgeY = Math.max(140, Math.min(1360, forkY + (stageNumber % 2 ? 390 : -390)));
-      paths.push([forkX, forkY, forkX + 160, forkY, forkX + 260, edgeY, forkX + 430, edgeY, forkX + 560, edgeY, boss.x - 180, boss.y, boss.x, boss.y]);
+      branchPath = [forkX, forkY, forkX + 160, forkY, forkX + 260, edgeY, forkX + 430, edgeY, forkX + 560, edgeY, boss.x - 180, boss.y, boss.x, boss.y];
+      paths.push(branchPath);
     }
-    return { townRect, boss, monsterSpawns, paths, landmarks, specialRect, tacticalPoints, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
+    const occupied = [start, boss, ...monsterSpawns.map(([x, y]) => ({ x, y }))];
+    const pointOutsideRect = (point, rect, padding = 0) => point.x < rect.x - padding || point.x > rect.x + rect.w + padding || point.y < rect.y - padding || point.y > rect.y + rect.h + padding;
+    const freePoint = (base, minDistance = 120, routePath = null) => {
+      const offsets = [
+        [0, 0], [120, -86], [-140, 92], [166, 118], [-176, -104],
+        [250, 0], [-250, 0], [0, 230], [0, -230], [300, 170], [-300, 170], [300, -170], [-300, -170],
+        [420, 0], [-420, 0], [0, 360], [0, -360], [520, 0], [-520, 0], [0, 480], [0, -480]
+      ];
+      const candidates = offsets.map(([dx, dy]) => ({ x: base.x + dx, y: base.y + dy }));
+      const normalized = candidates.map((point) => ({ x: Math.round(Math.max(410, Math.min(2160, point.x))), y: Math.round(Math.max(120, Math.min(1380, point.y))) }));
+      const valid = normalized.filter((point, index, all) => all.findIndex((other) => other.x === point.x && other.y === point.y) === index)
+        .filter((point) => pointOutsideRect(point, specialRect, 78))
+        .filter((point) => occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance))
+        .filter((point) => !routePath || distanceToPath(point, routePath) <= 132);
+      if (valid.length) return valid[0];
+      // Fallback must preserve hard map-safety and route constraints. It only
+      // changes candidate priority, never permits a node to enter a Boss zone.
+      const constrained = normalized.filter((point, index, all) => all.findIndex((other) => other.x === point.x && other.y === point.y) === index)
+        .filter((point) => pointOutsideRect(point, specialRect, 78))
+        .filter((point) => !routePath || distanceToPath(point, routePath) <= 132);
+      const fallback = constrained
+        .sort((a, b) => {
+          const score = (point) => Math.min(...occupied.map((other) => Math.hypot(point.x - other.x, point.y - other.y)));
+          return score(b) - score(a);
+        })[0];
+      if (fallback) return fallback;
+      throw new Error(`地图节点没有安全候选：${stageNumber}/${routePath ? "branch" : "main"}`);
+    };
+    const restPoint = freePoint({ x: path[4], y: path[5] }, 144);
+    occupied.push(restPoint);
+    // 支路线上的秘藏锚在分支中段，而不是靠近汇入首领区的末端；资源节点
+    // 还须为 Boss 半径、交互半径和额外战斗缓冲预留完整安全距离。
+    const cachePoint = branchPath
+      ? freePoint({ x: branchPath[2], y: branchPath[3] }, 208, branchPath)
+      : freePoint({ x: path[8], y: path[9] }, 208);
+    occupied.push(cachePoint);
+    const sitePoint = freePoint({ x: path[6], y: path[7] }, 154);
+    occupied.push(sitePoint);
+    const siteNode = siteNodeDefinition(stageNumber, chapter.short);
+    const tacticalPoints = [
+      { id: `rest-${stageNumber}`, kind: "rest", route: "main", x: restPoint.x, y: restPoint.y, radius: 62, name: `${chapter.short}前线篝火`, detail: "靠近篝火可恢复生命、资源并净化毒层" },
+      { id: `cache-${stageNumber}`, kind: "resource", route: branchPath ? "branch" : "main", x: cachePoint.x, y: cachePoint.y, radius: 70, name: `${chapter.short}${branchPath ? "支路秘藏补给箱" : "秘藏补给箱"}`, detail: branchPath ? "沿支路探索后按 F 搜索一次，获得药水、金币与首领印记" : "靠近后按 F 搜索一次，获得药水、金币与首领印记" },
+      { ...siteNode, route: "main", x: sitePoint.x, y: sitePoint.y, radius: 66 }
+    ];
+    return { townRect, boss, monsterSpawns, paths, branchPath, landmarks, specialRect, tacticalPoints, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
   }
 
   function generatedMap(stageNumber) {
@@ -396,6 +464,7 @@
       townRect: layout.townRect,
       specialRect: layout.specialRect,
       paths: layout.paths,
+      branchPath: layout.branchPath,
       landmarks: layout.landmarks,
       tacticalPoints: layout.tacticalPoints,
       siteStyle: layout.siteStyle,
@@ -444,7 +513,7 @@
       spawns: map.monsterSpawns,
       paths: map.paths,
       landmarks: map.landmarks.map(({ type, x, y }) => [type, x, y]),
-      tacticalPoints: (map.tacticalPoints || []).map(({ kind, x, y, radius }) => [kind, x, y, radius]),
+      tacticalPoints: (map.tacticalPoints || []).map(({ kind, route, x, y, radius }) => [kind, route, x, y, radius]),
       site: map.siteStyle?.arena || "handcrafted"
     });
   }
@@ -461,6 +530,31 @@
     }
     return turns;
   }
+  function placeTacticalPoints(map, stageNumber, chapterShort) {
+    const pointDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const start = { x: map.townRect.x + map.townRect.w / 2, y: map.townRect.y + map.townRect.h / 2 };
+    const boss = { x: map.boss.x, y: map.boss.y };
+    const occupied = [start, boss, ...map.monsterSpawns.map(([x, y]) => ({ x, y }))];
+    const pointOutsideRect = (point, rect, padding = 0) => !rect || point.x < rect.x - padding || point.x > rect.x + rect.w + padding || point.y < rect.y - padding || point.y > rect.y + rect.h + padding;
+    const pick = (base, minDistance) => {
+      const offsets = [[0, 0], [170, 0], [-170, 0], [0, 170], [0, -170], [280, 120], [-280, 120], [280, -120], [-280, -120], [420, 0], [-420, 0], [0, 330], [0, -330], [520, 180], [-520, 180], [520, -180], [-520, -180]];
+      const candidates = offsets.map(([dx, dy]) => ({ x: Math.round(Math.max(410, Math.min(2160, base.x + dx))), y: Math.round(Math.max(120, Math.min(1380, base.y + dy))) }));
+      const unique = candidates.filter((point, index, all) => all.findIndex((other) => other.x === point.x && other.y === point.y) === index);
+      const valid = unique.filter((point) => pointOutsideRect(point, map.specialRect, 78) && occupied.every((other) => pointDistance(point, other) >= minDistance));
+      const chosen = valid[0] || unique.sort((a, b) => Math.min(...occupied.map((other) => pointDistance(b, other))) - Math.min(...occupied.map((other) => pointDistance(a, other))))[0];
+      occupied.push(chosen);
+      return chosen;
+    };
+    const rest = pick({ x: map.townRect.x + map.townRect.w + 250, y: map.townRect.y + map.townRect.h / 2 }, 144);
+    const resource = pick({ x: map.boss.x - 410, y: map.boss.y + 300 }, 152);
+    const site = pick({ x: map.boss.x - 650, y: map.boss.y - 120 }, 148);
+    const siteNode = siteNodeDefinition(stageNumber, chapterShort);
+    return [
+      { id: `rest-${map.id}`, kind: "rest", x: rest.x, y: rest.y, radius: 62, name: `${chapterShort}前线篝火`, detail: "靠近篝火可恢复生命、资源并净化毒层" },
+      { id: `cache-${map.id}`, kind: "resource", x: resource.x, y: resource.y, radius: 70, name: `${chapterShort}秘藏补给箱`, detail: "靠近后按 F 搜索一次，获得药水、金币与首领印记" },
+      { ...siteNode, x: site.x, y: site.y, radius: 66 }
+    ];
+  }
   MAP_ORDER.forEach((id, index) => {
     const map = MAPS[id];
     map.stageNumber = index + 1;
@@ -470,10 +564,7 @@
     map.levelMin = campaignGrowth(index).level;
     map.levelMax = map.levelMin + 1;
     if (!map.tacticalPoints) {
-      map.tacticalPoints = [
-        { id: `rest-${map.id}`, kind: "rest", x: map.townRect.x + map.townRect.w + 210, y: map.townRect.y + map.townRect.h / 2, radius: 62, name: "前线篝火", detail: "靠近篝火可恢复生命、资源并净化毒层" },
-        { id: `cache-${map.id}`, kind: "resource", x: Math.max(520, map.boss.x - 280), y: Math.min(1280, map.boss.y + 180), radius: 70, name: "遗落补给箱", detail: "靠近后按 F 搜索一次，获得药水、金币与首领印记" }
-      ];
+      map.tacticalPoints = placeTacticalPoints(map, index + 1, map.name);
     }
     const exits = [];
     if (index > 0) {
@@ -657,13 +748,14 @@
   function mapProgress(mapId = state.currentMapId) {
     const rule = MAP_CLEAR_RULES[mapId];
     state.mapProgress ||= {};
-    state.mapProgress[mapId] ||= { kills: 0, need: rule.kills, bossDefeated: false, completed: false, rewardClaimed: false, completionAnnounced: false, resourceClaimed: false };
+    state.mapProgress[mapId] ||= { kills: 0, need: rule.kills, bossDefeated: false, completed: false, rewardClaimed: false, completionAnnounced: false, resourceClaimed: false, siteClaimed: false };
     const progress = state.mapProgress[mapId];
     progress.need = rule.kills;
     progress.kills = clamp(Number(progress.kills) || 0, 0, rule.kills);
     progress.bossDefeated = Boolean(progress.bossDefeated);
     progress.completed = progress.kills >= rule.kills && progress.bossDefeated;
     progress.resourceClaimed = Boolean(progress.resourceClaimed);
+    progress.siteClaimed = Boolean(progress.siteClaimed);
     return progress;
   }
 
@@ -966,6 +1058,103 @@
     log(`${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，靠近后按 F 拾取。`, "loot");
   }
 
+  function activateSitePoint(point) {
+    if (!point || point.kind !== "site") return false;
+    const progress = mapProgress();
+    if (progress.siteClaimed) {
+      const message = point.name + "已经激活过了";
+      showToast(message);
+      log(message + "。", "system");
+      return true;
+    }
+    const hero = activeHero();
+    const maxHp = playerMaxHp();
+    const resourceBefore = state.player.resource;
+    const hpBefore = state.player.hp;
+    let result = point.detail;
+    switch (point.effect) {
+      case "rally":
+        state.player.charge = 100;
+        result = "破势槽已充满";
+        break;
+      case "scout": {
+        const restore = Math.round(hero.resource * .25);
+        state.player.resource = clamp(state.player.resource + restore, 0, hero.resource);
+        const target = state.entities.filter((entity) => entity.alive).sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
+        state.player.targetId = target?.id || null;
+        moveTarget = null;
+        result = "职业资源 +" + Math.max(0, Math.round(state.player.resource - resourceBefore)) + (target ? "，已锁定 " + target.name : "");
+        break;
+      }
+      case "fortify": {
+        const restore = Math.round(maxHp * .35);
+        state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
+        state.player.invulnerable = 4;
+        result = "生命 +" + Math.max(0, Math.round(state.player.hp - hpBefore)) + "，免伤 4 秒";
+        break;
+      }
+      case "bridge":
+        state.hazards = [];
+        state.player.poison = 0;
+        state.player.poisonTimer = 0;
+        state.player.invulnerable = 3;
+        result = "危险区已清除、毒层已净化，免伤 3 秒";
+        break;
+      case "resonance": {
+        const restore = Math.round(hero.resource * .5);
+        state.player.resource = clamp(state.player.resource + restore, 0, hero.resource);
+        state.player.charge = clamp(state.player.charge + 30, 0, 100);
+        result = "职业资源 +" + Math.max(0, Math.round(state.player.resource - resourceBefore)) + "、破势 +30";
+        break;
+      }
+      case "compass": {
+        const target = state.entities.find((entity) => entity.boss && entity.alive) || state.entities.filter((entity) => entity.alive).sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
+        state.player.targetId = target?.id || null;
+        moveTarget = null;
+        result = target ? "已锁定 " + target.name : "当前没有可锁定目标";
+        break;
+      }
+      case "banner": {
+        const restore = Math.round(maxHp * .2);
+        state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
+        state.player.charge = clamp(state.player.charge + 50, 0, 100);
+        result = "生命 +" + Math.max(0, Math.round(state.player.hp - hpBefore)) + "、破势 +50";
+        break;
+      }
+      case "breach": {
+        const restore = Math.round(hero.resource * .2);
+        state.player.resource = clamp(state.player.resource + restore, 0, hero.resource);
+        state.player.charge = clamp(state.player.charge + 75, 0, 100);
+        result = "职业资源 +" + Math.max(0, Math.round(state.player.resource - resourceBefore)) + "、破势 +75";
+        break;
+      }
+      case "purify":
+        state.player.poison = 0;
+        state.player.poisonTimer = 0;
+        state.player.resource = hero.resource;
+        result = "毒层已清除，职业资源已补满";
+        break;
+      case "decree":
+        state.player.hp = maxHp;
+        state.player.resource = hero.resource;
+        state.player.charge = 100;
+        state.player.poison = 0;
+        state.player.poisonTimer = 0;
+        result = "生命、职业资源与破势槽全部补满";
+        break;
+      default:
+        result = "场景节点已激活";
+    }
+    progress.siteClaimed = true;
+    spark(point.x, point.y, "#b99bea", 22);
+    textAt("已激活", point.x, point.y - 30, "#d8c5ff", 14);
+    log("<b>" + point.name + "</b>已激活：" + result + "。", "loot");
+    showToast(point.name + "：" + result);
+    persistGame();
+    renderAll();
+    return true;
+  }
+
   function collectDrops() {
     const nearby = state.drops.filter((drop) => distance(state.player, drop) < 85);
     if (!nearby.length) {
@@ -981,6 +1170,11 @@
         showToast(`${cache.name}已开启，奖励已自动保存`);
         persistGame();
         renderAll();
+        return;
+      }
+      const site = (activeMap().tacticalPoints || []).find((point) => point.kind === "site" && distance(state.player, point) < point.radius);
+      if (site) {
+        activateSitePoint(site);
         return;
       }
       showToast(cache ? "秘藏补给箱已被搜索" : "附近没有可拾取物品");
@@ -1334,13 +1528,13 @@
     const pulse = 0.55 + Math.sin(Date.now() / 520) * 0.18;
     ctx.save();
     (map.tacticalPoints || []).forEach((point) => {
-      const claimed = point.kind === "resource" && progress.resourceClaimed;
-      const accent = point.kind === "rest" ? "98, 213, 198" : "231, 179, 107";
+      const claimed = (point.kind === "resource" && progress.resourceClaimed) || (point.kind === "site" && progress.siteClaimed);
+      const accent = point.kind === "rest" ? "98, 213, 198" : point.kind === "site" ? "185, 155, 234" : "231, 179, 107";
       ctx.globalAlpha = claimed ? .34 : 1;
       ctx.fillStyle = `rgba(${accent}, ${point.kind === "rest" ? .12 : .16})`;
       ctx.strokeStyle = `rgba(${accent}, ${point.kind === "rest" ? .48 : pulse})`;
       ctx.lineWidth = 2;
-      ctx.setLineDash(point.kind === "rest" ? [7, 5] : []);
+      ctx.setLineDash(point.kind === "rest" ? [7, 5] : point.kind === "site" ? [3, 6] : []);
       ctx.beginPath(); ctx.arc(point.x, point.y, point.kind === "rest" ? 34 : 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.setLineDash([]);
       if (point.kind === "rest") {
@@ -1348,6 +1542,15 @@
         ctx.beginPath(); ctx.moveTo(point.x, point.y - 18); ctx.lineTo(point.x - 13, point.y + 10); ctx.lineTo(point.x + 13, point.y + 10); ctx.closePath(); ctx.fill();
         ctx.strokeStyle = "rgba(231, 179, 107, .9)"; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(point.x, point.y + 6); ctx.lineTo(point.x, point.y - 9); ctx.stroke();
+      } else if (point.kind === "site") {
+        ctx.fillStyle = claimed ? "rgba(150, 140, 170, .55)" : "rgba(185, 155, 234, .92)";
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - 18); ctx.lineTo(point.x + 16, point.y);
+        ctx.lineTo(point.x, point.y + 18); ctx.lineTo(point.x - 16, point.y);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(35, 45, 47, .85)"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = claimed ? "rgba(230, 220, 255, .38)" : "rgba(230, 220, 255, " + pulse + ")";
+        ctx.beginPath(); ctx.arc(point.x, point.y, 28, 0, Math.PI * 2); ctx.stroke();
       } else {
         ctx.fillStyle = claimed ? "rgba(120, 140, 140, .55)" : "rgba(231, 179, 107, .9)";
         ctx.beginPath(); ctx.moveTo(point.x, point.y - 13); ctx.lineTo(point.x + 15, point.y); ctx.lineTo(point.x, point.y + 13); ctx.lineTo(point.x - 15, point.y); ctx.closePath(); ctx.fill();
@@ -1355,7 +1558,7 @@
       }
       ctx.fillStyle = claimed ? "rgba(160, 170, 170, .55)" : "rgba(244, 234, 201, .72)";
       ctx.font = "11px sans-serif"; ctx.textAlign = "center";
-      ctx.fillText(claimed ? `${point.name}（已搜空）` : point.name, point.x, point.y + 49);
+      ctx.fillText(claimed ? (point.kind === "site" ? point.name + "（已激活）" : point.name + "（已搜空）") : point.name, point.x, point.y + 49);
     });
     ctx.textAlign = "start";
     ctx.restore();
@@ -1612,6 +1815,8 @@
     else if (rule.next) dynamics.push(`<span class="world-event ${progress.completed ? "ready" : "locked"}"><i class="gold"></i> ${rule.exit}${progress.completed ? `已开启 · 前往 ${MAPS[rule.next].name}` : "未开启 · 完成清怪与首领目标"}</span>`);
     const restCount = (map.tacticalPoints || []).filter((point) => point.kind === "rest").length;
     const cache = (map.tacticalPoints || []).find((point) => point.kind === "resource");
+    const site = (map.tacticalPoints || []).find((point) => point.kind === "site");
+    if (site) dynamics.push('<span class="world-event"><i class="gold"></i> ' + (progress.siteClaimed ? site.name + '已激活' : 'F ' + site.name) + '</span>');
     dynamics.push(`<span class="world-event"><i class="gold"></i> ${restCount} 处篝火 · ${cache && progress.resourceClaimed ? "秘藏已搜空" : "F 搜寻秘藏补给箱"}</span>`);
     $("mapDynamics").innerHTML = dynamics.join("");
   }
@@ -1744,12 +1949,12 @@
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
   if (TEST_MODE) {
     window.__ONEKNIFE_E2E__ = {
-      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, tacticalPoints: (MAPS[id].tacticalPoints || []).map(({ kind, x, y, radius, name, detail }) => ({ kind, x, y, radius, name, detail })), safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
+      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, bossPoint: { x: MAPS[id].boss.x, y: MAPS[id].boss.y, radius: MAPS[id].boss.radius }, monsterSpawns: MAPS[id].monsterSpawns.map(([x, y]) => ({ x, y })), specialRect: MAPS[id].specialRect ? { ...MAPS[id].specialRect } : null, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, branchPath: MAPS[id].branchPath ? [...MAPS[id].branchPath] : null, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, tacticalPoints: (MAPS[id].tacticalPoints || []).map(({ kind, route, effect, x, y, radius, name, detail }) => ({ kind, route, effect, x, y, radius, name, detail })), sitePoint: (MAPS[id].tacticalPoints || []).find((point) => point.kind === "site") || null, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
       snapshot: () => state ? JSON.parse(JSON.stringify({
         currentMapId: state.currentMapId,
         stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,
         classId: state.classId,
-        player: { x: state.player.x, y: state.player.y, hp: state.player.hp, resource: state.player.resource, poison: state.player.poison, level: state.player.level, exp: state.player.exp, nextExp: state.player.nextExp, potion: state.player.potion, targetId: state.player.targetId, previewSkill: state.player.previewSkill },
+        player: { x: state.player.x, y: state.player.y, hp: state.player.hp, resource: state.player.resource, poison: state.player.poison, charge: state.player.charge, level: state.player.level, exp: state.player.exp, nextExp: state.player.nextExp, potion: state.player.potion, targetId: state.player.targetId, previewSkill: state.player.previewSkill },
         entities: state.entities.map((entity) => ({ id: entity.id, x: entity.x, y: entity.y, hp: entity.hp, alive: entity.alive, boss: Boolean(entity.boss), phase: entity.phase || 0 })),
         hazardsSpawned: state.hazardsSpawned || 0,
         progress: state.mapProgress,

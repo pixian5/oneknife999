@@ -5,6 +5,7 @@ const FAST_RUN = new URL(BASE_URL).searchParams.has("fast");
 let MAP_ORDER = [];
 let MAP_NEEDS = {};
 let SAFE_POINTS = {};
+let SITE_POINTS = {};
 let MAP_BOSS_PHASES = {};
 const VALID_CLASSES = ["warrior", "mage", "taoist"];
 const DEFAULT_CLASS_SEQUENCE = VALID_CLASSES;
@@ -24,6 +25,27 @@ function classForRun(runIndex) {
 }
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+function cubicPoint(startX, startY, control1X, control1Y, control2X, control2Y, endX, endY, t) {
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * startX + 3 * inverse ** 2 * t * control1X + 3 * inverse * t ** 2 * control2X + t ** 3 * endX,
+    y: inverse ** 3 * startY + 3 * inverse ** 2 * t * control1Y + 3 * inverse * t ** 2 * control2Y + t ** 3 * endY
+  };
+}
+
+function distanceToPath(point, path) {
+  if (!Array.isArray(path)) return Infinity;
+  let best = Infinity;
+  [[0, 2, 4, 6], [6, 8, 10, 12]].forEach(([start, control1, control2, end]) => {
+    if (path[end] === undefined) return;
+    for (let step = 0; step <= 24; step += 1) {
+      const sample = cubicPoint(path[start], path[start + 1], path[control1], path[control1 + 1], path[control2], path[control2 + 1], path[end], path[end + 1], step / 24);
+      best = Math.min(best, Math.hypot(point.x - sample.x, point.y - sample.y));
+    }
+  });
+  return best;
+}
 
 async function snapshot(page) {
   return page.evaluate(() => window.__ONEKNIFE_E2E__?.snapshot());
@@ -184,6 +206,14 @@ async function clearMap(page, mapId) {
   process.stdout.write(`START ${mapId}\n`);
   await returnToMap(page, mapId);
   let snap = await snapshot(page);
+  if (process.env.ONEKNIFE_ACTIVATE_SITES === "1" && !snap.progress[mapId]?.siteClaimed) {
+    const site = SITE_POINTS[mapId];
+    if (!site || !await moveToPoint(page, site, mapId, 48)) throw new Error("无法抵达 " + mapId + " 场景交互节点");
+    await page.keyboard.press("f");
+    await advance(page, 160);
+    snap = await snapshot(page);
+    if (!snap.progress[mapId]?.siteClaimed) throw new Error("场景交互节点未激活：" + mapId);
+  }
   while ((snap.progress[mapId]?.kills || 0) < MAP_NEEDS[mapId]) {
     const target = snap.entities.find((entity) => entity.alive && !entity.boss);
     if (!target) { await advance(page, 12000); snap = await snapshot(page); continue; }
@@ -225,18 +255,40 @@ async function runJourney(browser, runIndex) {
   if (new Set(catalog.map((entry) => entry.id)).size !== 100) throw new Error("地图 ID 不唯一");
   if (new Set(catalog.map((entry) => entry.layoutId)).size !== 100) throw new Error("地图布局签名不唯一");
   if (new Set(catalog.map((entry) => entry.layoutSignature)).size !== 100) throw new Error("地图实际构图重复");
-  if (new Set(catalog.slice(4).map((entry) => entry.siteArchetype)).size !== 10 || catalog.some((entry) => !entry.siteDetail)) throw new Error("地图场所母题缺失");
+  if (new Set(catalog.slice(4).map((entry) => entry.siteArchetype)).size !== 10 || new Set(catalog.slice(4).map((entry) => entry.sitePoint?.effect)).size !== 10 || catalog.some((entry) => !entry.siteDetail)) throw new Error("地图场所母题或交互效果缺失");
   if (catalog.slice(4).some((entry) => entry.monsterProfiles.some((monster) => !monster.intro || !Array.isArray(monster.skills) || monster.skills.length < 2 || monster.intro.includes("游荡在当前区域")))) throw new Error("后期普通怪资料缺失");
-  if (catalog.some((entry) => !Array.isArray(entry.tacticalPoints) || entry.tacticalPoints.length !== 2 || entry.tacticalPoints.filter((point) => point.kind === "rest").length !== 1 || entry.tacticalPoints.filter((point) => point.kind === "resource").length !== 1 || entry.tacticalPoints.some((point) => !point.name || !point.detail || point.radius < 50))) throw new Error("地图战术节点缺失或字段不完整");
+  if (catalog.some((entry) => !Array.isArray(entry.tacticalPoints) || entry.tacticalPoints.length !== 3 || entry.tacticalPoints.filter((point) => point.kind === "rest").length !== 1 || entry.tacticalPoints.filter((point) => point.kind === "resource").length !== 1 || entry.tacticalPoints.filter((point) => point.kind === "site").length !== 1 || entry.tacticalPoints.some((point) => !point.name || !point.detail || point.radius < 50) || !entry.sitePoint?.effect)) throw new Error("地图战术节点缺失或字段不完整");
+  for (const entry of catalog) {
+    const tacticalPoints = entry.tacticalPoints;
+    const distanceTo = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    for (let index = 0; index < tacticalPoints.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < tacticalPoints.length; otherIndex += 1) {
+        const a = tacticalPoints[index];
+        const b = tacticalPoints[otherIndex];
+        if (distanceTo(a, b) < a.radius + b.radius + 18) throw new Error(`地图节点交互范围重叠：${entry.id}/${a.kind}/${b.kind}`);
+      }
+    }
+    if (!entry.bossPoint || !Array.isArray(entry.monsterSpawns)) throw new Error(`地图几何目录缺失：${entry.id}`);
+    for (const point of tacticalPoints) {
+      if (distanceTo(point, entry.bossPoint) < point.radius + entry.bossPoint.radius + 100) throw new Error(`节点过近首领战区：${entry.id}/${point.kind}`);
+      if (entry.monsterSpawns.some((spawn) => distanceTo(point, spawn) < point.radius + 82)) throw new Error(`节点过近怪物刷新点：${entry.id}/${point.kind}`);
+      if (entry.specialRect && point.x >= entry.specialRect.x - 78 && point.x <= entry.specialRect.x + entry.specialRect.w + 78 && point.y >= entry.specialRect.y - 78 && point.y <= entry.specialRect.y + entry.specialRect.h + 78) throw new Error(`节点落入首领特殊战区：${entry.id}/${point.kind}`);
+    }
+  }
   const roadRules = { direct: { pathCount: 1 }, fork: { pathCount: 2 }, zigzag: { pathCount: 1, minTurns: 2 }, radial: { pathCount: 2 } };
   for (const entry of catalog.slice(4)) {
     const expected = roadRules[entry.road];
     if (!expected || entry.pathCount !== expected.pathCount || (expected.minTurns && entry.pathTurnCount < expected.minTurns)) throw new Error(`地图道路几何不符合 ${entry.id}：${JSON.stringify(entry)}`);
+    if (entry.road === "fork" || entry.road === "radial") {
+      const branchReward = entry.tacticalPoints.find((point) => point.kind === "resource" && point.route === "branch");
+      if (!branchReward || !entry.branchPath || distanceToPath(branchReward, entry.branchPath) > 138) throw new Error(`地图支路没有可获得的路线收益：${entry.id}`);
+    } else if (entry.tacticalPoints.some((point) => point.route === "branch")) throw new Error(`非分支地图错误标记支路收益：${entry.id}`);
   }
   if (new Set(catalog.map((entry) => entry.storyBeat)).size !== 100 || catalog.some((entry) => !entry.storyObjective)) throw new Error("百图剧情节点缺失或重复");
   MAP_ORDER = catalog.map((entry) => entry.id);
   MAP_NEEDS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.need]));
   SAFE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.safePoint]));
+  SITE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.sitePoint]));
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
   await page.locator(`[data-class="${classId}"]`).click();
   await advance(page, 200);
@@ -250,6 +302,19 @@ async function runJourney(browser, runIndex) {
   if (!cacheSnapshot.progress[MAP_ORDER[0]]?.resourceClaimed) throw new Error(`秘藏补给箱未完成一次性搜索：${JSON.stringify(cacheSnapshot)}`);
   const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
   if (!cacheSave?.mapProgress?.[MAP_ORDER[0]]?.resourceClaimed) throw new Error("秘藏搜索结果未自动保存");
+  const site = firstMap.tacticalPoints.find((point) => point.kind === "site");
+  if (!await moveToPoint(page, site, MAP_ORDER[0], 48)) throw new Error("无法抵达首张地图场景交互节点");
+  await page.keyboard.press("f");
+  await advance(page, 160);
+  const siteSnapshot = await snapshot(page);
+  if (!siteSnapshot.progress[MAP_ORDER[0]]?.siteClaimed || !siteSnapshot.logs.some((message) => message.includes("已激活"))) throw new Error("场景交互节点未生效：" + JSON.stringify(siteSnapshot));
+  const siteSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  if (!siteSave?.mapProgress?.[MAP_ORDER[0]]?.siteClaimed) throw new Error("场景交互节点未自动保存");
+  const claimedCharge = siteSnapshot.player.charge;
+  await page.keyboard.press("f");
+  await advance(page, 160);
+  const repeatedSiteSnapshot = await snapshot(page);
+  if (repeatedSiteSnapshot.player.charge !== claimedCharge || !repeatedSiteSnapshot.logs.some((message) => message.includes("已经激活过"))) throw new Error("重复激活场景节点发生重复结算：" + JSON.stringify(repeatedSiteSnapshot));
 
   await page.keyboard.press("t");
   await advance(page, 200);
