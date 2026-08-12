@@ -6,6 +6,7 @@ let MAP_ORDER = [];
 let MAP_NEEDS = {};
 let SAFE_POINTS = {};
 let SITE_POINTS = {};
+let RESOURCE_POINTS = {};
 let MAP_BOSS_PHASES = {};
 const VALID_CLASSES = ["warrior", "mage", "taoist"];
 const DEFAULT_CLASS_SEQUENCE = VALID_CLASSES;
@@ -206,6 +207,20 @@ async function clearMap(page, mapId) {
   process.stdout.write(`START ${mapId}\n`);
   await returnToMap(page, mapId);
   let snap = await snapshot(page);
+  if (process.env.ONEKNIFE_CLAIM_BRANCH === "1") {
+    const cache = RESOURCE_POINTS[mapId];
+    if (cache?.route === "branch" && !snap.progress[mapId]?.resourceClaimed) {
+      if (!await moveToPoint(page, cache, mapId, 48)) throw new Error("无法抵达 " + mapId + " 支路秘藏补给箱");
+      const goldBefore = snap.player.gold;
+      await page.keyboard.press("f");
+      await advance(page, 160);
+      snap = await snapshot(page);
+      if (!snap.progress[mapId]?.resourceClaimed || snap.player.gold <= goldBefore) throw new Error("支路秘藏未完成领取：" + mapId);
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+      if (!saved?.mapProgress?.[mapId]?.resourceClaimed) throw new Error("支路秘藏领取未自动保存：" + mapId);
+      process.stdout.write(`BRANCH ${mapId} CLAIMED+SAVED\n`);
+    }
+  }
   if (process.env.ONEKNIFE_ACTIVATE_SITES === "1" && !snap.progress[mapId]?.siteClaimed) {
     const site = SITE_POINTS[mapId];
     if (!site || !await moveToPoint(page, site, mapId, 48)) throw new Error("无法抵达 " + mapId + " 场景交互节点");
@@ -289,6 +304,7 @@ async function runJourney(browser, runIndex) {
   MAP_NEEDS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.need]));
   SAFE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.safePoint]));
   SITE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.sitePoint]));
+  RESOURCE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.tacticalPoints.find((point) => point.kind === "resource")]));
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
   await page.locator(`[data-class="${classId}"]`).click();
   await advance(page, 200);

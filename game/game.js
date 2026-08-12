@@ -1817,7 +1817,12 @@
     const cache = (map.tacticalPoints || []).find((point) => point.kind === "resource");
     const site = (map.tacticalPoints || []).find((point) => point.kind === "site");
     if (site) dynamics.push('<span class="world-event"><i class="gold"></i> ' + (progress.siteClaimed ? site.name + '已激活' : 'F ' + site.name) + '</span>');
-    dynamics.push(`<span class="world-event"><i class="gold"></i> ${restCount} 处篝火 · ${cache && progress.resourceClaimed ? "秘藏已搜空" : "F 搜寻秘藏补给箱"}</span>`);
+    const cacheHint = cache && progress.resourceClaimed
+      ? "秘藏已搜空"
+      : cache?.route === "branch"
+        ? "可选支路 · F 搜寻秘藏补给箱"
+        : "F 搜寻秘藏补给箱";
+    dynamics.push(`<span class="world-event"><i class="gold"></i> ${restCount} 处篝火 · ${cacheHint}</span>`);
     $("mapDynamics").innerHTML = dynamics.join("");
   }
 
