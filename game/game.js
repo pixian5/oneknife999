@@ -326,19 +326,45 @@
     return best;
   }
 
+  function pathLength(path) {
+    if (!path?.length) return 0;
+    let length = 0;
+    const segments = [[0, 2, 4, 6], [6, 8, 10, 12]];
+    segments.forEach(([start, control1, control2, end]) => {
+      if (path[end] === undefined) return;
+      let previous = { x: path[start], y: path[start + 1] };
+      for (let step = 1; step <= 24; step += 1) {
+        const current = cubicPoint(path[start], path[start + 1], path[control1], path[control1 + 1], path[control2], path[control2 + 1], path[end], path[end + 1], step / 24);
+        length += Math.hypot(current.x - previous.x, current.y - previous.y);
+        previous = current;
+      }
+    });
+    return Math.round(length);
+  }
+
+  function pointOnPath(path, progress) {
+    if (!path?.length) return { x: 0, y: 0 };
+    const normalized = Math.max(0, Math.min(1, progress));
+    const segment = normalized <= .5 ? [0, 2, 4, 6, normalized * 2] : [6, 8, 10, 12, (normalized - .5) * 2];
+    return cubicPoint(path[segment[0]], path[segment[0] + 1], path[segment[1]], path[segment[1] + 1], path[segment[2]], path[segment[2] + 1], path[segment[3]], path[segment[3] + 1], segment[4]);
+  }
+
+  function routePoint(path, progress, lateral = 0) {
+    const point = pointOnPath(path, progress);
+    const before = pointOnPath(path, Math.max(0, progress - .012));
+    const after = pointOnPath(path, Math.min(1, progress + .012));
+    const dx = after.x - before.x;
+    const dy = after.y - before.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return { x: point.x - (dy / length) * lateral, y: point.y + (dx / length) * lateral };
+  }
+
   function generatedLayout(stageNumber, chapter) {
     const random = seededRandom(stageNumber * 982451653 + 104729);
     const site = SITE_LAYOUTS[(stageNumber - 1) % 10];
     const townY = [180, 565, 950][stageNumber % 3];
     const townRect = { x: 80, y: townY, w: 280, h: 280 };
     const boss = { x: Math.round(1810 + random() * 380), y: Math.round(260 + random() * 840) };
-    const monsterSpawns = Array.from({ length: 12 }, (_, index) => {
-      const column = index % 4;
-      const row = Math.floor(index / 4);
-      const x = Math.round(560 + column * 410 + (random() - .5) * 180);
-      const y = Math.round(250 + row * 420 + (random() - .5) * 190);
-      return [Math.max(430, Math.min(2100, x)), Math.max(130, Math.min(1370, y)), (index + stageNumber) % 4];
-    });
     const start = { x: townRect.x + townRect.w / 2, y: townRect.y + townRect.h / 2 };
     const path = [start.x, start.y];
     for (let point = 1; point <= 5; point += 1) {
@@ -362,12 +388,16 @@
       r: Math.round(14 + random() * 16),
       color: index % 2 ? chapter.special : chapter.accent
     }));
+    const chapterEnd = stageNumber % 10 === 0;
     const specialRect = {
       x: Math.max(1380, Math.min(1780, boss.x - 260)),
       y: Math.max(90, Math.min(930, boss.y - 220)),
-      w: 520,
-      h: 440
+      w: chapterEnd ? 620 : 520,
+      h: chapterEnd ? 520 : 440,
+      tier: chapterEnd ? "chapter" : "standard",
+      label: chapterEnd ? "章末决战战区" : "区域首领战区"
     };
+    const outsideBossZone = (point, padding = 34) => point.x < specialRect.x - padding || point.x > specialRect.x + specialRect.w + padding || point.y < specialRect.y - padding || point.y > specialRect.y + specialRect.h + padding;
     const paths = [path];
     let branchPath = null;
     if (site.road === "fork" || site.road === "radial") {
@@ -377,9 +407,59 @@
       branchPath = [forkX, forkY, forkX + 160, forkY, forkX + 260, edgeY, forkX + 430, edgeY, forkX + 560, edgeY, boss.x - 180, boss.y, boss.x, boss.y];
       paths.push(branchPath);
     }
+    // 战斗营位贴着路线生成：玩家沿路清怪时会自然经历前段警戒、中段压迫和首领前集结，
+    // 分支图则把四只守卫放进支路中段，给“绕路换补给”一个真实战斗代价。
+    const mainProgresses = branchPath ? [.12, .22, .33, .45, .58, .7, .79, .86] : [.1, .17, .24, .32, .4, .48, .56, .64, .71, .77, .83, .88];
+    const branchProgresses = [.38, .5, .62, .74];
+    const monsterRoutes = branchPath
+      ? mainProgresses.map((progress, index) => ({ route: "main", progress, lateral: (index % 2 ? 1 : -1) * (28 + (stageNumber + index) % 3 * 16) })).concat(branchProgresses.map((progress, index) => ({ route: "branch", progress, lateral: (index % 2 ? -1 : 1) * (30 + (stageNumber + index) % 2 * 18) })))
+      : mainProgresses.map((progress, index) => ({ route: "main", progress, lateral: (index % 2 ? 1 : -1) * (28 + (stageNumber + index) % 3 * 16) }));
+    const monsterSpawns = monsterRoutes.map(({ route, progress, lateral }, index) => {
+      const routePath = route === "branch" ? branchPath : path;
+      let adjustedProgress = progress;
+      let point = routePoint(routePath, adjustedProgress, lateral);
+      // 首领前集结必须停在战区外，给 Boss 留出完整的阶段走位和撤离空间。
+      while (!outsideBossZone(point, 70) && adjustedProgress > .18) {
+        adjustedProgress = Math.max(.12, adjustedProgress - .045);
+        point = routePoint(routePath, adjustedProgress, lateral);
+      }
+      if (!outsideBossZone(point, 34)) {
+        const lateralCandidates = [lateral + 110, lateral - 110, lateral + 180, lateral - 180, lateral + 250, lateral - 250];
+        const alternate = lateralCandidates.map((offset) => routePoint(routePath, adjustedProgress, offset)).find((candidate) => outsideBossZone(candidate, 70));
+        if (alternate) point = alternate;
+      }
+      const jittered = { x: point.x + (random() - .5) * 24, y: point.y + (random() - .5) * 24 };
+      if (!outsideBossZone(jittered, 58)) {
+        jittered.x = point.x;
+        jittered.y = point.y;
+      }
+      return [Math.round(Math.max(430, Math.min(2100, jittered.x))), Math.round(Math.max(130, Math.min(1370, jittered.y))), (index + stageNumber) % 4, route, adjustedProgress];
+    });
+    const bossEntry = { x: path[10], y: path[11] };
+    const routePlan = {
+      type: site.road,
+      summary: site.road === "fork" ? "主路 + 支路秘藏" : site.road === "radial" ? "环线分流 · 支路补给" : site.road === "zigzag" ? "折返峡道 · 逐段清场" : "主路直进 · 首领入口",
+      mainLength: pathLength(path),
+      branchLength: branchPath ? pathLength(branchPath) : 0,
+      branchEntry: branchPath ? { x: branchPath[0], y: branchPath[1] } : null,
+      bossEntry,
+      bossEntryBuffer: Math.round(Math.hypot(boss.x - bossEntry.x, boss.y - bossEntry.y)),
+      encounterBands: branchPath
+        ? [
+            { id: "approach", route: "main", label: "前段警戒带", from: .08, to: .33, count: 3 },
+            { id: "pressure", route: "main", label: "中段压迫带", from: .34, to: .7, count: 3 },
+            { id: "branch_guard", route: "branch", label: "支路守卫带", from: .18, to: .66, count: 4 },
+            { id: "rally", route: "main", label: "首领前集结", from: .71, to: .88, count: 2 }
+          ]
+        : [
+            { id: "approach", route: "main", label: "前段警戒带", from: .08, to: .32, count: 3 },
+            { id: "pressure", route: "main", label: "中段压迫带", from: .33, to: .68, count: 4 },
+            { id: "rally", route: "main", label: "首领前集结", from: .69, to: .9, count: 5 }
+          ]
+    };
     const occupied = [start, boss, ...monsterSpawns.map(([x, y]) => ({ x, y }))];
     const pointOutsideRect = (point, rect, padding = 0) => point.x < rect.x - padding || point.x > rect.x + rect.w + padding || point.y < rect.y - padding || point.y > rect.y + rect.h + padding;
-    const freePoint = (base, minDistance = 120, routePath = null) => {
+    const freePoint = (base, minDistance = 120, routePath = null, maxRouteDistance = 132) => {
       const offsets = [
         [0, 0], [120, -86], [-140, 92], [166, 118], [-176, -104],
         [250, 0], [-250, 0], [0, 230], [0, -230], [300, 170], [-300, 170], [300, -170], [-300, -170],
@@ -390,18 +470,28 @@
       const valid = normalized.filter((point, index, all) => all.findIndex((other) => other.x === point.x && other.y === point.y) === index)
         .filter((point) => pointOutsideRect(point, specialRect, 78))
         .filter((point) => occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance))
-        .filter((point) => !routePath || distanceToPath(point, routePath) <= 132);
+        .filter((point) => !routePath || distanceToPath(point, routePath) <= maxRouteDistance);
       if (valid.length) return valid[0];
       // Fallback must preserve hard map-safety and route constraints. It only
       // changes candidate priority, never permits a node to enter a Boss zone.
       const constrained = normalized.filter((point, index, all) => all.findIndex((other) => other.x === point.x && other.y === point.y) === index)
         .filter((point) => pointOutsideRect(point, specialRect, 78))
-        .filter((point) => !routePath || distanceToPath(point, routePath) <= 132);
+        .filter((point) => !routePath || distanceToPath(point, routePath) <= maxRouteDistance);
+      const expanded = [];
+      for (let x = 430; x <= 2100; x += 85) {
+        for (let y = 130; y <= 1370; y += 85) {
+          const point = { x, y };
+          if (pointOutsideRect(point, specialRect, 78) && (!routePath || distanceToPath(point, routePath) <= maxRouteDistance) && occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance)) expanded.push(point);
+        }
+      }
+      if (expanded.length) return expanded[0];
       const fallback = constrained
         .sort((a, b) => {
           const score = (point) => Math.min(...occupied.map((other) => Math.hypot(point.x - other.x, point.y - other.y)));
           return score(b) - score(a);
         })[0];
+      const safeFallback = constrained.find((point) => occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance));
+      if (safeFallback) return safeFallback;
       if (fallback) return fallback;
       throw new Error(`地图节点没有安全候选：${stageNumber}/${routePath ? "branch" : "main"}`);
     };
@@ -409,9 +499,20 @@
     occupied.push(restPoint);
     // 支路线上的秘藏锚在分支中段，而不是靠近汇入首领区的末端；资源节点
     // 还须为 Boss 半径、交互半径和额外战斗缓冲预留完整安全距离。
-    const cachePoint = branchPath
-      ? freePoint({ x: branchPath[2], y: branchPath[3] }, 208, branchPath)
-      : freePoint({ x: path[8], y: path[9] }, 208);
+    const branchCachePoint = branchPath ? (() => {
+      const progresses = [.06, .1, .14, .18, .22, .26, .3];
+      const laterals = [-120, -90, 90, 120];
+      for (const progress of progresses) {
+        for (const lateral of laterals) {
+          const point = routePoint(branchPath, progress, lateral);
+          if (pointOutsideRect(point, specialRect, 78) && distanceToPath(point, branchPath) <= 132 && occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= 158)) return point;
+        }
+      }
+      return null;
+    })() : null;
+    const cachePoint = branchCachePoint || (branchPath
+      ? freePoint(routePoint(branchPath, .22), 208, branchPath)
+      : freePoint({ x: path[8], y: path[9] }, 208));
     occupied.push(cachePoint);
     const sitePoint = freePoint({ x: path[6], y: path[7] }, 154);
     occupied.push(sitePoint);
@@ -421,7 +522,7 @@
       { id: `cache-${stageNumber}`, kind: "resource", route: branchPath ? "branch" : "main", x: cachePoint.x, y: cachePoint.y, radius: 70, name: `${chapter.short}${branchPath ? "支路秘藏补给箱" : "秘藏补给箱"}`, detail: branchPath ? "沿支路探索后按 F 搜索一次，获得药水、金币与首领印记" : "靠近后按 F 搜索一次，获得药水、金币与首领印记" },
       { ...siteNode, route: "main", x: sitePoint.x, y: sitePoint.y, radius: 66 }
     ];
-    return { townRect, boss, monsterSpawns, paths, branchPath, landmarks, specialRect, tacticalPoints, siteStyle: site, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
+    return { townRect, boss, monsterSpawns, paths, branchPath, landmarks, specialRect, tacticalPoints, siteStyle: site, routePlan, layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}` };
   }
 
   function generatedMap(stageNumber) {
@@ -468,6 +569,8 @@
       landmarks: layout.landmarks,
       tacticalPoints: layout.tacticalPoints,
       siteStyle: layout.siteStyle,
+      routePlan: layout.routePlan,
+      encounterBands: layout.routePlan.encounterBands,
       landmarkLabels: [{ text: `${chapter.short}补给营`, x: layout.townRect.x + 70, y: layout.townRect.y + layout.townRect.h + 25 }, { text: `${bossName}领域`, x: layout.boss.x - 80, y: layout.boss.y + 95 }],
       monsterTypes,
       monsterSpawns: layout.monsterSpawns,
@@ -566,6 +669,30 @@
     if (!map.tacticalPoints) {
       map.tacticalPoints = placeTacticalPoints(map, index + 1, map.name);
     }
+    if (!map.routePlan) {
+      const mainPath = map.paths?.[0] || [];
+      const bossEntry = mainPath.length >= 12
+        ? { x: mainPath[10], y: mainPath[11] }
+        : { x: map.boss.x - 120, y: map.boss.y };
+      map.routePlan = {
+        type: map.paths?.length > 1 ? "fork" : "direct",
+        summary: map.paths?.length > 1 ? "主路 + 支路秘藏" : "主路直进 · 首领入口",
+        mainLength: pathLength(mainPath),
+        branchLength: map.paths?.[1] ? pathLength(map.paths[1]) : 0,
+        branchEntry: map.paths?.[1] ? { x: map.paths[1][0], y: map.paths[1][1] } : null,
+        bossEntry,
+        bossEntryBuffer: Math.round(Math.hypot(map.boss.x - bossEntry.x, map.boss.y - bossEntry.y))
+      };
+    }
+    if (!map.routePlan.encounterBands) {
+      const third = Math.ceil(map.monsterSpawns.length / 3);
+      map.routePlan.encounterBands = [
+        { id: "approach", route: "main", label: "前段警戒带", from: .08, to: .34, count: Math.max(2, third) },
+        { id: "pressure", route: "main", label: "中段压迫带", from: .35, to: .68, count: Math.max(2, third) },
+        { id: "rally", route: "main", label: "首领前集结", from: .69, to: .9, count: Math.max(2, map.monsterSpawns.length - third * 2) }
+      ];
+    }
+    map.encounterBands = map.routePlan.encounterBands;
     const exits = [];
     if (index > 0) {
       const previous = MAPS[MAP_ORDER[index - 1]];
@@ -1475,6 +1602,7 @@
     // 城镇与特殊区
     if (map.townRect) { ctx.fillStyle = p.town; ctx.fillRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); ctx.strokeStyle = p.townBorder; ctx.lineWidth = 3; ctx.strokeRect(map.townRect.x, map.townRect.y, map.townRect.w, map.townRect.h); }
     if (map.specialRect) { ctx.fillStyle = p.special; ctx.fillRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); ctx.strokeStyle = p.specialBorder; ctx.strokeRect(map.specialRect.x, map.specialRect.y, map.specialRect.w, map.specialRect.h); }
+    drawRouteGuides(map);
     drawSiteDetails(map);
     drawTacticalPoints(map);
     // 水道
@@ -1486,6 +1614,61 @@
     drawHazards();
     state.drops.forEach(drawDrop); state.entities.filter((entity) => entity.alive).forEach(drawEntity); drawSkillRangePreview(); drawPlayer(); state.particles.forEach(drawParticle); state.texts.forEach(drawText); drawMonsterTooltip(view, width, height);
     if (moveTarget) { ctx.strokeStyle = "rgba(98, 213, 198, .7)"; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.arc(moveTarget.x, moveTarget.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.restore();
+  }
+
+  function drawRouteGuides(map) {
+    const plan = map.routePlan;
+    if (!plan) return;
+    ctx.save();
+    const label = (text, x, y, color = "#e7b36b") => {
+      ctx.font = "600 11px sans-serif";
+      const width = ctx.measureText(text).width + 16;
+      ctx.fillStyle = "rgba(8, 16, 20, .78)";
+      roundedRect(x - width / 2, y - 14, width, 22, 3);
+      ctx.fill();
+      ctx.strokeStyle = `${color}88`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.textAlign = "center";
+      ctx.fillText(text, x, y + 1);
+    };
+    const start = { x: map.townRect.x + map.townRect.w / 2, y: map.townRect.y + map.townRect.h / 2 };
+    const entry = plan.bossEntry || { x: map.boss.x - 120, y: map.boss.y };
+    ctx.fillStyle = "rgba(231, 179, 107, .75)";
+    ctx.strokeStyle = "rgba(231, 179, 107, .62)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath(); ctx.moveTo(entry.x, entry.y); ctx.lineTo(map.boss.x, map.boss.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(entry.x, entry.y, 16, 0, Math.PI * 2); ctx.stroke();
+    label("首领入口", entry.x, entry.y - 22, "#f3b1a8");
+    if (plan.branchEntry) {
+      ctx.fillStyle = "rgba(98, 213, 198, .8)";
+      ctx.strokeStyle = "rgba(98, 213, 198, .75)";
+      ctx.beginPath(); ctx.arc(plan.branchEntry.x, plan.branchEntry.y, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      label("支路入口", plan.branchEntry.x, plan.branchEntry.y - 22, "#62d5c6");
+      label("主路", Math.round((start.x + entry.x) / 2), Math.round((start.y + entry.y) / 2) - 34, "#e7b36b");
+    } else if (plan.type === "zigzag") {
+      label("折返战线", Math.round((start.x + entry.x) / 2), Math.round((start.y + entry.y) / 2) - 34, "#e7b36b");
+    } else {
+      label("主路", Math.round((start.x + entry.x) / 2), Math.round((start.y + entry.y) / 2) - 34, "#e7b36b");
+    }
+    if (map.specialRect?.tier === "chapter") label("章末决战战区", map.specialRect.x + map.specialRect.w / 2, map.specialRect.y - 16, "#f3b1a8");
+    (plan.encounterBands || []).forEach((band, index) => {
+      const route = band.route === "branch" ? map.branchPath : map.paths?.[0];
+      if (!route) return;
+      const point = routePoint(route, (band.from + band.to) / 2, band.route === "branch" ? 54 : -54);
+      ctx.strokeStyle = band.route === "branch" ? "rgba(98, 213, 198, .5)" : "rgba(231, 179, 107, .45)";
+      ctx.fillStyle = band.route === "branch" ? "#62d5c6" : "#e7b36b";
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.arc(point.x, point.y, 19, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = "9px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`${index + 1} · ${band.label} · ${band.count}只`, point.x, point.y + 3);
+    });
+    ctx.textAlign = "start";
     ctx.restore();
   }
 
@@ -1823,6 +2006,11 @@
         ? "可选支路 · F 搜寻秘藏补给箱"
         : "F 搜寻秘藏补给箱";
     dynamics.push(`<span class="world-event"><i class="gold"></i> ${restCount} 处篝火 · ${cacheHint}</span>`);
+    if (map.routePlan) {
+      const plan = map.routePlan;
+      const routeText = plan.type === "fork" || plan.type === "radial" ? `主路 ${plan.mainLength} · 支路 ${plan.branchLength}` : `${plan.summary} · ${plan.mainLength}`;
+      dynamics.push(`<span class="world-event route-plan"><i></i> ${routeText} · 首领入口缓冲 ${plan.bossEntryBuffer}px</span>`);
+    }
     $("mapDynamics").innerHTML = dynamics.join("");
   }
 
@@ -1954,7 +2142,7 @@
   function frame(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); requestAnimationFrame(frame); }
   if (TEST_MODE) {
     window.__ONEKNIFE_E2E__ = {
-      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, bossPoint: { x: MAPS[id].boss.x, y: MAPS[id].boss.y, radius: MAPS[id].boss.radius }, monsterSpawns: MAPS[id].monsterSpawns.map(([x, y]) => ({ x, y })), specialRect: MAPS[id].specialRect ? { ...MAPS[id].specialRect } : null, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, branchPath: MAPS[id].branchPath ? [...MAPS[id].branchPath] : null, monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, tacticalPoints: (MAPS[id].tacticalPoints || []).map(({ kind, route, effect, x, y, radius, name, detail }) => ({ kind, route, effect, x, y, radius, name, detail })), sitePoint: (MAPS[id].tacticalPoints || []).find((point) => point.kind === "site") || null, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
+      catalog: () => JSON.parse(JSON.stringify(MAP_ORDER.map((id) => ({ id, need: MAP_CLEAR_RULES[id].kills, stageNumber: MAP_CLEAR_RULES[id].stageNumber, boss: MAPS[id].boss.name, bossPhases: MAPS[id].boss.phases, bossPoint: { x: MAPS[id].boss.x, y: MAPS[id].boss.y, radius: MAPS[id].boss.radius }, monsterSpawns: MAPS[id].monsterSpawns.map(([x, y, type, route, progress]) => ({ x, y, type, route: route || "main", progress: progress ?? null })), specialRect: MAPS[id].specialRect ? { ...MAPS[id].specialRect } : null, layoutId: MAPS[id].layoutId || `handcrafted-${id}`, layoutSignature: mapLayoutSignature(MAPS[id]), siteArchetype: MAPS[id].siteStyle?.arena || "handcrafted", siteDetail: MAPS[id].siteStyle?.detail || "手工地图", road: MAPS[id].siteStyle?.road || "handcrafted", pathCount: MAPS[id].paths?.length || 0, pathTurnCount: MAPS[id].paths?.[0] ? pathTurnCount(MAPS[id].paths[0]) : 0, pathLengths: (MAPS[id].paths || []).map(pathLength), branchPath: MAPS[id].branchPath ? [...MAPS[id].branchPath] : null, routePlan: MAPS[id].routePlan || null, encounterBands: MAPS[id].encounterBands || [], monsterProfiles: MAPS[id].monsterTypes.map(({ name, intro, skills }) => ({ name, intro, skills })), storyBeat: MAPS[id].story.beatTitle, storyObjective: MAPS[id].story.objective, tacticalPoints: (MAPS[id].tacticalPoints || []).map(({ kind, route, effect, x, y, radius, name, detail }) => ({ kind, route, effect, x, y, radius, name, detail })), sitePoint: (MAPS[id].tacticalPoints || []).find((point) => point.kind === "site") || null, safePoint: { x: MAPS[id].townRect.x + MAPS[id].townRect.w / 2, y: MAPS[id].townRect.y + MAPS[id].townRect.h / 2 } })))),
       snapshot: () => state ? JSON.parse(JSON.stringify({
         currentMapId: state.currentMapId,
         stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,

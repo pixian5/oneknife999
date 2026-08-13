@@ -284,19 +284,33 @@ async function runJourney(browser, runIndex) {
       }
     }
     if (!entry.bossPoint || !Array.isArray(entry.monsterSpawns)) throw new Error(`地图几何目录缺失：${entry.id}`);
+    if (!Array.isArray(entry.encounterBands) || entry.encounterBands.length < 3 || entry.encounterBands.some((band) => !band.id || !band.label || !Number.isFinite(band.from) || !Number.isFinite(band.to) || band.from >= band.to || band.count < 1)) throw new Error(`地图战斗分段缺失：${entry.id}/${JSON.stringify(entry.encounterBands)}`);
+    const routeCounts = entry.monsterSpawns.reduce((counts, spawn) => { counts[spawn.route] = (counts[spawn.route] || 0) + 1; return counts; }, {});
+    if (!routeCounts.main || routeCounts.main < 8) throw new Error(`主路战斗营位不足：${entry.id}/${JSON.stringify(routeCounts)}`);
+    if ((entry.road === "fork" || entry.road === "radial") && (!routeCounts.branch || routeCounts.branch < 4)) throw new Error(`支路守卫营位不足：${entry.id}/${JSON.stringify(routeCounts)}`);
     for (const point of tacticalPoints) {
       if (distanceTo(point, entry.bossPoint) < point.radius + entry.bossPoint.radius + 100) throw new Error(`节点过近首领战区：${entry.id}/${point.kind}`);
       if (entry.monsterSpawns.some((spawn) => distanceTo(point, spawn) < point.radius + 82)) throw new Error(`节点过近怪物刷新点：${entry.id}/${point.kind}`);
       if (entry.specialRect && point.x >= entry.specialRect.x - 78 && point.x <= entry.specialRect.x + entry.specialRect.w + 78 && point.y >= entry.specialRect.y - 78 && point.y <= entry.specialRect.y + entry.specialRect.h + 78) throw new Error(`节点落入首领特殊战区：${entry.id}/${point.kind}`);
+    }
+    if (entry.stageNumber > 4 && entry.specialRect) {
+      const inBossZone = (point, padding = 30) => point.x >= entry.specialRect.x - padding && point.x <= entry.specialRect.x + entry.specialRect.w + padding && point.y >= entry.specialRect.y - padding && point.y <= entry.specialRect.y + entry.specialRect.h + padding;
+      if (entry.monsterSpawns.some((spawn) => inBossZone(spawn, 30))) throw new Error(`普通怪刷新点侵入首领战区：${entry.id}`);
     }
   }
   const roadRules = { direct: { pathCount: 1 }, fork: { pathCount: 2 }, zigzag: { pathCount: 1, minTurns: 2 }, radial: { pathCount: 2 } };
   for (const entry of catalog.slice(4)) {
     const expected = roadRules[entry.road];
     if (!expected || entry.pathCount !== expected.pathCount || (expected.minTurns && entry.pathTurnCount < expected.minTurns)) throw new Error(`地图道路几何不符合 ${entry.id}：${JSON.stringify(entry)}`);
+    if (!entry.routePlan || entry.routePlan.type !== entry.road || !Number.isFinite(entry.routePlan.mainLength) || entry.routePlan.mainLength < 500 || !Number.isFinite(entry.routePlan.bossEntryBuffer) || entry.routePlan.bossEntryBuffer < 100) throw new Error(`地图路线计划缺失或首领入口过近：${entry.id}/${JSON.stringify(entry.routePlan)}`);
+    if (!Array.isArray(entry.pathLengths) || entry.pathLengths.length !== entry.pathCount || entry.pathLengths.some((length) => !Number.isFinite(length) || length < 500)) throw new Error(`地图道路长度未形成可玩路线：${entry.id}/${JSON.stringify(entry.pathLengths)}`);
+    const chapterEnd = entry.stageNumber % 10 === 0;
+    if (chapterEnd && (entry.specialRect?.tier !== "chapter" || entry.specialRect.w < 600 || entry.specialRect.h < 500)) throw new Error(`章末地图没有扩大决战战区：${entry.id}`);
+    if (!chapterEnd && entry.specialRect?.tier !== "standard") throw new Error(`普通地图错误标记章末战区：${entry.id}`);
     if (entry.road === "fork" || entry.road === "radial") {
       const branchReward = entry.tacticalPoints.find((point) => point.kind === "resource" && point.route === "branch");
       if (!branchReward || !entry.branchPath || distanceToPath(branchReward, entry.branchPath) > 138) throw new Error(`地图支路没有可获得的路线收益：${entry.id}`);
+      if (!entry.routePlan.branchEntry || entry.routePlan.branchLength < 500 || entry.routePlan.branchLength <= entry.routePlan.mainLength * .28) throw new Error(`地图支路长度或入口不可辨认：${entry.id}/${JSON.stringify(entry.routePlan)}`);
     } else if (entry.tacticalPoints.some((point) => point.route === "branch")) throw new Error(`非分支地图错误标记支路收益：${entry.id}`);
   }
   if (new Set(catalog.map((entry) => entry.storyBeat)).size !== 100 || catalog.some((entry) => !entry.storyObjective)) throw new Error("百图剧情节点缺失或重复");
@@ -308,6 +322,8 @@ async function runJourney(browser, runIndex) {
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
   await page.locator(`[data-class="${classId}"]`).click();
   await advance(page, 200);
+  const dynamicsText = await page.locator("#mapDynamics").textContent();
+  if (!dynamicsText.includes("首领入口缓冲") || !dynamicsText.includes("主路")) throw new Error(`地图路线 HUD 未显示可读摘要：${dynamicsText}`);
 
   const firstMap = catalog.find((entry) => entry.id === MAP_ORDER[0]);
   const cache = firstMap.tacticalPoints.find((point) => point.kind === "resource");
