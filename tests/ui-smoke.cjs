@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
+const { browserLaunchOptions } = require("./browser-options.cjs");
 
 const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1";
 const VIEWPORTS = [
@@ -56,7 +57,7 @@ async function verifyViewport(browser, viewport) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(browserLaunchOptions());
   try {
     for (const viewport of VIEWPORTS) await verifyViewport(browser, viewport);
     process.stdout.write("ALL UI SMOKE TESTS PASSED\n");

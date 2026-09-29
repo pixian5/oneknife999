@@ -1,0 +1,41 @@
+name: CI 校验
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 语法检查
+        run: npm run check
+
+      - name: 纯函数单元测试
+        run: npm run test:unit
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UI 冒烟（桌面 + 移动视口）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 1
+          ONEKNIFE_CHANNEL=chromium npm run test:ui
+
+      - name: 界面渲染与输入回归
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 1
+          ONEKNIFE_CHANNEL=chromium npm run test:ui:regression

@@ -1,16 +1,33 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.1。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.2。
 
 ## 启动
 
 在仓库根目录执行：
 
 ```bash
-python3 -m http.server 4174 --directory game
+npm run serve
 ```
 
-打开 <http://127.0.0.1:4174>。
+打开 <http://127.0.0.1:4174>（等价于 `python3 -m http.server 4174 --directory game`）。
+
+## 代码结构
+
+原型入口为 `index.html`，逻辑拆分为 `src/` 下的 ES Modules：
+
+| 文件 | 职责 |
+|---|---|
+| [src/main.js](src/main.js) | 入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口 |
+| [src/maps.js](src/maps.js) | 4 张手工地图 + 96 张确定性生成地图、关卡顺序与通关规则 |
+| [src/config.js](src/config.js) | 职业、怪物资料、掉落池与运行环境标记 |
+| [src/geometry.js](src/geometry.js) | 确定性随机、贝塞尔采样与路径计算（纯函数） |
+| [src/runtime.js](src/runtime.js) | 运行时状态容器（state / keys / pointer / moveTarget） |
+| [src/render.js](src/render.js) | Canvas 世界绘制与右侧 HUD 的 DOM 渲染 |
+| [src/persist.js](src/persist.js) | localStorage 存档读写与 v2 → v3 迁移判定 |
+| [src/util.js](src/util.js) | DOM 查询与数学辅助（纯函数） |
+
+`geometry.js`、`maps.js`、`config.js` 不依赖 DOM，可直接被 Node 单元测试引用，也是未来服务端共享逻辑的候选。
 
 ## 操作
 
@@ -65,48 +82,35 @@ python3 -m http.server 4174 --directory game
 - 进入地图左下安全营后免伤并恢复生命与职业资源；赤砂大漠水井可快速净化毒层。
 - 玩家按下方向键会立即取消普攻自动接近，松开后不会继续追逐旧目标。
 
-## 真实浏览器验收
+## 测试
+
+先安装依赖（仅 Playwright 包，不会下载浏览器）：
 
 ```bash
-ONEKNIFE_RUNS=1 \
-NODE_PATH=/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
-/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-tests/e2e-ten-clear-runs.cjs
+npm install
 ```
 
-驱动使用真实鼠标、键盘和浏览器时钟完成 100 图。默认 URL 含 `e2e=1&fast=1`：该模式仅在本机地址生效，快进只把伤害放大 25 倍，Boss 单次伤害限制为最大生命的 18%，不直接修改玩家、怪物或关卡状态。每一关都清怪、验证 Boss 完整阶段和危险技能、读取自动存档、刷新页面、验证恢复，然后走出口进入下一关。
+三类测试都直接使用本机已安装的 Google Chrome（`ONEKNIFE_CHANNEL` 可切换：默认 `chrome`；CI 上设 `chromium` 并使用 `npx playwright install chromium`）：
+
+```bash
+npm run verify                # 语法检查 + 纯函数单元测试（不需要浏览器）
+npm run test:ui               # 桌面 + 移动视口冒烟测试（需要先 npm run serve）
+npm run test:ui:regression    # 界面渲染与输入回归（需要先 npm run serve）
+npm run test:e2e              # 百图通关回归（需要先 npm run serve）
+```
+
+真实浏览器验收会使用真实鼠标、键盘和浏览器时钟完成 100 图。默认 URL 含 `e2e=1&fast=1`：该模式仅在本机地址生效，快进只把伤害放大 25 倍，Boss 单次伤害限制为最大生命的 18%，不直接修改玩家、怪物或关卡状态。每一关都清怪、验证 Boss 完整阶段和危险技能、读取自动存档、刷新页面、验证恢复，然后走出口进入下一关。
 
 最近结果见 [通关测试记录](../docs/13-通关测试记录.md)。
 
-界面冒烟测试：
+界面冒烟测试检查桌面与移动视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停和范围技能预览。
 
-```bash
-NODE_PATH=/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
-/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-tests/ui-smoke.cjs
-```
-
-该测试检查桌面与移动视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停和范围技能预览。
-
-界面渲染与输入回归测试：
-
-```bash
-NODE_PATH=/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
-/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-tests/ui-render-input-regression.cjs
-```
-
-该测试验证首领刷新读秒随实体递减（不再固定 0s）、技能/背包/装备/导航/日志/关卡卡在静止帧内不被每帧重建、Shift/CapsLock 状态下大写按键仍可移动，以及拾取后面板按需刷新。
+界面渲染与输入回归测试检查首领刷新读秒随实体递减（不再固定 0s）、技能/背包/装备/导航/日志/关卡卡在静止帧内不被每帧重建、Shift/CapsLock 状态下大写按键仍可移动，以及真实拾取后面板按需刷新。
 
 三职业并行百图复核：
 
 ```bash
-ONEKNIFE_RUNS=3 \
-ONEKNIFE_CLASSES=warrior,mage,taoist \
-ONEKNIFE_CONCURRENCY=3 \
-NODE_PATH=/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
-/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-tests/e2e-ten-clear-runs.cjs
+ONEKNIFE_RUNS=3 ONEKNIFE_CLASSES=warrior,mage,taoist ONEKNIFE_CONCURRENCY=3 npm run test:e2e
 ```
 
 该命令先验证 v2→v3 迁移、重置清除两代存档和装备自动保存，再同时打开三个独立浏览器账号，各自真实完成 100 图并在每关刷新恢复。路线营位打磨后的最近结果为战士、法师、道士均通过 100/100、Lv.41，合计 300 个检查点通过。若要逐关真实走到并激活场景节点，可追加 `ONEKNIFE_ACTIVATE_SITES=1`；该模式已完成战士 100/100 节点激活回归。

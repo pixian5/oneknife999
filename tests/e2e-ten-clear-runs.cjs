@@ -1,4 +1,5 @@
 const { chromium } = require("playwright");
+const { browserLaunchOptions } = require("./browser-options.cjs");
 
 const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1&fast=1";
 const FAST_RUN = new URL(BASE_URL).searchParams.has("fast");
@@ -452,7 +453,7 @@ async function assertAssetAutosave(browser) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(browserLaunchOptions());
   const results = [];
   try {
     await assertLegacyMigration(browser);

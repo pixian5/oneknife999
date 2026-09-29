@@ -1,0 +1,31 @@
+name: 百图 E2E 回归
+
+# 手动触发或每周运行一次：真实浏览器驱动完整 100 图（fast 快进模式，仅本机地址生效）
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * 0"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 百图通关回归（战士单账号）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 1
+          ONEKNIFE_RUNS=1 ONEKNIFE_CHANNEL=chromium npm run test:e2e
