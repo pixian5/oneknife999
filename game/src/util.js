@@ -8,9 +8,10 @@ export const rand = (min, max) => Math.random() * (max - min) + min;
 export const pick = (array) => array[Math.floor(Math.random() * array.length)];
 export const formatNumber = (value) => Math.floor(value).toLocaleString("zh-CN");
 
-export function weightedPick(entries) {
+// 按权重随机取一项；random 可注入，便于纯逻辑单测复现（默认 Math.random）。
+export function weightedPick(entries, random = Math.random) {
   const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
-  let roll = Math.random() * total;
+  let roll = random() * total;
   for (const entry of entries) {
     roll -= entry.weight;
     if (roll <= 0) return entry.item;

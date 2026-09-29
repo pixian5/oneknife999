@@ -45,7 +45,7 @@
               <span id="mapObjectiveText">击败 8 只普通怪物</span>
               <div class="objective-checks" id="mapObjectiveChecks"></div>
             </div>
-            <div class="combat-hint" id="combatHint">WASD 移动 · J 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡</div>
+            <div class="combat-hint" id="combatHint">WASD / 摇杆移动 · J 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡</div>
           </div>
           <div class="world-footer">
             <div class="mini-objectives" id="mapDynamics">
@@ -103,8 +103,9 @@
 
       <footer class="action-bar">
         <div class="movement-controls" aria-label="移动控制">
-          <button class="move-button" data-move="up" title="向上移动">上</button>
-          <div><button class="move-button" data-move="left" title="向左移动">左</button><button class="move-button" data-move="down" title="向下移动">下</button><button class="move-button" data-move="right" title="向右移动">右</button></div>
+          <div class="joystick" id="joystickPad" role="application" aria-label="虚拟摇杆：按住拖动控制移动方向">
+            <div class="joystick-knob" id="joystickKnob"></div>
+          </div>
         </div>
         <div class="target-block"><span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span></div>
         <button class="normal-attack-button" id="normalAttackBtn" title="普通攻击"><span class="attack-key">J</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip" id="normalAttackTooltip"></span></button>

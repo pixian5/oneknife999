@@ -22,13 +22,16 @@ jobs:
       - name: 语法检查
         run: npm run check
 
+      - name: 代码格式检查
+        run: npm run format:check
+
       - name: 纯函数单元测试
         run: npm run test:unit
 
       - name: 安装 Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: UI 冒烟（桌面 + 移动视口）
+      - name: UI 冒烟（桌面 / 移动 / 360px 视口）
         run: |
           python3 -m http.server 4174 --directory game &
           sleep 1

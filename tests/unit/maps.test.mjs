@@ -1,7 +1,17 @@
 // 纯函数单元测试：地图数据契约与成长曲线。运行方式：npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAPS, MAP_ORDER, CHAPTERS, campaignGrowth, mapsPerLevel, generatedLayout, mapLayoutSignature, siteNodeDefinition, SITE_NODE_EFFECTS } from "../../game/src/maps.js";
+import {
+  MAPS,
+  MAP_ORDER,
+  CHAPTERS,
+  campaignGrowth,
+  mapsPerLevel,
+  generatedLayout,
+  mapLayoutSignature,
+  siteNodeDefinition,
+  SITE_NODE_EFFECTS
+} from "../../game/src/maps.js";
 
 const ALL_MAPS = MAP_ORDER.map((id) => MAPS[id]);
 

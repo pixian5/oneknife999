@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.2。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.3。
 
 ## 启动
 
@@ -18,21 +18,23 @@ npm run serve
 
 | 文件 | 职责 |
 |---|---|
-| [src/main.js](src/main.js) | 入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口 |
+| [src/main.js](src/main.js) | 入口与主逻辑：地图流程、输入、主循环与 E2E 接口（战斗/掉落为薄封装，调用纯逻辑模块） |
 | [src/maps.js](src/maps.js) | 4 张手工地图 + 96 张确定性生成地图、关卡顺序与通关规则 |
 | [src/config.js](src/config.js) | 职业、怪物资料、掉落池与运行环境标记 |
 | [src/geometry.js](src/geometry.js) | 确定性随机、贝塞尔采样与路径计算（纯函数） |
-| [src/runtime.js](src/runtime.js) | 运行时状态容器（state / keys / pointer / moveTarget） |
+| [src/combat.js](src/combat.js) | 伤害结算与击杀收益（纯函数，随机数参数注入） |
+| [src/drops.js](src/drops.js) | 掉落掷点、拾取结算与场景节点效果（纯函数，随机数 / 时间参数注入） |
+| [src/runtime.js](src/runtime.js) | 运行时状态容器（state / keys / pointer / moveTarget / joystick） |
 | [src/render.js](src/render.js) | Canvas 世界绘制与右侧 HUD 的 DOM 渲染 |
-| [src/persist.js](src/persist.js) | localStorage 存档读写与 v2 → v3 迁移判定 |
+| [src/persist.js](src/persist.js) | localStorage 存档读写与迁移函数表驱动的版本升级 |
 | [src/util.js](src/util.js) | DOM 查询与数学辅助（纯函数） |
 
-`geometry.js`、`maps.js`、`config.js` 不依赖 DOM，可直接被 Node 单元测试引用，也是未来服务端共享逻辑的候选。
+`geometry.js`、`maps.js`、`config.js`、`combat.js`、`drops.js` 不依赖 DOM，可直接被 Node 单元测试引用，也是未来服务端共享逻辑的候选。
 
 ## 操作
 
 - 选择战士、法师或道士后开始。
-- `WASD` / 方向键或点击地面移动，点击怪物锁定。
+- `WASD` / 方向键或点击地面移动，点击怪物锁定；移动端使用左下角虚拟摇杆拖动移动。
 - `J` 普攻，`1`–`4` 技能，`R` 一刀时刻，`F` 交互（优先拾取掉落，其次搜索补给箱，再激活场景节点），`Q` 药水。
 - `T` 前往当前关的东侧出口；必须完成普通怪与 Boss 两项目标。
 - 技能悬停显示完整说明，范围技能显示以角色为中心的范围圈。
@@ -93,19 +95,23 @@ npm install
 三类测试都直接使用本机已安装的 Google Chrome（`ONEKNIFE_CHANNEL` 可切换：默认 `chrome`；CI 上设 `chromium` 并使用 `npx playwright install chromium`）：
 
 ```bash
-npm run verify                # 语法检查 + 纯函数单元测试（不需要浏览器）
+npm run verify                # 语法检查 + Prettier 格式检查 + 纯函数单元测试（不需要浏览器）
+npm run format                # 按 .prettierrc 格式化 game/src 与 tests
 npm run test:ui               # 桌面 + 移动视口冒烟测试（需要先 npm run serve）
 npm run test:ui:regression    # 界面渲染与输入回归（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
+npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）
 ```
 
 真实浏览器验收会使用真实鼠标、键盘和浏览器时钟完成 100 图。默认 URL 含 `e2e=1&fast=1`：该模式仅在本机地址生效，快进只把伤害放大 25 倍，Boss 单次伤害限制为最大生命的 18%，不直接修改玩家、怪物或关卡状态。每一关都清怪、验证 Boss 完整阶段和危险技能、读取自动存档、刷新页面、验证恢复，然后走出口进入下一关。
 
 最近结果见 [通关测试记录](../docs/13-通关测试记录.md)。
 
-界面冒烟测试检查桌面与移动视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停和范围技能预览。
+界面冒烟测试检查桌面（1440×900）、移动（390×844）与窄屏（360×640）三个视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停、范围技能预览，以及虚拟摇杆拖拽移动与松开复位。
 
 界面渲染与输入回归测试检查首领刷新读秒随实体递减（不再固定 0s）、技能/背包/装备/导航/日志/关卡卡在静止帧内不被每帧重建、Shift/CapsLock 状态下大写按键仍可移动，以及真实拾取后面板按需刷新。
+
+帧率探测（`npm run perf`）用无头 Chrome 关闭垂直同步采样 8 秒真实操作，当前基线为平均约 4647 fps、p99 帧 0.9ms、最差帧 8.3ms、零长帧（MacBook M5 / 1440×900；桌面无头环境，不代表移动真机）。
 
 三职业并行百图复核：
 

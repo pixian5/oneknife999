@@ -12,13 +12,27 @@ const STORAGE_KEY = "oneknife999-prototype-save-v3";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const pressKey = (page, key, down) => page.evaluate(({ key, down }) => {
-  window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key }));
-}, { key, down });
+const pressKey = (page, key, down) =>
+  page.evaluate(
+    ({ key, down }) => {
+      window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key }));
+    },
+    { key, down }
+  );
 
 function makeSavedRun() {
   const equipment = {
-    weapon: { id: "test-weapon", slot: "weapon", quality: "orange", glyph: "刀", name: "测试利刃", color: "#e7b36b", power: 9999, value: 1, desc: "回归测试用" },
+    weapon: {
+      id: "test-weapon",
+      slot: "weapon",
+      quality: "orange",
+      glyph: "刀",
+      name: "测试利刃",
+      color: "#e7b36b",
+      power: 9999,
+      value: 1,
+      desc: "回归测试用"
+    },
     neck: null,
     boots: null
   };
@@ -27,13 +41,50 @@ function makeSavedRun() {
     classId: "warrior",
     currentMapId: "ash_outskirts",
     player: {
-      x: 1980, y: 760, hp: 999999, resource: 100, level: 5, exp: 0, nextExp: 100, gold: 0, marks: 0, charge: 0,
-      potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0],
-      targetId: null, previewSkill: null, equipment, poison: 0, visitedMaps: { ash_outskirts: true }
+      x: 1980,
+      y: 760,
+      hp: 999999,
+      resource: 100,
+      level: 5,
+      exp: 0,
+      nextExp: 100,
+      gold: 0,
+      marks: 0,
+      charge: 0,
+      potion: 3,
+      kills: 0,
+      totalKills: 0,
+      oneMomentUsed: false,
+      attackTimer: 0,
+      invulnerable: 0,
+      cooldowns: [0, 0, 0, 0],
+      targetId: null,
+      previewSkill: null,
+      equipment,
+      poison: 0,
+      visitedMaps: { ash_outskirts: true }
     },
     inventory: [
-      { id: "test-item-1", slot: "material", quality: "blue", glyph: "矿", name: "测试材料一", color: "#78b6ec", value: 1, desc: "回归测试用" },
-      { id: "test-item-2", slot: "material", quality: "purple", glyph: "核", name: "测试材料二", color: "#a88ce3", value: 1, desc: "回归测试用" }
+      {
+        id: "test-item-1",
+        slot: "material",
+        quality: "blue",
+        glyph: "矿",
+        name: "测试材料一",
+        color: "#78b6ec",
+        value: 1,
+        desc: "回归测试用"
+      },
+      {
+        id: "test-item-2",
+        slot: "material",
+        quality: "purple",
+        glyph: "核",
+        name: "测试材料二",
+        color: "#a88ce3",
+        value: 1,
+        desc: "回归测试用"
+      }
     ],
     equipment,
     mapProgress: { ash_outskirts: { kills: 0, need: 8, bossDefeated: false, completed: false, rewardClaimed: false } }
@@ -52,10 +103,10 @@ async function verifyLayoutStability(page) {
     const snapshot = () => ({
       skill: document.querySelector('#skillBar [data-skill="0"]'),
       inv: document.querySelector('#inventoryGrid [data-item-index="0"]'),
-      equip: document.querySelector('#equipmentGrid button'),
-      region: document.querySelector('#regionList [data-map-id]'),
-      log: document.querySelector('#eventLog .event-entry'),
-      objective: document.querySelector('#mapObjectiveChecks span')
+      equip: document.querySelector("#equipmentGrid button"),
+      region: document.querySelector("#regionList [data-map-id]"),
+      log: document.querySelector("#eventLog .event-entry"),
+      objective: document.querySelector("#mapObjectiveChecks span")
     });
     const before = snapshot();
     await new Promise((resolve) => setTimeout(resolve, 1600));
@@ -115,11 +166,12 @@ async function verifyBossRespawnCountdown(page) {
   await page.evaluate(() => clearInterval(window.__autoAttack));
   assert.ok(bossDead, "首领未在 30 秒内被击杀");
 
-  const readRespawn = () => page.evaluate(() => {
-    const text = document.querySelector("#mapDynamics").textContent.replace(/\s+/g, " ").trim();
-    const match = text.match(/首领已击破 · (\d+)s 后刷新/);
-    return { respawn: match ? Number(match[1]) : null, alert: document.querySelector("#bossAlertText").textContent };
-  });
+  const readRespawn = () =>
+    page.evaluate(() => {
+      const text = document.querySelector("#mapDynamics").textContent.replace(/\s+/g, " ").trim();
+      const match = text.match(/首领已击破 · (\d+)s 后刷新/);
+      return { respawn: match ? Number(match[1]) : null, alert: document.querySelector("#bossAlertText").textContent };
+    });
   const first = await readRespawn();
   await sleep(3200);
   const second = await readRespawn();
@@ -156,11 +208,15 @@ async function verifyBossRespawnCountdown(page) {
   // 掉落内容随机，且一次 F 会拾取附近多件掉落（材料/药水/金币/印记碎片），
   // 因此只要求至少一类资产增加，不写死背包格数（避免随机掉落造成偶发失败）
   const countOf = (text) => Number(String(text).replace(/[^\d]/g, ""));
-  const gainedAsset = countOf(after.inv) > countOf(before.inv)
-    || countOf(after.potion) > countOf(before.potion)
-    || countOf(after.gold) > countOf(before.gold)
-    || countOf(after.marks) > countOf(before.marks);
-  assert.ok(gainedAsset, `拾取后资产未增加：背包 ${before.inv} → ${after.inv}，药水 ${before.potion} → ${after.potion}，金币 ${before.gold} → ${after.gold}，印记 ${before.marks} → ${after.marks}`);
+  const gainedAsset =
+    countOf(after.inv) > countOf(before.inv) ||
+    countOf(after.potion) > countOf(before.potion) ||
+    countOf(after.gold) > countOf(before.gold) ||
+    countOf(after.marks) > countOf(before.marks);
+  assert.ok(
+    gainedAsset,
+    `拾取后资产未增加：背包 ${before.inv} → ${after.inv}，药水 ${before.potion} → ${after.potion}，金币 ${before.gold} → ${after.gold}，印记 ${before.marks} → ${after.marks}`
+  );
   assert.match(after.objective, /✓/, `首领击破后关卡卡未更新：${after.objective}`);
 }
 

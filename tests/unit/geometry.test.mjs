@@ -4,8 +4,11 @@ import assert from "node:assert/strict";
 import { seededRandom, cubicPoint, distanceToPath, pathLength, pointOnPath, routePoint } from "../../game/src/geometry.js";
 
 // 一条水平直线路径（两段贝塞尔，起点 0,0 终点 600,0），便于手算期望值。
-// 注意：地图路径统一使用 14 个数值（两段曲线），单段路径不受 pointOnPath 支持。
+// 地图路径统一使用 14 个数值（两段曲线）；单段路径（8 个数值）由 pointOnPath 单独保护。
 const STRAIGHT = [0, 0, 100, 0, 200, 0, 300, 0, 400, 0, 500, 0, 600, 0];
+
+// 单段贝塞尔路径（起点 0,0 终点 300,0），用于验证单段保护分支。
+const SINGLE_SEGMENT = [0, 0, 100, 0, 200, 0, 300, 0];
 
 test("seededRandom：相同种子产生相同序列，不同种子产生不同序列", () => {
   const first = seededRandom(42);
@@ -14,7 +17,10 @@ test("seededRandom：相同种子产生相同序列，不同种子产生不同�
   const firstValues = Array.from({ length: 5 }, () => first());
   const secondValues = Array.from({ length: 5 }, () => second());
   assert.deepEqual(firstValues, secondValues);
-  assert.notDeepEqual(firstValues, Array.from({ length: 5 }, () => other()));
+  assert.notDeepEqual(
+    firstValues,
+    Array.from({ length: 5 }, () => other())
+  );
   for (const value of firstValues) assert.ok(value >= 0 && value < 1, `随机值应在 [0,1)：${value}`);
 });
 
@@ -38,6 +44,16 @@ test("pointOnPath：进度 0 与 1 落在路径两端", () => {
   assert.deepEqual(start, { x: 0, y: 0 });
   assert.ok(Math.abs(middle.x - 300) < 1, `中点 x 期望约 300，实际 ${middle.x}`);
   assert.ok(Math.abs(end.x - 600) < 1, `终点 x 期望约 600，实际 ${end.x}`);
+});
+
+test("pointOnPath：单段路径不会在 progress 大于 0.5 时返回 NaN", () => {
+  [0, 0.25, 0.5, 0.75, 1].forEach((progress) => {
+    const point = pointOnPath(SINGLE_SEGMENT, progress);
+    assert.ok(Number.isFinite(point.x) && Number.isFinite(point.y), `progress ${progress} 应返回有限数值：${JSON.stringify(point)}`);
+    assert.ok(point.x >= 0 && point.x <= 300, `progress ${progress} 的 x 应落在路径范围内：${point.x}`);
+  });
+  assert.deepEqual(pointOnPath(SINGLE_SEGMENT, 0), { x: 0, y: 0 });
+  assert.ok(Math.abs(pointOnPath(SINGLE_SEGMENT, 1).x - 300) < 1, "单段路径终点应落在路径末端");
 });
 
 test("routePoint：横向偏移沿路径法线方向", () => {
