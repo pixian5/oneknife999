@@ -862,7 +862,6 @@
       player: { x: 480, y: 780, hp: hero.hp, resource: hero.resource * .68, level: 1, exp: 0, nextExp: 100, gold: 40, marks: 0, charge: 0, potion: 3, kills: 0, totalKills: 0, oneMomentUsed: false, attackTimer: 0, invulnerable: 0, cooldowns: [0, 0, 0, 0], targetId: null, previewSkill: null, equipment: { weapon: null, neck: null, boots: null }, poison: 0, visitedMaps: { ash_outskirts: true } },
       entities: [],
       drops: [], particles: [], texts: [], logs: [],
-      boss: { active: true, defeated: false, respawn: 0 },
       startedAt: Date.now(),
       quest: { kills: 0, need: 8, completed: false },
       mapProgress: {},
@@ -927,7 +926,6 @@
     state.hazards = [];
     state.hazardsSpawned = 0;
     state.hoveredEntityId = null;
-    state.boss = { active: true, defeated: false, respawn: 0 };
     state.quest = mapProgress(mapId);
     state.player.visitedMaps[mapId] = true;
     if (!silent) {
@@ -1128,7 +1126,6 @@
       const map = activeMap();
       log(`<b>首领击破</b>：${target.name} 倒下，个人获得 35 首领印记。`, "loot");
       showToast("首领结算完成：贡献快照已锁定");
-      state.boss.defeated = true;
       state.quest.bossDefeated = true;
     } else log(`${target.name} 被击败，获得 ${expGain} 经验与 ${target.gold} 金币。`);
     spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
@@ -1451,7 +1448,7 @@
     const hero = activeHero();
     const map = activeMap();
     let dx = 0, dy = 0;
-    if (keys.w || keys.ArrowUp) dy -= 1; if (keys.s || keys.ArrowDown) dy += 1; if (keys.a || keys.ArrowLeft) dx -= 1; if (keys.d || keys.ArrowRight) dx += 1;
+    if (keys.w || keys.arrowup) dy -= 1; if (keys.s || keys.arrowdown) dy += 1; if (keys.a || keys.arrowleft) dx -= 1; if (keys.d || keys.arrowright) dx += 1;
     if (dx || dy) moveTarget = null;
     if (!dx && !dy && moveTarget) { dx = moveTarget.x - state.player.x; dy = moveTarget.y - state.player.y; if (Math.hypot(dx, dy) < 8) moveTarget = null; }
     const length = Math.hypot(dx, dy) || 1; if (dx || dy) { state.player.x += (dx / length) * hero.speed * dt; state.player.y += (dy / length) * hero.speed * dt; }
@@ -1500,7 +1497,7 @@
       entity.hitFlash = Math.max(0, entity.hitFlash - dt);
       if (!entity.alive) {
         entity.respawn -= dt;
-        if (entity.respawn <= 0) { entity.alive = true; entity.hp = entity.maxHp; if (entity.boss) { state.boss.defeated = false; entity.phase = 1; entity.specialTimer = map.boss.specialInterval; entity.summonTimer = map.boss.summonInterval || 0; log(`<b>首领情报</b>：${entity.name} 重新进入场景。`, "warn"); } }
+        if (entity.respawn <= 0) { entity.alive = true; entity.hp = entity.maxHp; if (entity.boss) { entity.phase = 1; entity.specialTimer = map.boss.specialInterval; entity.summonTimer = map.boss.summonInterval || 0; log(`<b>首领情报</b>：${entity.name} 重新进入场景。`, "warn"); } }
         return;
       }
       if (!entity.boss) { entity.wander += dt; const drift = Math.sin(entity.wander * .7) * 3; entity.x = clamp(entity.x + drift * dt, 90, map.width - 90); }
@@ -1947,7 +1944,9 @@
   function drawText(text) { ctx.save(); ctx.globalAlpha = clamp(text.life * 2, 0, 1); ctx.fillStyle = text.color; ctx.font = `700 ${text.size}px sans-serif`; ctx.textAlign = "center"; ctx.fillText(text.message, text.x, text.y); ctx.restore(); }
 
   function renderTarget() { const target = state?.entities.find((entity) => entity.id === state.player.targetId && entity.alive); $("targetText").textContent = target ? target.name : "未锁定目标"; $("targetHint").textContent = target ? `${Math.max(0, Math.round(target.hp))} / ${target.maxHp} HP` : "靠近怪物开始战斗"; }
-  function renderLog() { $("eventLog").innerHTML = state.logs.slice().reverse().map((entry) => `<div class="event-entry ${entry.type}">${entry.message}</div>`).join(""); }
+  let logStamp = null;
+  function renderLog() { const signature = state.logs.map((entry) => entry.message).join("\u0000"); if (signature === logStamp) return; // 日志未变化时跳过重建
+    logStamp = signature; $("eventLog").innerHTML = state.logs.slice().reverse().map((entry) => `<div class="event-entry ${entry.type}">${entry.message}</div>`).join(""); }
 
   function renderPlayer() {
     const hero = activeHero(); const maxHp = playerMaxHp(); const maxResource = hero.resource; const power = hero.attack + state.player.level * 4 + Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) + hero.defense * 2;
@@ -1965,11 +1964,15 @@
     return { step: "步骤 2 / 3", title: `击败 ${rule.boss}`, text: "普通怪清剿已完成，前往首领区域完成关卡。", complete: false };
   }
 
+  let mapObjectiveStamp = null;
   function renderMapObjective() {
     const map = activeMap();
     const rule = MAP_CLEAR_RULES[map.id];
     const progress = mapProgress();
     const view = objectiveView();
+    const stamp = `${map.id}|${progress.kills}|${progress.need}|${progress.bossDefeated}|${progress.completed}|${progress.rewardClaimed}|${view.step}`;
+    if (stamp === mapObjectiveStamp) return; // 关卡卡片未变化时跳过 DOM 写入
+    mapObjectiveStamp = stamp;
     $("mapObjective").classList.toggle("complete", view.complete);
     $("mapObjectiveState").textContent = view.step;
     $("mapObjectiveTitle").textContent = view.title;
@@ -1988,10 +1991,17 @@
     const dangerEl = $("mapDanger");
     dangerEl.textContent = map.dangerLabel;
     dangerEl.className = `pill ${map.danger === "safe" ? "safe" : map.danger === "danger" || map.danger === "desolate" ? "danger" : ""}`;
-    // 区域动态
+    renderDynamics();
+  }
+
+  // 区域动态每帧刷新；首领刷新倒计时直接取自实体，避免与状态副本脱节
+  let dynamicsStamp = null;
+  function renderDynamics() {
+    const map = activeMap();
+    const bossEntity = state.entities.find((entity) => entity.boss);
     const dynamics = [];
-    if (state.boss.defeated) dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(state.boss.respawn)}s 后刷新</span>`);
-    else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${state.entities.find((e) => e.boss)?.phase || 1}</span>`);
+    if (bossEntity && !bossEntity.alive) dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(bossEntity.respawn)}s 后刷新</span>`);
+    else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${bossEntity?.phase || 1}</span>`);
     const rule = MAP_CLEAR_RULES[map.id];
     const progress = mapProgress();
     if (!rule.next && progress.completed) dynamics.push(`<span class="world-event ready"><i class="gold"></i> 100/100 通关 · 百图征途完成</span>`);
@@ -2011,9 +2021,14 @@
       const routeText = plan.type === "fork" || plan.type === "radial" ? `主路 ${plan.mainLength} · 支路 ${plan.branchLength}` : `${plan.summary} · ${plan.mainLength}`;
       dynamics.push(`<span class="world-event route-plan"><i></i> ${routeText} · 首领入口缓冲 ${plan.bossEntryBuffer}px</span>`);
     }
-    $("mapDynamics").innerHTML = dynamics.join("");
+    const html = dynamics.join("");
+    if (html === dynamicsStamp) return; // 内容未变时跳过，避免每帧重建 DOM
+    dynamicsStamp = html;
+    $("mapDynamics").innerHTML = html;
   }
 
+  let regionStamp = null;
+  let regionTipStamp = null;
   function renderRegion() {
     const map = activeMap();
     const idx = MAP_ORDER.indexOf(map.id);
@@ -2036,7 +2051,11 @@
         <span class="region-progress ${progress.completed ? "done" : ""}">${progressLabel}</span>
       </button>`;
     }).join("");
-    document.querySelector(".region-tip").textContent = `第 ${idx + 1} / 100 关`;
+    const tip = `第 ${idx + 1} / 100 关`;
+    if (html === regionStamp && tip === regionTipStamp) return; // 导航内容未变时跳过重建与重复绑定
+    regionStamp = html;
+    regionTipStamp = tip;
+    document.querySelector(".region-tip").textContent = tip;
     $("regionList").innerHTML = html;
     $("regionList").querySelectorAll("[data-map-id]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2073,8 +2092,12 @@
     $("skillBar").querySelectorAll("button").forEach((button) => { button.disabled = state.player.cooldowns[Number(button.dataset.skill)] > 0; });
   }
 
-  function renderEquipment() { const labels = { weapon: "武器", neck: "项链", boots: "靴子" }; $("equipmentGrid").innerHTML = Object.keys(labels).map((slot) => { const item = state.player.equipment[slot]; return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`; }).join(""); }
-  function renderInventory() { const inventory = state.inventory || []; $("inventoryCount").textContent = `${inventory.length}/12`; $("inventoryGrid").innerHTML = Array.from({ length: 12 }, (_, index) => { const item = inventory[index]; return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`; }).join(""); $("inventoryGrid").querySelectorAll("[data-item-index]").forEach((button) => { button.addEventListener("click", () => equipItem(inventory[Number(button.dataset.itemIndex)])); }); }
+  let equipmentStamp = null;
+  function renderEquipment() { const labels = { weapon: "武器", neck: "项链", boots: "靴子" }; const stamp = Object.keys(labels).map((slot) => state.player.equipment[slot]?.id || "").join("|"); if (stamp === equipmentStamp) return; // 装备未变化时跳过重建
+    equipmentStamp = stamp; $("equipmentGrid").innerHTML = Object.keys(labels).map((slot) => { const item = state.player.equipment[slot]; return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`; }).join(""); }
+  let inventorySignature = null;
+  function renderInventory() { const inventory = state.inventory || []; $("inventoryCount").textContent = `${inventory.length}/12`; const signature = inventory.map((item) => item?.id || "").join("|"); if (signature === inventorySignature) return; // 背包未变化时跳过重建与重复绑定
+    inventorySignature = signature; $("inventoryGrid").innerHTML = Array.from({ length: 12 }, (_, index) => { const item = inventory[index]; return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`; }).join(""); $("inventoryGrid").querySelectorAll("[data-item-index]").forEach((button) => { button.addEventListener("click", () => equipItem(inventory[Number(button.dataset.itemIndex)])); }); }
   function renderBoss() { const boss = state.entities.find((entity) => entity.boss); if (!boss) return; $("bossAlertText").textContent = boss.alive ? `${boss.name} · ${Math.ceil(boss.hp / boss.maxHp * 100)}% 生命 · 阶段 ${boss.phase}/${activeMap().boss.phases}` : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`; }
   function renderAll() { if (!state) return; drawWorld(); renderMapHeader(); renderMapObjective(); renderRegion(); renderPlayer(); renderTarget(); renderNormalAttack(); renderSkills(); renderEquipment(); renderInventory(); renderLog(); renderBoss(); $("coords").textContent = `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`; }
 
@@ -2127,14 +2150,14 @@
   function setupClasses() { $("classOptions").innerHTML = Object.entries(CLASSES).map(([id, hero]) => `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`).join(""); $("classOptions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => chooseClass(button.dataset.class))); }
 
   function setupInput() {
-    window.addEventListener("keydown", (event) => { keys[event.key] = true; const key = event.key.toLowerCase(); if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const exit = primaryExit(); if (exit) tryTravel(exit); else showToast(mapProgress().completed ? "100 张地图已全部通关" : objectiveView().text); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key] = false; });
+    window.addEventListener("keydown", (event) => { const key = event.key.toLowerCase(); keys[key] = true; if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault(); if (key === "j") normalAttack(); if (key === "f") collectDrops(); if (key === "q") usePotion(); if (key === "r") oneMoment(); if (key === "t") { const exit = primaryExit(); if (exit) tryTravel(exit); else showToast(mapProgress().completed ? "100 张地图已全部通关" : objectiveView().text); } if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1); }); window.addEventListener("keyup", (event) => { keys[event.key.toLowerCase()] = false; });
     canvas.addEventListener("pointerdown", (event) => { pointer.down = true; const point = canvasPoint(event); const target = state?.entities.find((entity) => entity.alive && distance(point, entity) < entity.radius + 22); if (target) selectTarget(target); else moveTarget = point; }); canvas.addEventListener("pointerup", () => { pointer.down = false; });
     canvas.addEventListener("pointermove", (event) => { if (!state) return; const point = canvasPoint(event); pointer.x = point.x; pointer.y = point.y; const hovered = state.entities.filter((entity) => entity.alive).sort((a, b) => Number(b.boss) - Number(a.boss)).find((entity) => distance(point, entity) < entity.radius + 18); state.hoveredEntityId = hovered?.id || null; });
     canvas.addEventListener("pointerleave", () => { if (state) state.hoveredEntityId = null; });
     $("skillBar").addEventListener("click", (event) => { const button = event.target.closest("[data-skill]"); if (button) castSkill(Number(button.dataset.skill)); });
     $("skillBar").addEventListener("pointerover", (event) => { const button = event.target.closest("[data-skill]"); if (button && state) state.player.previewSkill = Number(button.dataset.skill); });
     $("skillBar").addEventListener("pointerleave", () => { if (state) state.player.previewSkill = null; });
-    $("normalAttackBtn").addEventListener("click", normalAttack); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[button.dataset.move]] = false; }); });
+    $("normalAttackBtn").addEventListener("click", normalAttack); $("potionBtn").addEventListener("click", usePotion); $("saveBtn").addEventListener("click", saveGame); $("resetBtn").addEventListener("click", resetGame); $("inventoryHint").addEventListener("click", () => showToast("背包装备会影响战力，锁定只防误操作，不提供死亡保护")); document.querySelectorAll("[data-move]").forEach((button) => { button.addEventListener("pointerdown", () => { keys[{ up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" }[button.dataset.move]] = true; }); button.addEventListener("pointerup", () => { keys[{ up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" }[button.dataset.move]] = false; }); button.addEventListener("pointerleave", () => { keys[{ up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" }[button.dataset.move]] = false; }); });
   }
 
   function usePotion() { if (!state || state.player.potion <= 0) { showToast("生命药水已用完"); return; } const maxHp = playerMaxHp(); if (state.player.hp >= maxHp) { showToast("生命值已满"); return; } state.player.potion -= 1; const restore = Math.round(maxHp * .32); state.player.hp = clamp(state.player.hp + restore, 0, maxHp); textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15); log(`使用生命药水，恢复 ${restore} 点生命。`); persistGame(); }

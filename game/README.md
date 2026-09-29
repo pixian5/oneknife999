@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.0。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.2.1。
 
 ## 启动
 
@@ -87,6 +87,16 @@ tests/ui-smoke.cjs
 ```
 
 该测试检查桌面与移动视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停和范围技能预览。
+
+界面渲染与输入回归测试：
+
+```bash
+NODE_PATH=/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
+/Users/x/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+tests/ui-render-input-regression.cjs
+```
+
+该测试验证首领刷新读秒随实体递减（不再固定 0s）、技能/背包/装备/导航/日志/关卡卡在静止帧内不被每帧重建、Shift/CapsLock 状态下大写按键仍可移动，以及拾取后面板按需刷新。
 
 三职业并行百图复核：
 
