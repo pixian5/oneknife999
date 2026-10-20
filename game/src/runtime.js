@@ -49,6 +49,7 @@ export function createState(classId) {
       potion: 3,
       kills: 0,
       totalKills: 0,
+      deaths: 0,
       oneMomentUsed: false,
       attackTimer: 0,
       invulnerable: 0,

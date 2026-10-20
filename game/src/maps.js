@@ -859,7 +859,8 @@ export function generatedLayout(stageNumber, chapter) {
   const mainProgresses = branchPath
     ? [0.12, 0.22, 0.33, 0.45, 0.58, 0.7, 0.79, 0.86]
     : [0.1, 0.17, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64, 0.71, 0.77, 0.83, 0.88];
-  const branchProgresses = [0.38, 0.5, 0.62, 0.74];
+  // 支路守卫全部落在声明的主路区间之外、支路守卫带之内，保证元数据与实际营位一致。
+  const branchProgresses = [0.3, 0.42, 0.54, 0.66];
   const monsterRoutes = branchPath
     ? mainProgresses
         .map((progress, index) => ({ route: "main", progress, lateral: (index % 2 ? 1 : -1) * (28 + ((stageNumber + index) % 3) * 16) }))
@@ -905,6 +906,9 @@ export function generatedLayout(stageNumber, chapter) {
     ];
   });
   const bossEntry = { x: path[10], y: path[11] };
+  // 分段计数从实际营位统计（含战区回拉后的 adjustedProgress），保证元数据与场景一致。
+  const countIn = (route, from, to) =>
+    monsterSpawns.filter(([, , , spawnRoute, progress]) => spawnRoute === route && progress >= from && progress <= to).length;
   const routePlan = {
     type: site.road,
     summary:
@@ -922,15 +926,15 @@ export function generatedLayout(stageNumber, chapter) {
     bossEntryBuffer: Math.round(Math.hypot(boss.x - bossEntry.x, boss.y - bossEntry.y)),
     encounterBands: branchPath
       ? [
-          { id: "approach", route: "main", label: "前段警戒带", from: 0.08, to: 0.33, count: 3 },
-          { id: "pressure", route: "main", label: "中段压迫带", from: 0.34, to: 0.7, count: 3 },
-          { id: "branch_guard", route: "branch", label: "支路守卫带", from: 0.18, to: 0.66, count: 4 },
-          { id: "rally", route: "main", label: "首领前集结", from: 0.71, to: 0.88, count: 2 }
+          { id: "approach", route: "main", label: "前段警戒带", from: 0.08, to: 0.33, count: countIn("main", 0.08, 0.33) },
+          { id: "pressure", route: "main", label: "中段压迫带", from: 0.34, to: 0.7, count: countIn("main", 0.34, 0.7) },
+          { id: "branch_guard", route: "branch", label: "支路守卫带", from: 0.18, to: 0.66, count: countIn("branch", 0.18, 0.66) },
+          { id: "rally", route: "main", label: "首领前集结", from: 0.71, to: 0.88, count: countIn("main", 0.71, 0.88) }
         ]
       : [
-          { id: "approach", route: "main", label: "前段警戒带", from: 0.08, to: 0.32, count: 3 },
-          { id: "pressure", route: "main", label: "中段压迫带", from: 0.33, to: 0.68, count: 4 },
-          { id: "rally", route: "main", label: "首领前集结", from: 0.69, to: 0.9, count: 5 }
+          { id: "approach", route: "main", label: "前段警戒带", from: 0.08, to: 0.32, count: countIn("main", 0.08, 0.32) },
+          { id: "pressure", route: "main", label: "中段压迫带", from: 0.33, to: 0.68, count: countIn("main", 0.33, 0.68) },
+          { id: "rally", route: "main", label: "首领前集结", from: 0.69, to: 0.9, count: countIn("main", 0.69, 0.9) }
         ]
   };
   const occupied = [start, boss, ...monsterSpawns.map(([x, y]) => ({ x, y }))];
@@ -990,14 +994,12 @@ export function generatedLayout(stageNumber, chapter) {
       }
     }
     if (expanded.length) return expanded[0];
+    // 末级兜底：放弃间距约束、取离已占用点最远的安全候选；网格已覆盖全图，
+    // 走到这里仍为空说明地图参数本身非法，直接抛错暴露问题。
     const fallback = constrained.sort((a, b) => {
       const score = (point) => Math.min(...occupied.map((other) => Math.hypot(point.x - other.x, point.y - other.y)));
       return score(b) - score(a);
     })[0];
-    const safeFallback = constrained.find((point) =>
-      occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= minDistance)
-    );
-    if (safeFallback) return safeFallback;
     if (fallback) return fallback;
     throw new Error(`地图节点没有安全候选：${stageNumber}/${routePath ? "branch" : "main"}`);
   };
@@ -1073,21 +1075,27 @@ export function generatedMap(stageNumber) {
   const chapter = CHAPTERS[chapterIndex];
   const slot = (stageNumber - 1) % 10;
   const expectedLevel = campaignGrowth(stageNumber - 1).level;
-  const scale = 1 + stageNumber * 0.085;
   const id = `stage_${String(stageNumber).padStart(3, "0")}`;
   const layout = generatedLayout(stageNumber, chapter);
-  const monsterTypes = chapter.monsters.map((name, typeIndex) => ({
-    name: `${chapter.short}${name}`,
-    color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72"][typeIndex],
-    hp: Math.round((72 + typeIndex * 18) * scale),
-    attack: Math.round(11 + stageNumber * 1.05 + typeIndex * 2),
-    defense: Math.round(3 + stageNumber * 0.42 + typeIndex * 2),
-    exp: 0,
-    gold: Math.round(8 + stageNumber * 1.4 + typeIndex * 2),
-    radius: 16 + typeIndex,
-    intro: `${chapter.name}中负责巡逻的${name}，会根据玩家距离选择攻击方式。`,
-    skills: [`${name}攻击：基础伤害 ${Math.round(11 + stageNumber * 1.05 + typeIndex * 2)}`, `${name}本能：受到伤害后继续追击`]
-  }));
+  // 数值曲线以第 4 关（手工图「赤砂大漠」）为锚点：第 5 关起与关 4 数值衔接并线性增长，
+  // 消除手工图与生成图之间的难度/装备断崖；第 100 关峰值与旧曲线基本一致。
+  const anchored = (base, slope) => Math.round(base + (stageNumber - 4) * slope);
+  const monsterTypes = chapter.monsters.map((name, typeIndex) => {
+    const attack = anchored(70 + typeIndex * 7.3, 0.32);
+    return {
+      // 章节前缀与怪物名重复时不再二次拼接（避免「龙脉龙脉毒虫」式 stutter）。
+      name: name.startsWith(chapter.short) ? name : `${chapter.short}${name}`,
+      color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72"][typeIndex],
+      hp: Math.round((480 + typeIndex * 46.7) * (1 + (stageNumber - 4) * 0.0097)),
+      attack,
+      defense: anchored(16 + typeIndex * 1.3, 0.35),
+      exp: 0,
+      gold: anchored(36 + typeIndex * 3, 1.4),
+      radius: 16 + typeIndex,
+      intro: `${chapter.name}中负责巡逻的${name}，会根据玩家距离选择攻击方式。`,
+      skills: [`${name}攻击：基础伤害 ${attack}`, `${name}本能：受到伤害后继续追击`]
+    };
+  });
   const bossName = slot === 9 ? chapter.boss : `${chapter.short}${STAGE_SITES[slot]}领主`;
   return {
     id,
@@ -1134,11 +1142,11 @@ export function generatedMap(stageNumber) {
       id: `boss-${id}`,
       name: bossName,
       color: chapter.accent,
-      hp: Math.round(760 + stageNumber * 88),
-      attack: Math.round(24 + stageNumber * 1.28),
-      defense: Math.round(10 + stageNumber * 0.55),
+      hp: anchored(3000, 67.5),
+      attack: anchored(112, 0.42),
+      defense: anchored(60, 0.05),
       exp: 0,
-      gold: Math.round(120 + stageNumber * 16),
+      gold: anchored(1100, 6.5),
       radius: 34 + Math.min(6, Math.floor(stageNumber / 20)),
       x: layout.boss.x,
       y: layout.boss.y,
@@ -1155,18 +1163,18 @@ export function generatedMap(stageNumber) {
         slot: "weapon",
         quality: stageNumber > 70 ? "orange" : "purple",
         glyph: "刃",
-        power: 10 + stageNumber * 2,
-        value: 30 + stageNumber * 8,
+        power: anchored(56, 1.6),
+        value: anchored(280, 5.7),
         color: stageNumber > 70 ? "#e7b36b" : "#a88ce3",
-        desc: `第 ${stageNumber} 关武器 · 攻击 ${10 + stageNumber * 2}`
+        desc: `第 ${stageNumber} 关武器 · 攻击 ${anchored(56, 1.6)}`
       },
       {
         name: `${chapter.short}魂链·${stageNumber}`,
         slot: "neck",
         quality: "purple",
         glyph: "玉",
-        power: 8 + stageNumber,
-        value: 25 + stageNumber * 6,
+        power: anchored(48, 0.67),
+        value: anchored(240, 4),
         color: "#a88ce3",
         desc: `第 ${stageNumber} 关护符 · 生命与战力成长`
       },
@@ -1175,8 +1183,8 @@ export function generatedMap(stageNumber) {
         slot: "boots",
         quality: "blue",
         glyph: "靴",
-        power: 6 + stageNumber,
-        value: 20 + stageNumber * 5,
+        power: anchored(44, 0.65),
+        value: anchored(130, 4),
         color: "#78b6ec",
         desc: `第 ${stageNumber} 关战靴 · 防御与移速成长`
       },
@@ -1186,7 +1194,7 @@ export function generatedMap(stageNumber) {
         quality: "orange",
         glyph: "核",
         power: 0,
-        value: 80 + stageNumber * 12,
+        value: anchored(320, 10),
         color: "#e7b36b",
         desc: `第 ${stageNumber} 关首领铸魂材料`
       }
@@ -1302,6 +1310,8 @@ export function placeTacticalPoints(map, stageNumber, chapterShort) {
   ];
 }
 
+// 第一遍：等级、剧情与节点归一（含手工图）。必须先于出口构建执行，
+// 否则出口文案会读到手工图未归一的旧 levelMin，出现路牌与地图自述矛盾。
 MAP_ORDER.forEach((id, index) => {
   const map = MAPS[id];
   map.stageNumber = index + 1;
@@ -1335,6 +1345,11 @@ MAP_ORDER.forEach((id, index) => {
     ];
   }
   map.encounterBands = map.routePlan.encounterBands;
+});
+
+// 第二遍：出口文案基于归一后的 levelMin 生成，与地图自述保持一致。
+MAP_ORDER.forEach((id, index) => {
+  const map = MAPS[id];
   const exits = [];
   if (index > 0) {
     const previous = MAPS[MAP_ORDER[index - 1]];

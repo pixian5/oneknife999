@@ -35,7 +35,7 @@
           </div>
           <div class="canvas-wrap" id="canvasWrap">
             <canvas id="gameCanvas" aria-label="灰烬边境战斗场景"></canvas>
-            <div class="boss-alert" id="bossAlert" aria-live="polite">
+            <div class="boss-alert" id="bossAlert">
               <span class="boss-pulse"></span>
               <span><b>首领情报</b><small id="bossAlertText">裂碑领主正在苏醒</small></span>
             </div>
@@ -117,7 +117,7 @@
       </footer>
     </main>
 
-    <div class="class-modal" id="classModal">
+    <div class="class-modal" id="classModal" role="dialog" aria-modal="true" aria-label="选择职业">
       <div class="class-intro">
         <span class="eyebrow">服务器 · 烬阳-01</span>
         <h2>选择你的传奇道路</h2>

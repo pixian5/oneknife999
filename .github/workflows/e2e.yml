@@ -24,8 +24,8 @@ jobs:
       - name: 安装 Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: 百图通关回归（战士单账号）
+      - name: 百图通关回归（三职业并发）
         run: |
           python3 -m http.server 4174 --directory game &
           sleep 1
-          ONEKNIFE_RUNS=1 ONEKNIFE_CHANNEL=chromium npm run test:e2e
+          ONEKNIFE_RUNS=3 ONEKNIFE_CLASSES=warrior,mage,taoist ONEKNIFE_CONCURRENCY=3 ONEKNIFE_CHANNEL=chromium npm run test:e2e

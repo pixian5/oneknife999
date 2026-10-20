@@ -247,6 +247,7 @@ async function clearMap(page, mapId) {
   process.stdout.write(`START ${mapId}\n`);
   await returnToMap(page, mapId);
   let snap = await snapshot(page);
+  const deathsBefore = snap.player.deaths || 0;
   if (process.env.ONEKNIFE_CLAIM_BRANCH === "1") {
     const cache = RESOURCE_POINTS[mapId];
     if (cache?.route === "branch" && !snap.progress[mapId]?.resourceClaimed) {
@@ -287,6 +288,9 @@ async function clearMap(page, mapId) {
   await defeatEntity(page, boss.id, mapId);
   snap = await snapshot(page);
   if (!snap.progress[mapId]?.completed) throw new Error(`${mapId} 未进入完成状态：${JSON.stringify(snap)}`);
+  // 死亡次数守卫：快进模式下正常每关死亡 0-3 次；怪物攻击被改坏时会爆炸式增长。
+  const deathsAfter = snap.player.deaths || 0;
+  if (deathsAfter - deathsBefore > 30) throw new Error(`${mapId} 单关死亡 ${deathsAfter - deathsBefore} 次，难度数值异常`);
 }
 
 async function assertAutoSaveCheckpoint(page, mapId) {
@@ -301,8 +305,17 @@ async function assertAutoSaveCheckpoint(page, mapId) {
   const expected = expectedGrowth(clearedMaps);
   if (restored.player.level !== expected.level || restored.player.exp !== expected.exp || restored.player.nextExp !== 100)
     throw new Error(`${mapId} 成长节奏错误：期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(restored.player)}`);
+  // 经济与接口契约：gold/marks 必须随进度累积，snapshot 必须暴露资产字段（否则跨刷新清零无从发现）。
+  if (typeof restored.player.gold !== "number" || typeof restored.player.marks !== "number" || typeof restored.player.deaths !== "number")
+    throw new Error(`${mapId} snapshot 缺少经济/死亡字段（E2E 接口契约）：${JSON.stringify(restored.player)}`);
+  if (restored.player.gold < clearedMaps * 80) throw new Error(`${mapId} 刷新后金币异常偏低：${restored.player.gold}`);
+  if (restored.player.marks < clearedMaps * 40) throw new Error(`${mapId} 刷新后首领印记异常偏低：${restored.player.marks}`);
+  if (typeof restored.inventoryCount !== "number" || typeof restored.equipmentIds?.weapon === "undefined")
+    throw new Error(`${mapId} snapshot 缺少背包/装备字段（E2E 接口契约）：${JSON.stringify(restored)}`);
+  if (!saved.player || saved.player.gold < clearedMaps * 80 || saved.player.marks < clearedMaps * 40)
+    throw new Error(`${mapId} 存档中经济资产未落盘：gold=${saved.player?.gold} marks=${saved.player?.marks}`);
   process.stdout.write(
-    `CHECKPOINT ${String(clearedMaps).padStart(3, "0")}/100 ${mapId} Lv.${restored.player.level} ${restored.player.exp}/100 SAVED+RESTORED\n`
+    `CHECKPOINT ${String(clearedMaps).padStart(3, "0")}/100 ${mapId} Lv.${restored.player.level} ${restored.player.exp}/100 gold=${restored.player.gold} marks=${restored.player.marks} deaths=${restored.player.deaths} SAVED+RESTORED\n`
   );
 }
 
@@ -610,12 +623,39 @@ async function assertAssetAutosave(browser) {
   await context.close();
 }
 
+// 损坏存档必须安全回退到职业选择（回到新档），而不是白屏或半恢复。
+async function assertCorruptedSaveFallback(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const consoleWarnings = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning") consoleWarnings.push(message.text());
+  });
+  await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("oneknife999-prototype-save-v3", '{"saveVersion":3,"classId":"warrior","currentMapId":"ash_outki');
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await advance(page, 200);
+  const snap = await snapshot(page);
+  if (snap) throw new Error(`损坏存档不应恢复出游戏状态：${JSON.stringify(snap)}`);
+  const modalVisible = await page.evaluate(() => !document.querySelector("#classModal").classList.contains("hidden"));
+  if (!modalVisible) throw new Error("损坏存档后未回退到职业选择弹窗");
+  if (!consoleWarnings.some((text) => /存档(解析|读取)失败/.test(text)))
+    throw new Error(`损坏存档应留下 console.warn 诊断：${JSON.stringify(consoleWarnings)}`);
+  process.stdout.write("CORRUPT SAVE FALLBACK WARN+MODAL PASS\n");
+  await context.close();
+}
+
 (async () => {
   const browser = await chromium.launch(browserLaunchOptions());
   const results = [];
   try {
     await assertLegacyMigration(browser);
     await assertAssetAutosave(browser);
+    await assertCorruptedSaveFallback(browser);
     for (let offset = 0; offset < TOTAL_RUNS; offset += CONCURRENCY) {
       const batch = Array.from({ length: Math.min(CONCURRENCY, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));
       const batchResults = await Promise.all(batch);

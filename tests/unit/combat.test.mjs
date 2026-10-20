@@ -1,7 +1,7 @@
 // 纯函数单元测试：战斗结算（combat.js）。运行方式：npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeDamage, computeKillReward } from "../../game/src/combat.js";
+import { computeDamage, computeKillReward, computeIncomingDamage } from "../../game/src/combat.js";
 
 // 队列式假随机：按给定顺序返回随机值，用尽后回退为 0，保证结果完全可复现。
 const queueRandom = (values) => {
@@ -138,4 +138,23 @@ test("computeKillReward：首领首次击杀给 35 印记、32 破势与按地�
   assert.equal(again.firstProgressKill, false);
   assert.equal(again.expGain, 0);
   assert.equal(again.marksGain, 35, "重复击杀首领仍给印记（刷新后击杀）");
+});
+
+test("computeIncomingDamage：与 docs/11 基线公式一致（减伤随攻击者等级衰减）", () => {
+  // 基线：减免 = 防御 / (防御 + 100 + 攻击者等级 × 5)
+  const baseline = (attack, attackerLevel, defense) =>
+    Math.max(1, Math.round(attack * (1 - defense / (defense + 100 + attackerLevel * 5))));
+  assert.equal(computeIncomingDamage({ attack: 100, attackerLevel: 40, defense: 22 }), baseline(100, 40, 22));
+  assert.equal(computeIncomingDamage({ attack: 112, attackerLevel: 6, defense: 22 }), baseline(112, 6, 22));
+  assert.equal(computeIncomingDamage({ attack: 152, attackerLevel: 102, defense: 22 }), baseline(152, 102, 22));
+  // 攻击者等级越高，同一目标受到的伤害越大（衰减项生效）。
+  const low = computeIncomingDamage({ attack: 100, attackerLevel: 1, defense: 50 });
+  const high = computeIncomingDamage({ attack: 100, attackerLevel: 50, defense: 50 });
+  assert.ok(high > low, `高等级攻击者应造成更高伤害：${high} > ${low}`);
+});
+
+test("computeIncomingDamage：attackerLevel 缺省为 1、伤害下限为 1、非法等级按 0 处理", () => {
+  assert.equal(computeIncomingDamage({ attack: 10, defense: 0 }), 10, "零防御时全额伤害");
+  assert.equal(computeIncomingDamage({ attack: 1, defense: 9999 }), 1, "伤害下限为 1");
+  assert.equal(computeIncomingDamage({ attack: 30, defense: 10, attackerLevel: -5 }), Math.max(1, Math.round(30 * (1 - 10 / 110))));
 });

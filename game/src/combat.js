@@ -20,6 +20,13 @@ export function computeDamage({ target, hero, player, multiplier, kind, fastForw
   return { damage, critical, chargeGain: target.boss ? 7 : 10 };
 }
 
+// 计算玩家承伤：公式与 docs/11 数值基线一致（输入输出同一公式）。
+// 减免 = 防御 / (防御 + 100 + 攻击者等级 × 5)；attackerLevel 缺省按 1 处理。
+export function computeIncomingDamage({ attack, attackerLevel = 1, defense }) {
+  const reduction = defense / (defense + 100 + Math.max(0, attackerLevel) * 5);
+  return Math.max(1, Math.round(attack * (1 - reduction)));
+}
+
 // 计算击杀收益：经验、首领印记、破势与职业资源回复比例。
 // quest 为当前关卡进度快照（kills/need/bossDefeated），rule 为 MAP_CLEAR_RULES 条目。
 export function computeKillReward({ target, quest, rule }) {

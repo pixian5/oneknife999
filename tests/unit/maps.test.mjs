@@ -83,3 +83,53 @@ test("场景节点按十种场所母题轮转", () => {
   assert.equal(effects.size, SITE_NODE_EFFECTS.length);
   assert.equal(effects.size, 10);
 });
+
+test("数值衔接：第 5 关怪物与装备不低于第 4 关水平（关4→5 无断崖）", () => {
+  const fourth = MAPS.red_sand_desert;
+  const fifth = MAPS.stage_005;
+  const mobAttacks = (map) => map.monsterTypes.map((type) => type.attack);
+  const mobHps = (map) => map.monsterTypes.map((type) => type.hp);
+  const bestPower = (map, slot) => Math.max(0, ...map.drops.filter((drop) => drop.slot === slot).map((drop) => drop.power));
+  // 第 5 关怪攻区间应覆盖第 4 关区间（衔接而非跌落），Boss 攻击不下降。
+  assert.ok(Math.min(...mobAttacks(fifth)) <= Math.max(...mobAttacks(fourth)), "第 5 关最低怪攻应与第 4 关最高值衔接");
+  assert.ok(Math.max(...mobAttacks(fifth)) >= Math.max(...mobAttacks(fourth)) - 2, "第 5 关最高怪攻不应明显低于第 4 关");
+  assert.ok(Math.min(...mobHps(fifth)) >= Math.min(...mobHps(fourth)) - 6, "第 5 关怪血不应低于第 4 关");
+  assert.ok(fifth.boss.attack >= fourth.boss.attack - 2 && fifth.boss.hp >= fourth.boss.hp, "第 5 关 Boss 数值应与第 4 关衔接");
+  // 装备 power 不再倒退：第 5 关掉落不低于第 4 关（容差 4）。
+  for (const slot of ["weapon", "neck", "boots"])
+    assert.ok(
+      bestPower(fifth, slot) >= bestPower(fourth, slot) - 4,
+      `第 5 关 ${slot} power 不应倒退：${bestPower(fifth, slot)} vs ${bestPower(fourth, slot)}`
+    );
+  // 第 100 关峰值与旧曲线设计值一致（怪攻 123 / Boss 血 9480 / 武器 210）。
+  const hundredth = MAPS.stage_100;
+  assert.equal(Math.max(...mobAttacks(hundredth)), 123);
+  assert.equal(hundredth.boss.hp, 9480);
+  assert.equal(bestPower(hundredth, "weapon"), 210);
+});
+
+test("分段计数：encounterBands 声明与实际刷怪营位一致（生成图）", () => {
+  for (const map of ALL_MAPS.slice(4)) {
+    assert.ok(map.encounterBands.length >= 3, `${map.id} 分段缺失`);
+    for (const band of map.encounterBands) {
+      const actual = map.monsterSpawns.filter(
+        ([, , , route, progress]) => route === band.route && progress >= band.from && progress <= band.to
+      ).length;
+      assert.equal(actual, band.count, `${map.id}/${band.id} 声明 ${band.count} 只、实际 ${actual} 只`);
+      assert.ok(band.count >= 1, `${map.id}/${band.id} 分段为空`);
+    }
+  }
+  // 手工图 spawn 无 progress 元组，只校验分段计数总和等于刷怪数。
+  for (const map of ALL_MAPS.slice(0, 4)) {
+    const total = map.encounterBands.reduce((sum, band) => sum + band.count, 0);
+    assert.equal(total, map.monsterSpawns.length, `${map.id} 手工图分段计数与刷怪数不一致`);
+  }
+});
+
+test("生成怪命名不重复拼接章节前缀", () => {
+  for (const map of ALL_MAPS.slice(4)) {
+    const short = CHAPTERS[map.chapter - 1].short;
+    for (const type of map.monsterTypes)
+      assert.ok(!type.name.slice(short.length).startsWith(short), `${map.id} 怪物名前缀重复：${type.name}`);
+  }
+});

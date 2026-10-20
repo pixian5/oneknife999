@@ -64,7 +64,9 @@ export function readSavedGame() {
     const parsed = JSON.parse(raw);
     if (!parsed || !CLASSES[parsed.classId]) return null;
     return migrateSave(parsed);
-  } catch {
+  } catch (error) {
+    // 存档损坏（截断/非法 JSON）按无存档处理，但留下诊断线索而不是静默吞掉。
+    console.warn("[oneknife999] 存档解析失败，按无存档处理：", error);
     return null;
   }
 }

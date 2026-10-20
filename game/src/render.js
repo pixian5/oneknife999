@@ -14,15 +14,35 @@ let dpr = 1;
 
 let toastTimer = null;
 
-let skillSignature = "";
+let skillSkeletonSignature = "";
 let normalAttackSignature = "";
 
+// HUD 计算层签名：每个面板缓存一个轻量签名，签名不变时跳过整段 DOM 构建，
+// 避免每帧为脏检查本身支付字符串/数组分配（写入层 set* 缓存仍作为第二道防线）。
+const panelSignatures = new WeakMap();
+function panelChanged(keyElement, signature) {
+  if (panelSignatures.get(keyElement) === signature) return false;
+  panelSignatures.set(keyElement, signature);
+  return true;
+}
+
+let resizeScheduled = false;
 export function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(rect.width * dpr);
   canvas.height = Math.floor(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// resize 事件风暴（iOS 工具栏收展、窗口拖拽）合并到每帧最多一次画布重建。
+export function scheduleResize() {
+  if (resizeScheduled) return;
+  resizeScheduled = true;
+  requestAnimationFrame(() => {
+    resizeScheduled = false;
+    resizeCanvas();
+  });
 }
 
 export function canvasPoint(event) {
@@ -33,13 +53,11 @@ export function canvasPoint(event) {
 }
 
 export function getViewScale() {
-  const map = activeMap();
   return Math.min(canvas.clientWidth / 940, canvas.clientHeight / 590);
 }
 
-export function getCamera() {
+export function getCamera(scale = getViewScale()) {
   const map = activeMap();
-  const scale = getViewScale();
   const halfW = canvas.clientWidth / scale / 2;
   const halfH = canvas.clientHeight / scale / 2;
   return { x: clamp(state.player.x - halfW, 0, map.width - halfW * 2), y: clamp(state.player.y - halfH, 0, map.height - halfH * 2) };
@@ -156,7 +174,7 @@ function getGroundLayer(map) {
 export function drawWorld() {
   const map = activeMap();
   const scale = getViewScale();
-  const view = getCamera();
+  const view = getCamera(scale);
   const width = canvas.clientWidth / scale;
   const height = canvas.clientHeight / scale;
   ctx.save();
@@ -169,7 +187,9 @@ export function drawWorld() {
   drawExits(map);
   drawHazards();
   state.drops.forEach(drawDrop);
-  state.entities.filter((entity) => entity.alive).forEach(drawEntity);
+  for (const entity of state.entities) {
+    if (entity.alive) drawEntity(entity);
+  }
   drawSkillRangePreview();
   drawPlayer();
   state.particles.forEach(drawParticle);
@@ -531,7 +551,7 @@ export function drawEntity(entity) {
     ctx.stroke();
   }
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
-  ctx.fillStyle = entity.boss ? entity.color : entity.color;
+  ctx.fillStyle = entity.color;
   ctx.beginPath();
   ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2);
   ctx.fill();
@@ -574,7 +594,7 @@ export function drawNameplate(entity) {
   ctx.fillStyle = "#0c1518";
   ctx.fillRect(left + 7, top + 25, width - 14, 4);
   ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2";
-  ctx.fillRect(left + 7, top + 25, (width - 14) * (entity.hp / entity.maxHp), 4);
+  ctx.fillRect(left + 7, top + 25, (width - 14) * clamp(entity.hp / entity.maxHp, 0, 1), 4);
   ctx.textAlign = "start";
 }
 
@@ -750,10 +770,13 @@ function setClassName(element, className) {
 
 export function renderTarget() {
   const target = state?.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
+  if (state && !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}`)) return;
   setText($("targetText"), target ? target.name : "未锁定目标");
   setText($("targetHint"), target ? `${Math.max(0, Math.round(target.hp))} / ${target.maxHp} HP` : "靠近怪物开始战斗");
 }
 export function renderLog() {
+  const last = state.logs[state.logs.length - 1];
+  if (!panelChanged($("eventLog"), `${state.logs.length}|${last?.message}`)) return;
   setHtml(
     $("eventLog"),
     state.logs
@@ -772,6 +795,19 @@ export function renderPlayer() {
     state.player.level * 4 +
     Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) +
     hero.defense * 2;
+  const signature = [
+    state.classId,
+    power,
+    Math.ceil(state.player.resource),
+    state.player.exp,
+    state.player.nextExp,
+    state.player.gold,
+    state.player.marks,
+    state.player.potion,
+    state.quest.kills,
+    state.quest.bossDefeated
+  ].join("|");
+  if (!panelChanged($("powerText"), signature)) return;
   const avatar = $("avatar");
   setText(avatar, hero.glyph);
   setStyle(avatar, "color", hero.color);
@@ -815,6 +851,16 @@ export function renderMapObjective() {
   const rule = MAP_CLEAR_RULES[map.id];
   const progress = mapProgress();
   const view = objectiveView();
+  const signature = [
+    map.id,
+    progress.kills,
+    progress.need,
+    progress.bossDefeated,
+    progress.completed,
+    progress.rewardClaimed,
+    view.step
+  ].join("|");
+  if (!panelChanged($("mapObjective"), signature)) return;
   setClass($("mapObjective"), "complete", view.complete);
   setText($("mapObjectiveState"), view.step);
   setText($("mapObjectiveTitle"), view.title);
@@ -846,19 +892,28 @@ export function renderMapObjective() {
 
 export function renderMapHeader() {
   const map = activeMap();
+  // 区域动态：首领刷新读秒直接取实体 respawn，避免状态副本与实体脱节
+  const bossEntity = state.entities.find((entity) => entity.boss);
+  const progress = mapProgress();
+  const signature = [
+    map.id,
+    bossEntity?.alive,
+    bossEntity && !bossEntity.alive ? Math.ceil(bossEntity.respawn) : bossEntity?.phase || 1,
+    progress.completed,
+    progress.siteClaimed,
+    progress.resourceClaimed
+  ].join("|");
+  if (!panelChanged($("mapDynamics"), signature)) return;
   setText($("mapTitle"), `${map.name} · ${map.subtitle}`);
   setText($("mapLevelRange"), `推荐 Lv.${map.levelMin}-${map.levelMax}`);
   const dangerEl = $("mapDanger");
   setText(dangerEl, map.dangerLabel);
   setClassName(dangerEl, `pill ${map.danger === "safe" ? "safe" : map.danger === "danger" || map.danger === "desolate" ? "danger" : ""}`);
-  // 区域动态：首领刷新读秒直接取实体 respawn，避免状态副本与实体脱节
-  const bossEntity = state.entities.find((entity) => entity.boss);
   const dynamics = [];
   if (bossEntity && !bossEntity.alive)
     dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(bossEntity.respawn)}s 后刷新</span>`);
   else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${bossEntity?.phase || 1}</span>`);
   const rule = MAP_CLEAR_RULES[map.id];
-  const progress = mapProgress();
   if (!rule.next && progress.completed)
     dynamics.push(`<span class="world-event ready"><i class="gold"></i> 100/100 通关 · 百图征途完成</span>`);
   else if (rule.next)
@@ -914,6 +969,13 @@ export function renderRegion() {
   const windowSize = 6;
   const start = clamp(idx - 2, 0, MAP_ORDER.length - windowSize);
   const visibleIds = MAP_ORDER.slice(start, start + windowSize);
+  const signature = `${map.id}|${visibleIds
+    .map((id) => {
+      const progress = mapProgress(id);
+      return [id, state.player.visitedMaps[id] ? 1 : 0, progress.completed, progress.kills, progress.bossDefeated].join(".");
+    })
+    .join("|")}`;
+  if (!panelChanged($("regionList"), signature)) return;
   const html = visibleIds
     .map((id) => {
       const i = MAP_ORDER.indexOf(id);
@@ -928,7 +990,7 @@ export function renderRegion() {
           ? `进行中 ${progress.kills}/${progress.need}`
           : "未开始";
       const dangerCls = m.danger === "safe" ? "safe" : m.danger === "danger" || m.danger === "desolate" ? "danger" : "";
-      return `<button class="region-node ${isCurrent ? "current" : ""} ${isVisited ? "visited" : ""} ${accessible ? "accessible" : ""}" data-map-id="${id}" title="${m.name}：推荐 Lv.${m.levelMin}-${m.levelMax}，${m.dangerLabel}${isVisited ? "" : "（未到访）"}">
+      return `<button class="region-node ${isCurrent ? "current" : ""} ${isVisited ? "visited" : ""} ${accessible ? "accessible" : ""}" data-map-id="${id}"${isCurrent ? ' aria-current="true"' : ""} title="${m.name}：推荐 Lv.${m.levelMin}-${m.levelMax}，${m.dangerLabel}${isVisited ? "" : "（未到访）"}">
       <span class="region-name">${String(i + 1).padStart(3, "0")} · ${m.name}</span>
       <span class="region-level">第 ${m.chapter} 章 · Lv.${m.levelMin}-${m.levelMax}</span>
       <span class="region-danger ${dangerCls}">${m.dangerLabel}</span>
@@ -954,36 +1016,49 @@ export function renderNormalAttack() {
 
 export function renderSkills() {
   const hero = activeHero();
-  const signature = `${state.classId}:${state.player.cooldowns.map((cooldown) => Math.ceil(cooldown)).join(",")}`;
-  if (skillSignature === signature) return;
-  skillSignature = signature;
-  setHtml(
-    $("skillBar"),
-    hero.skills
-      .map((skill, index) => {
-        // 拆出范围文案与冷却角标，避免单行模板字符串超过 400 字符；输出 HTML 与拆分前一致。
-        const rangeText = skill.area ? `范围：以角色为中心 ${skill.areaLabel}` : `施法距离：${Math.round(skill.range / 30)} 格`;
-        const cooldown =
-          state.player.cooldowns[index] > 0 ? `<span class="cooldown">${Math.ceil(state.player.cooldowns[index])}</span>` : "";
-        return (
-          `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}">` +
-          `<span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
-          `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
-          cooldown +
-          `</button>`
-        );
-      })
-      .join("")
-  );
+  // 骨架只在换职业时重建；冷却角标与禁用态逐按钮更新，
+  // 避免冷却期间每秒整段 innerHTML 重建导致键盘焦点丢失（可访问性回归）。
+  if (skillSkeletonSignature !== state.classId) {
+    skillSkeletonSignature = state.classId;
+    setHtml(
+      $("skillBar"),
+      hero.skills
+        .map((skill, index) => {
+          // 拆出范围文案，避免单行模板字符串超过 400 字符；输出 HTML 与拆分前一致。
+          const rangeText = skill.area ? `范围：以角色为中心 ${skill.areaLabel}` : `施法距离：${Math.round(skill.range / 30)} 格`;
+          return (
+            `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}">` +
+            `<span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
+            `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
+            `<span class="cooldown"></span>` +
+            `</button>`
+          );
+        })
+        .join("")
+    );
+  }
   $("skillBar")
-    .querySelectorAll("button")
+    .querySelectorAll("[data-skill]")
     .forEach((button) => {
-      button.disabled = state.player.cooldowns[Number(button.dataset.skill)] > 0;
+      const index = Number(button.dataset.skill);
+      const remaining = state.player.cooldowns[index];
+      const badge = button.querySelector(".cooldown");
+      if (badge) {
+        setText(badge, remaining > 0 ? String(Math.ceil(remaining)) : "");
+        setStyle(badge, "display", remaining > 0 ? "grid" : "none");
+      }
+      setClass(button, "on-cooldown", remaining > 0);
+      const shouldBeDisabled = remaining > 0;
+      if (button.disabled !== shouldBeDisabled) button.disabled = shouldBeDisabled;
     });
 }
 
 export function renderEquipment() {
   const labels = { weapon: "武器", neck: "项链", boots: "靴子" };
+  const signature = Object.values(labels)
+    .map((_, index) => state.player.equipment[Object.keys(labels)[index]]?.id || "-")
+    .join("|");
+  if (!panelChanged($("equipmentGrid"), signature)) return;
   setHtml(
     $("equipmentGrid"),
     Object.keys(labels)
@@ -996,6 +1071,8 @@ export function renderEquipment() {
 }
 export function renderInventory() {
   const inventory = state.inventory || [];
+  const signature = inventory.map((item) => item.id).join(",");
+  if (!panelChanged($("inventoryGrid"), signature)) return;
   setText($("inventoryCount"), `${inventory.length}/12`);
   setHtml(
     $("inventoryGrid"),
@@ -1008,6 +1085,13 @@ export function renderInventory() {
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
   if (!boss) return;
+  if (
+    !panelChanged(
+      $("bossAlertText"),
+      `${boss.alive ? 1 : 0}|${Math.ceil(boss.alive ? (boss.hp / boss.maxHp) * 100 : boss.respawn)}|${boss.phase}`
+    )
+  )
+    return;
   setText(
     $("bossAlertText"),
     boss.alive

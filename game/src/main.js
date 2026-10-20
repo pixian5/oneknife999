@@ -36,7 +36,7 @@ import {
   renderInventory
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, CURRENT_SAVE_VERSION } from "./persist.js";
-import { computeDamage, computeKillReward } from "./combat.js";
+import { computeDamage, computeKillReward, computeIncomingDamage } from "./combat.js";
 import { rollDropItem, rollDropCount, computePickup, computeSiteEffect } from "./drops.js";
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
@@ -461,7 +461,8 @@ export function playerDamage(dt) {
     .filter((entity) => entity.alive && distance(state.player, entity) < entity.radius + 70)
     .sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
   if (!atSanctuary && attacker && Math.random() <= dt * (attacker.boss ? 0.6 : 0.32)) {
-    const amount = Math.max(1, Math.round(attacker.attack * (1 - activeHero().defense / (activeHero().defense + 100))));
+    // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
+    const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: activeHero().defense });
     state.player.hp = Math.max(0, state.player.hp - amount);
     textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13);
     spark(state.player.x, state.player.y, "#f16d66", 4);
@@ -477,7 +478,7 @@ export function playerDamage(dt) {
     if (h.life <= 0) {
       h.snap = true;
       if (!atSanctuary && distance(state.player, h) < h.r) {
-        const amount = Math.max(1, Math.round(h.damage * (1 - activeHero().defense / (activeHero().defense + 100))));
+        const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: activeHero().defense });
         state.player.hp = Math.max(0, state.player.hp - amount);
         textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
@@ -517,6 +518,7 @@ export function die() {
   const mapId = state.currentMapId;
   const town = activeMap().townRect;
   const safeSpawn = { x: town.x + town.w / 2, y: town.y + town.h / 2 };
+  state.player.deaths = (state.player.deaths || 0) + 1;
   state.player.hp = Math.round(playerMaxHp() * 0.55);
   state.player.resource = activeHero().resource * 0.45;
   state.player.invulnerable = 3;
@@ -707,6 +709,7 @@ export function spawnHazard(boss) {
   target.snap = false;
   target.fade = 0.5;
   target.damage = damage;
+  target.attackerLevel = boss.level;
   state.hazards.push(target);
   state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
   if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
@@ -770,7 +773,9 @@ export function loadGame() {
       log(`已将 v${fromVersion} 存档迁移到 v${CURRENT_SAVE_VERSION}：旧存档保留，地图、装备和原等级已继续使用。`, "loot");
     } else log("已恢复本机进度：服务器规则仍以当前版本为准。", "loot");
     return true;
-  } catch {
+  } catch (error) {
+    // 存档损坏时回退到职业选择，但要留下诊断线索而不是静默吞掉。
+    console.warn("[oneknife999] 存档读取失败，已回退到新档：", error);
     return false;
   }
 }
@@ -1000,9 +1005,16 @@ if (TEST_MODE) {
                 exp: state.player.exp,
                 nextExp: state.player.nextExp,
                 potion: state.player.potion,
+                gold: state.player.gold,
+                marks: state.player.marks,
+                deaths: state.player.deaths || 0,
                 targetId: state.player.targetId,
                 previewSkill: state.player.previewSkill
               },
+              inventoryCount: (state.inventory || []).length,
+              equipmentIds: Object.fromEntries(
+                Object.entries(state.player.equipment || {}).map(([slot, item]) => [slot, item?.id || null])
+              ),
               entities: state.entities.map((entity) => ({
                 id: entity.id,
                 x: entity.x,
@@ -1023,7 +1035,8 @@ if (TEST_MODE) {
 setupClasses();
 setupInput();
 resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+// iOS 工具栏收展 / 窗口拖拽会触发 resize 事件风暴，用 rAF 合并到每帧最多一次重建画布。
+window.addEventListener("resize", () => scheduleResize());
 if (!loadGame()) {
   $("classModal").classList.remove("hidden");
 }
