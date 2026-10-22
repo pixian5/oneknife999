@@ -33,8 +33,10 @@ import {
   nearWaterWell,
   nearRestPoint,
   nearTown,
-  isRedName
+  isRedName,
+  fx
 } from "./runtime.js";
+import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
 import {
   canvas,
   canvasPoint,
@@ -179,6 +181,11 @@ export function loadMap(mapId, spawnX, spawnY, silent) {
   state.hazards = [];
   state.hazardsSpawned = 0;
   state.hoveredEntityId = null;
+  // 换图 / 死亡复活时清空瞬时打击反馈，避免连击数与震屏跨场景残留。
+  fx.combo = 0;
+  fx.comboTimer = 0;
+  fx.shake = 0;
+  fx.levelUp = 0;
   state.quest = mapProgress(mapId);
   state.player.visitedMaps[mapId] = true;
   if (!silent) {
@@ -236,12 +243,24 @@ export function selectTarget(entity) {
 // 伤害结算：纯计算交给 combat.js，这里只负责写回实体状态与打击反馈。
 export function resolveDamage(target, multiplier, skillName, kind) {
   const hero = activeHero();
-  const { damage, chargeGain } = computeDamage({ target, hero, player: state.player, multiplier, kind, fastForward: FAST_FORWARD });
+  const { damage, critical, chargeGain } = computeDamage({
+    target,
+    hero,
+    player: state.player,
+    multiplier,
+    kind,
+    fastForward: FAST_FORWARD
+  });
   if (target.npc) target.hostile = true;
   sfx.hit();
   target.hp = Math.max(0, target.hp - damage);
   target.hitFlash = 0.12;
   state.player.charge = clamp(state.player.charge + chargeGain, 0, 100);
+  // 0.3.3 打击感：满破势爆发（含一刀时刻）触发短促震屏，让高倍率结算有重量感。
+  if (critical) {
+    fx.shake = 0.22;
+    fx.shakePower = 5;
+  }
   spark(target.x, target.y, hero.color, kind === "范围" ? 14 : 7);
   textAt(`${damage}`, target.x, target.y - target.radius - 12, kind === "爆发" ? "#e7b36b" : "#eff4ef", kind === "爆发" ? 18 : 13);
   if (skillName) log(`${skillName} 命中 <b>${target.name}</b>，造成 ${damage} 点伤害。`);
@@ -374,6 +393,12 @@ function gainExperience(amount) {
   state.player.hp = playerMaxHp();
   state.player.resource = activeHero().resource;
   sfx.levelup();
+  // 0.3.3 升级反馈：金色粒子爆发 + 短暂震屏 + 世界内升级光环（render.js 读取 fx.levelUp）。
+  fx.levelUp = 1.1;
+  fx.shake = 0.2;
+  fx.shakePower = 4;
+  spark(state.player.x, state.player.y, "#e7b36b", 26);
+  textAt("LEVEL UP", state.player.x, state.player.y - 58, "#e7b36b", 20);
   log(
     `<b>等级提升</b>：击杀经验达到 Lv.${state.player.level}，技能点 +${SKILL_UPGRADE.pointsPerLevel * result.levelsGained}（按 ${keyLabel("skillUpgrade")} 打开技能）。本关最高可到 Lv.${currentLevelCap()}。`,
     "loot"
@@ -410,7 +435,19 @@ export function defeat(target) {
   if (!target.boss) state.quest.kills = Math.min(state.quest.need, state.quest.kills + 1);
   state.player.resource = clamp(state.player.resource + hero.resource * reward.resourceGainRatio, 0, hero.resource);
   state.player.charge = clamp(state.player.charge + reward.chargeGain, 0, 100);
+  // 0.3.3 连击：3 秒内连续击杀累计连击，每 5 连击额外金币；只加金币不改经验曲线。
+  const combo = registerComboKill({ count: fx.combo, timer: fx.comboTimer });
+  fx.combo = combo.count;
+  fx.comboTimer = combo.timer;
+  if (combo.count >= 2) textAt(`${combo.count} 连击`, state.player.x, state.player.y - 64, "#e7b36b", 13 + Math.min(7, combo.count));
+  if (combo.milestone) {
+    state.player.gold += combo.bonusGold;
+    log(`<b>${combo.count} 连击</b>：额外获得 ${combo.bonusGold} 金币（每 ${COMBO_RULES.bonusEvery} 连击奖励一次）。`, "loot");
+  }
   if (target.boss) {
+    // 首领倒下给一次更强的震屏，强调里程碑。
+    fx.shake = 0.32;
+    fx.shakePower = 7;
     state.player.marks += reward.marksGain;
     log(`<b>首领击破</b>：${target.name} 倒下，个人获得 ${reward.marksGain} 首领印记。`, "loot");
     showToast("首领结算完成：贡献快照已锁定");
@@ -617,6 +654,8 @@ export function playerDamage(dt) {
     // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
     const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: activeHero().defense });
     state.player.hp = Math.max(0, state.player.hp - amount);
+    // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧（仅视觉，不改变结算）。
+    attacker.attackFlash = 0.18;
     textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13);
     spark(state.player.x, state.player.y, "#f16d66", 4);
     if (activeMap().boss.poisonStacks && attacker.boss) {
@@ -784,6 +823,7 @@ export function updateEntities(dt) {
   const map = activeMap();
   state.entities.forEach((entity) => {
     entity.hitFlash = Math.max(0, entity.hitFlash - dt);
+    entity.attackFlash = Math.max(0, (entity.attackFlash || 0) - dt);
     if (!entity.alive) {
       entity.respawn -= dt;
       if (entity.respawn <= 0) {
@@ -939,6 +979,12 @@ export function update(dt) {
   state.player.cooldowns = state.player.cooldowns.map((cd) => Math.max(0, cd - dt));
   if (state.player.resource < hero.resource)
     state.player.resource = clamp(state.player.resource + hero.resource * 0.008 * dt, 0, hero.resource);
+  // 打击感瞬时状态衰减：连击计时、震屏、升级闪光（只影响绘制，不影响战斗数值）。
+  const combo = advanceCombo({ count: fx.combo, timer: fx.comboTimer }, dt);
+  fx.combo = combo.count;
+  fx.comboTimer = combo.timer;
+  fx.shake = Math.max(0, fx.shake - dt);
+  fx.levelUp = Math.max(0, fx.levelUp - dt);
   movePlayer(dt);
   updateEntities(dt);
   playerDamage(dt);

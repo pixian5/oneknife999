@@ -7,9 +7,22 @@ import { clamp, distance } from "./util.js";
 
 export let state = null;
 
+// 打击感瞬时状态（0.3.3）：连击、屏幕震动、升级闪光。仅存在于内存，不写入存档。
+export const fx = { combo: 0, comboTimer: 0, shake: 0, shakePower: 0, levelUp: 0 };
+
+export function resetFx() {
+  fx.combo = 0;
+  fx.comboTimer = 0;
+  fx.shake = 0;
+  fx.shakePower = 0;
+  fx.levelUp = 0;
+}
+
 // 只允许通过 setState 替换整个状态对象；state 内部字段仍可原位修改。
 export function setState(next) {
   state = next;
+  // 新档 / 读档 / 重置时清空瞬时反馈，避免上一局的连击与震屏残留。
+  resetFx();
 }
 
 export const keys = {};

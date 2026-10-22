@@ -1,4 +1,4 @@
-import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress, keybindCapture } from "./runtime.js";
+import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress, keybindCapture, activeHero } from "./runtime.js";
 import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybindPanel } from "./render.js";
 import { $, distance } from "./util.js";
 import { isMuted, toggleMute, unlockAudio } from "./audio.js";
@@ -180,6 +180,27 @@ export function setupInput() {
     if (state) state.player.previewSkill = null;
   });
   $("normalAttackBtn").addEventListener("click", normalAttack);
+  // 0.3.3 移动端长按普攻：按住按钮持续攻击，只在目标进入普攻距离时触发，
+  // 避免距离外每 100ms 重复弹「正在接近」提示。抬手 / 取消立即停止。
+  let attackHold = null;
+  const stopAttackHold = () => {
+    if (attackHold) clearInterval(attackHold);
+    attackHold = null;
+    $("normalAttackBtn").classList.remove("holding");
+  };
+  $("normalAttackBtn").addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    if (attackHold) return;
+    normalAttack();
+    attackHold = setInterval(() => {
+      if (!state) return;
+      const target = state.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
+      if (target && distance(state.player, target) <= activeHero().range) normalAttack();
+    }, 100);
+    $("normalAttackBtn").classList.add("holding");
+  });
+  window.addEventListener("pointerup", stopAttackHold);
+  window.addEventListener("pointercancel", stopAttackHold);
   $("potionBtn").addEventListener("click", usePotion);
   $("saveBtn").addEventListener("click", saveGame);
   $("resetBtn").addEventListener("click", resetGame);

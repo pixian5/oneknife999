@@ -21,8 +21,10 @@ import {
   isForwardExit,
   questStatus,
   chapterStats,
-  keybindCapture
+  keybindCapture,
+  fx
 } from "./runtime.js";
+import { COMBO_RULES, resolveGuideTarget } from "./feedback.js";
 
 // 《一刀999》渲染层：Canvas 世界绘制、右侧 HUD 的 DOM 渲染与屏幕反馈。
 
@@ -203,6 +205,11 @@ export function drawWorld() {
   const height = canvas.clientHeight / scale;
   ctx.save();
   ctx.scale(scale, scale);
+  // 0.3.3 震屏：只偏移绘制，不影响点击命中与相机几何（render 层临时视觉）。
+  if (fx.shake > 0) {
+    const power = Math.max(0, fx.shakePower) * Math.min(1, fx.shake / 0.22);
+    ctx.translate(rand(-power, power), rand(-power, power));
+  }
   ctx.translate(-view.x, -view.y);
   ctx.fillStyle = "#1a2c23";
   ctx.fillRect(view.x, view.y, width, height);
@@ -216,6 +223,9 @@ export function drawWorld() {
   }
   drawSkillRangePreview();
   drawPlayer();
+  // 0.3.3：目标指引箭头 + 升级光环在世界坐标系内绘制，跟随相机但不受 HUD 布局影响。
+  drawGuideArrow();
+  drawLevelUpFx();
   state.particles.forEach(drawParticle);
   state.texts.forEach(drawText);
   drawMonsterTooltip(view, width, height);
@@ -228,6 +238,86 @@ export function drawWorld() {
     ctx.setLineDash([]);
   }
   ctx.restore();
+  // 连击 HUD 使用屏幕坐标绘制，不随相机移动（世界坐标恢复后再画）。
+  drawComboHud();
+}
+
+// 目标指引箭头：按关卡阶段指向「最近的普通怪 → 首领 → 前进出口」，箭头绕玩家 54px，
+// 下方显示目标名与格数（30px = 1 格），解决百图大地图里找不到目标的问题。
+export function drawGuideArrow() {
+  const map = activeMap();
+  const progress = mapProgress();
+  const forwardExit = map.exits.find((exit) => isForwardExit(exit, map.id));
+  const guide = resolveGuideTarget({
+    player: state.player,
+    entities: state.entities,
+    progress,
+    boss: { x: map.boss.x, y: map.boss.y, name: map.boss.name },
+    forwardExit
+  });
+  if (!guide?.target) return;
+  const target = guide.target;
+  const dx = target.x - state.player.x;
+  const dy = target.y - state.player.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 80) return;
+  const angle = Math.atan2(dy, dx);
+  const radius = 54;
+  const x = state.player.x + Math.cos(angle) * radius;
+  const y = state.player.y + Math.sin(angle) * radius;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = guide.color;
+  ctx.globalAlpha = 0.88;
+  ctx.beginPath();
+  ctx.moveTo(9, 0);
+  ctx.lineTo(-5, -6);
+  ctx.lineTo(-2, 0);
+  ctx.lineTo(-5, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = guide.color;
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`${guide.label} · ${Math.round(dist / 30)} 格`, state.player.x, state.player.y + 82);
+  ctx.restore();
+  ctx.textAlign = "start";
+}
+
+// 升级光环：fx.levelUp 在 1.1 秒内衰减，画一圈向外扩散的金色圆环。
+export function drawLevelUpFx() {
+  if (fx.levelUp <= 0) return;
+  const ratio = clamp(fx.levelUp / 1.1, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = ratio * 0.9;
+  ctx.strokeStyle = "#e7b36b";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(state.player.x, state.player.y, 26 + (1 - ratio) * 70, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 连击 HUD：屏幕顶部居中显示当前连击，临近结束（<0.8s）逐帧淡出。
+export function drawComboHud() {
+  if (fx.combo < 2) return;
+  const width = canvas.clientWidth;
+  const alpha = clamp(fx.comboTimer / 0.8, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#e7b36b";
+  ctx.font = `700 ${18 + Math.min(18, fx.combo)}px Georgia, sans-serif`;
+  ctx.fillText(`${fx.combo} 连击`, width / 2, 38);
+  ctx.fillStyle = "rgba(238, 243, 244, .72)";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`每 ${COMBO_RULES.bonusEvery} 连击额外金币 · ${fx.comboTimer.toFixed(1)}s`, width / 2, 55);
+  ctx.restore();
+  ctx.textAlign = "start";
 }
 
 export function drawRouteGuides(target, map) {
@@ -628,6 +718,15 @@ export function drawEntity(entity) {
       ctx.arc(entity.x, entity.y, entity.radius * scale + 14, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+  // 0.3.3 怪物命中玩家的瞬间：朝玩家方向闪一道红色挥击弧（纯视觉反馈，不改变伤害结算）。
+  if (entity.attackFlash > 0) {
+    const angle = Math.atan2(state.player.y - entity.y, state.player.x - entity.x);
+    ctx.strokeStyle = "rgba(241, 109, 102, .85)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.radius * scale + 7, angle - 0.45, angle + 0.45);
+    ctx.stroke();
   }
   ctx.restore();
   drawNameplate(entity);
@@ -1134,6 +1233,9 @@ export function renderSkills() {
         setStyle(badge, "display", remaining > 0 ? "grid" : "none");
       }
       setClass(button, "on-cooldown", remaining > 0);
+      // 0.3.3：资源不足时按钮变暗，玩家不必点一下才知道放不出来。
+      const skill = activeHero().skills[index];
+      setClass(button, "no-resource", remaining <= 0 && state.player.resource < skill.cost);
       const shouldBeDisabled = remaining > 0;
       if (button.disabled !== shouldBeDisabled) button.disabled = shouldBeDisabled;
     });
