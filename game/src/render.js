@@ -830,10 +830,12 @@ export function renderLog() {
 export function renderPlayer() {
   const hero = activeHero();
   const maxResource = hero.resource;
+  // 战力汇总：装备按「有效战力」计入（含强化 +15 与攻击词缀收益，docs/03），
+  // 使 HUD 数值能反映强化与词缀的实际提升，而非只显示基础 power。
   const power =
     hero.attack +
     state.player.level * 4 +
-    Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.power || 0), 0) +
+    Object.values(state.player.equipment).reduce((sum, item) => sum + (item ? effectiveItemPower(item) : 0), 0) +
     hero.defense * 2;
   const signature = [
     state.classId,
@@ -1122,8 +1124,10 @@ export function renderEquipment() {
       if (!item)
         return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位"><span class="slot-glyph">+</span><span class="slot-name">${label}</span></button>`;
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
-      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n点击强化（+8 起需材料，失败不降级）`;
-      return `<button class="equipment-slot filled" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
+      const powerValue = effectiveItemPower(item);
+      const maxed = (item.enhance || 0) >= 15;
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n有效战力 ${powerValue}；点击强化（+8 起需材料，失败不降级）`;
+      return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
     }).join("")
   );
 }
@@ -1136,7 +1140,11 @@ export function renderInventory() {
     $("inventoryGrid"),
     Array.from({ length: 12 }, (_, index) => {
       const item = inventory[index];
-      return `<button class="inventory-slot ${item ? "" : "empty"}" data-item-index="${index}" title="${item ? `${item.name}：${item.desc}` : "空背包格"}">${item ? `<span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}` : ""}</button>`;
+      if (!item) return `<button class="inventory-slot empty" data-item-index="${index}"></button>`;
+      const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
+      const powerValue = effectiveItemPower(item);
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}`;
+      return `<button class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span></button>`;
     }).join("")
   );
 }
