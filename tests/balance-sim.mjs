@@ -194,12 +194,18 @@ function handleDrops(player, source, map, stats) {
   }
 }
 
-// 穿戴策略：新装备有效战力高于当前槽位时换装（武器/其他部位都按有效战力比较）。
+// 穿戴策略：武器槽按「强化收益折算」比较——新武器按 +10 强化（1.8 倍）预估有效战力，
+// 超过旧武器当前有效战力才换（真实玩家会等新武器值得练才换，避免过渡期战力低谷
+// 与强化重置的重复开销）；其他部位按有效战力比较（词缀收益要保留）。
 function tryEquip(player, slotKey, stats) {
   const candidate = player.inventory.find((entry) => entry.slot === slotKey);
   if (!candidate) return;
   const current = player.equipment[slotKey];
-  if (!current || effectiveItemPower(candidate) > effectiveItemPower(current)) {
+  const better =
+    slotKey === "weapon"
+      ? (candidate.power || 0) * 1.8 > effectiveItemPower(current || { power: 0 })
+      : effectiveItemPower(candidate) > effectiveItemPower(current);
+  if (!current || better) {
     player.equipment[slotKey] = candidate;
     player.inventory = player.inventory.filter((entry) => entry.id !== candidate.id);
     if (current) player.inventory.push(current);
@@ -297,9 +303,25 @@ function simulateMap(player, map, rule, stats, logLine) {
   const DT = 1 / 30; // 30 帧步进，约 33ms
   const MAX_TIME = 600; // 单关上限 10 分钟，防死循环
 
-  // 最近存活普通怪
-  const nearestMob = () =>
-    entities.filter((entity) => entity.alive && !entity.boss).sort((a, b) => distance(player, a) - distance(player, b))[0] || null;
+  // 目标选择（聚怪策略）：仅对范围技能收益大的远程职业（法师/道士，range>100）启用，
+  // 优先选「被其他怪包围」的怪，让范围技能一次命中多只；
+  // 但聚怪只在目标距离 ≤320px 时生效（一次走位可到达，避免为远处小怪堆长途奔袭，
+  // 走位成本超过范围技能收益）；战士近战（range 70）聚怪收益小、深入怪群风险大，
+  // 仍按最近怪单杀。
+  const wantsAoE = hero.range > 100; // 法师 220 / 道士 185 / 战士 70
+  const nearestMob = () => {
+    const mobs = entities.filter((entity) => entity.alive && !entity.boss);
+    if (!mobs.length) return null;
+    const byDist = mobs.sort((a, b) => distance(player, a) - distance(player, b));
+    if (!wantsAoE) return byDist[0];
+    const best = mobs
+      .map((mob) => {
+        const around = mobs.filter((other) => other !== mob && distance(mob, other) < 240).length;
+        return { mob, around, dist: distance(player, mob) };
+      })
+      .sort((a, b) => b.around - a.around || a.dist - b.dist)[0];
+    return best.around > 0 && best.dist <= 320 ? best.mob : byDist[0];
+  };
 
   // ---------- 阶段一：清怪（need 只） ----------
   let clearTime = 0;
@@ -385,12 +407,13 @@ function simulateMap(player, map, rule, stats, logLine) {
           ? 1
           : 2;
     if (newPhase !== boss.phase) boss.phase = newPhase;
-    // 危险区：阶段 2 起按间隔生成；玩家走位躲避（近战 50% / 远程 75% 躲避率）。
+    // 危险区：阶段 2 起按间隔生成；玩家走位躲避（近战 40% / 远程 80% 躲避率，
+    // 近战被红圈覆盖率高、需走位回来，远程离得远更易躲，贴近真实走位成本）。
     if (boss.phase >= 2) {
       hazardTimer -= DT;
       if (hazardTimer <= 0) {
         hazardTimer = Math.max(2, bossBase.specialInterval - boss.phase * 0.8);
-        const dodge = hero.range > 100 ? 0.75 : 0.5;
+        const dodge = hero.range > 100 ? 0.8 : 0.4;
         if (RNG() > dodge) {
           const amount = computeIncomingDamage({
             attack: Math.round(boss.attack * 1.4),
