@@ -79,6 +79,10 @@ export const sfx = {
   enhanceFail() {
     tone({ frequency: 240, endFrequency: 110, duration: 0.22, type: "square", gain: 0.08 });
   },
+  salvage() {
+    tone({ frequency: 420, endFrequency: 210, duration: 0.18, type: "triangle", gain: 0.07 });
+    tone({ frequency: 210, endFrequency: 100, duration: 0.22, type: "sine", gain: 0.06, delay: 0.1 });
+  },
   skillUp() {
     tone({ frequency: 520, endFrequency: 780, duration: 0.14, type: "sine", gain: 0.08 });
   },

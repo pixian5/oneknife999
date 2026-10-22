@@ -13,6 +13,7 @@ import {
   castSkill,
   selectTarget,
   equipItem,
+  salvageItem,
   enhanceItem,
   upgradeSkill,
   saveGame,
@@ -184,6 +185,12 @@ export function setupInput() {
   setupJoystick();
   // 背包点击使用事件委托，只在启动时绑定一次，避免渲染层每帧重建监听器
   $("inventoryGrid").addEventListener("click", (event) => {
+    // 拆解按钮优先：点击「拆」拆解该装备（返还基础材料与金币），不触发穿戴。
+    const salvageBtn = event.target.closest("[data-salvage-id]");
+    if (salvageBtn) {
+      salvageItem(salvageBtn.dataset.salvageId);
+      return;
+    }
     const button = event.target.closest("[data-item-index]");
     if (!button) return;
     equipItem((state.inventory || [])[Number(button.dataset.itemIndex)]);

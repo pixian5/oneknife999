@@ -9,7 +9,8 @@ import {
   effectiveItemPower,
   ENHANCE_RULES,
   SKILL_UPGRADE,
-  PK_RULES
+  PK_RULES,
+  QUEST_REWARD
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth, mapLayoutSignature, pathTurnCount } from "./maps.js";
 import { pathLength } from "./geometry.js";
@@ -53,7 +54,15 @@ import {
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, CURRENT_SAVE_VERSION } from "./persist.js";
 import { computeDamage, computeKillReward, computeIncomingDamage } from "./combat.js";
-import { rollDropItem, rollDropCount, computePickup, computeSiteEffect } from "./drops.js";
+import {
+  rollDropItem,
+  rollDropCount,
+  computePickup,
+  computeSiteEffect,
+  stackMaterial,
+  salvageReward,
+  normalizeInventory
+} from "./drops.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 
@@ -401,14 +410,17 @@ export function checkMapCompletion() {
   progress.completionAnnounced = true;
   if (!progress.rewardClaimed) {
     progress.rewardClaimed = true;
-    state.player.gold += 60;
-    state.player.marks += 8;
+    state.player.gold += QUEST_REWARD.gold;
+    state.player.marks += QUEST_REWARD.marks;
   }
   syncCampaignGrowth();
   log(`<b>剧情揭示</b>：${map.story.reveal}`, "loot");
   if (rule.next) {
     const nextMap = MAPS[rule.next];
-    log(`<b>${map.name}通关</b>：60 金币、8 首领印记已发放。前往${rule.exit}进入<b>${nextMap.name}</b>。`, "loot");
+    log(
+      `<b>${map.name}通关</b>：${QUEST_REWARD.gold} 金币、${QUEST_REWARD.marks} 首领印记已发放。前往${rule.exit}进入<b>${nextMap.name}</b>。`,
+      "loot"
+    );
     showToast(`${map.name}已通关：前往${rule.exit}进入${nextMap.name}`);
   } else {
     log("<b>百图征途完成</b>：100 张地图与 100 名区域首领全部通关。", "loot");
@@ -489,8 +501,15 @@ export function collectDrops() {
     sfx.pickup();
     const pickup = computePickup(drop, { player: state.player, hero: activeHero() });
     if (pickup.toInventory) {
-      state.inventory.push(drop);
-      log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，点击背包查看属性。`, "loot");
+      if (drop.slot === "material") {
+        // 材料堆叠：同名材料合并 count，基础材料不占满 12 格背包。
+        state.inventory = stackMaterial(state.inventory, drop);
+        const merged = state.inventory.find((entry) => entry.name === drop.name && entry.slot === "material");
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b> ×${merged?.count || 1}（材料已堆叠）。`, "loot");
+      } else {
+        state.inventory.push(drop);
+        log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，点击背包查看属性。`, "loot");
+      }
       return;
     }
     Object.assign(state.player, pickup.patch);
@@ -922,7 +941,8 @@ export function loadGame() {
     state.player.skillLevels = saved.player.skillLevels || [0, 0, 0, 0];
     state.player.sin = saved.player.sin || 0;
     state.player.deaths = saved.player.deaths || 0;
-    state.inventory = saved.inventory || [];
+    // 恢复时规范化背包：合并旧档 / 迁移存档中重复的同名材料（0.3.0 材料堆叠）。
+    state.inventory = normalizeInventory(saved.inventory);
     state.mapProgress = saved.mapProgress || {};
     if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
     syncCampaignGrowth(true);
@@ -993,8 +1013,12 @@ export function enhanceItem(slotKey) {
   }
   state.player.gold -= quote.cost;
   if (quote.materialNeeded) {
+    // 消耗 1 件材料：堆叠材料 count-1，count 归零时移除（0.3.0 材料堆叠后）。
     const materialIndex = (state.inventory || []).findIndex((entry) => entry.slot === "material");
-    state.inventory.splice(materialIndex, 1);
+    const material = state.inventory[materialIndex];
+    const count = material?.count || 1;
+    if (count > 1) material.count = count - 1;
+    else state.inventory.splice(materialIndex, 1);
   }
   const success = quote.rate >= 1 || Math.random() < quote.rate;
   if (success) {
@@ -1014,6 +1038,29 @@ export function enhanceItem(slotKey) {
     );
     showToast(`强化失败，保持 +${item.enhance || 0}`);
   }
+  persistGame();
+  renderPlayer();
+  renderInventory();
+}
+
+// 拆解背包装备（docs/03：返还 50% 基础强化材料与 10% 价值金币）。
+// 材料/消耗品/货币不可拆解；返还的基础材料与掉落共用堆叠（同名合并 count）。
+export function salvageItem(itemId) {
+  const item = (state.inventory || []).find((entry) => entry.id === itemId);
+  if (!item || item.slot === "material" || item.slot === "consumable" || item.slot === "currency") {
+    showToast("该物品不能拆解");
+    return;
+  }
+  const { rewards } = salvageReward(item);
+  state.inventory = state.inventory.filter((entry) => entry.id !== itemId);
+  for (const reward of rewards) {
+    if (reward.kind === "gold") state.player.gold += reward.amount;
+    else state.inventory = stackMaterial(state.inventory, reward);
+  }
+  const gold = rewards.find((reward) => reward.kind === "gold")?.amount || 0;
+  sfx.salvage();
+  log(`拆解 <b style="color:${item.color}">${item.name}</b>：返还 1 黑铁矿石与 ${gold} 金币。`, "loot");
+  showToast(`${item.name} 已拆解，获得基础材料与 ${gold} 金币`);
   persistGame();
   renderPlayer();
   renderInventory();

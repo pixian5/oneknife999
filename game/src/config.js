@@ -412,6 +412,23 @@ export const ENHANCE_RULES = {
   powerStep: 0.08 // 每级强化按基础 power 的 8% 提升有效战力
 };
 
+// 关卡通关奖励（docs/03 确定性目标：首领印记与基础材料）。
+// checkMapCompletion 发放，任务链任务卡同步展示，避免奖励文案与发放漂移。
+export const QUEST_REWARD = { gold: 60, marks: 8 };
+
+// 拆解返还的基础强化材料模板（docs/03：拆解返还 50% 基础强化材料）。
+// 与生成地图的「黑铁矿石」同名同品质，掉落与拆解共用堆叠。
+export const BASIC_MATERIAL = {
+  name: "黑铁矿石",
+  slot: "material",
+  quality: "blue",
+  glyph: "矿",
+  power: 0,
+  value: 30,
+  color: "#78b6ec",
+  desc: "基础强化材料，+8 起强化消耗 1 件；可堆叠"
+};
+
 // 强化结算纯函数：返回 { canEnhance, reason, cost, materialNeeded, rate }。
 export function enhanceQuote(item, playerGold, inventory) {
   const level = item?.enhance || 0;

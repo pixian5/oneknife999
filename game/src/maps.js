@@ -1206,6 +1206,17 @@ export function generatedMap(stageNumber) {
         desc: `第 ${stageNumber} 关战靴 · 防御与移速成长`
       },
       {
+        // 基础强化材料（docs/03：普通怪 -> 基础材料）：与拆解返还的黑铁矿石同名，堆叠共用。
+        name: "黑铁矿石",
+        slot: "material",
+        quality: "blue",
+        glyph: "矿",
+        power: 0,
+        value: anchored(30, 1),
+        color: "#78b6ec",
+        desc: `基础强化材料，+8 起强化消耗 1 件；可堆叠`
+      },
+      {
         name: `${chapter.short}首领魂核·${stageNumber}`,
         slot: "material",
         quality: "orange",

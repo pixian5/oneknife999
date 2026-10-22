@@ -1,4 +1,12 @@
-import { monsterProfile, EQUIPMENT_SLOTS, EQUIPMENT_SLOT_KEYS, effectiveItemPower, SKILL_UPGRADE, PK_RULES } from "./config.js";
+import {
+  monsterProfile,
+  EQUIPMENT_SLOTS,
+  EQUIPMENT_SLOT_KEYS,
+  effectiveItemPower,
+  SKILL_UPGRADE,
+  PK_RULES,
+  QUEST_REWARD
+} from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber } from "./util.js";
@@ -942,7 +950,7 @@ export function renderMapObjective() {
       : `${map.story.objective}；击败玄烬帝尊，结束第千次轮回。`
   );
   setText($("questTag"), progress.completed ? (rule.next ? "出口已开启" : "已通关") : "进行中");
-  setText($("questReward"), progress.rewardClaimed ? "通关奖励已领取" : "通关奖励：60 金币 · 8 印记");
+  setText($("questReward"), progress.rewardClaimed ? "通关奖励已领取" : `通关奖励：${QUEST_REWARD.gold} 金币 · ${QUEST_REWARD.marks} 印记`);
 }
 
 export function renderMapHeader() {
@@ -1133,18 +1141,24 @@ export function renderEquipment() {
 }
 export function renderInventory() {
   const inventory = state.inventory || [];
-  const signature = inventory.map((item) => item.id).join(",");
+  // 签名含 id 与 count：材料堆叠数量变化（count）也触发背包重渲染。
+  const signature = inventory.map((item) => `${item.id}:${item.count || 1}`).join(",");
   if (!panelChanged($("inventoryGrid"), signature)) return;
   setText($("inventoryCount"), `${inventory.length}/12`);
   setHtml(
     $("inventoryGrid"),
     Array.from({ length: 12 }, (_, index) => {
       const item = inventory[index];
-      if (!item) return `<button class="inventory-slot empty" data-item-index="${index}"></button>`;
+      if (!item) return `<div class="inventory-slot empty" data-item-index="${index}"></div>`;
+      if (item.slot === "material") {
+        // 材料格：只显示数量（×N）与品质点，不显示战力（材料 power 0 无意义）。
+        const count = item.count || 1;
+        return `<div class="inventory-slot" data-item-index="${index}" title="${item.name}：${item.desc}；持有 ×${count}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span><span class="slot-power">×${count}</span></div>`;
+      }
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}`;
-      return `<button class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span></button>`;
+      return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
     }).join("")
   );
 }
@@ -1217,7 +1231,9 @@ export function renderQuestChain() {
   setText($("questChainTip"), `${stats.done}/${stats.total} 完成`);
   const bossMark = progress.bossDefeated ? "首领已破" : progress.kills >= progress.need ? "前往首领" : "首领未破";
   const expText = `经验 ${state.player.exp}/100（等级由通关数决定）`;
-  const rewardText = progress.rewardClaimed ? `通关奖励已领：60 金币 + 8 首领印记` : `通关奖励：60 金币 + 8 首领印记`;
+  const rewardText = progress.rewardClaimed
+    ? `通关奖励已领：${QUEST_REWARD.gold} 金币 + ${QUEST_REWARD.marks} 首领印记`
+    : `通关奖励：${QUEST_REWARD.gold} 金币 + ${QUEST_REWARD.marks} 首领印记`;
   const nextChapter = stats.complete ? (map.chapter < 10 ? `第 ${map.chapter + 1} 章已解锁` : "十章已全部完成") : "";
   const nodes = stats.ids
     .map((id, index) => {

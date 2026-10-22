@@ -2,7 +2,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { COMMON_DROPS } from "../../game/src/config.js";
-import { BOSS_MARK_SHARD, rollDropItem, rollDropCount, computePickup, computeSiteEffect } from "../../game/src/drops.js";
+import {
+  BOSS_MARK_SHARD,
+  rollDropItem,
+  rollDropCount,
+  computePickup,
+  computeSiteEffect,
+  stackMaterial,
+  salvageReward,
+  normalizeInventory
+} from "../../game/src/drops.js";
 
 // 队列式假随机：按给定顺序返回随机值，用尽后回退为 0，保证掉落结果完全可复现。
 const queueRandom = (values) => {
@@ -197,4 +206,55 @@ test("computeSiteEffect：未知效果回退到固定文案且不产生变更", 
   assert.deepEqual(fallback.patch, {});
   assert.equal(fallback.clearHazards, false);
   assert.equal(fallback.retarget, false);
+});
+
+test("stackMaterial：同名材料合并 count，首件写入 count=1", () => {
+  const ore = { name: "黑铁矿石", slot: "material", id: "m1" };
+  const merged = stackMaterial([], ore);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].count, 1);
+
+  const again = stackMaterial(merged, { name: "黑铁矿石", slot: "material", id: "m2" });
+  assert.equal(again.length, 1);
+  assert.equal(again[0].count, 2);
+  assert.equal(again[0].id, "m1"); // 保留首件 id（强化消耗按 id 定位仍有效）
+});
+
+test("stackMaterial：不同名材料不合并，装备不受影响直接追加", () => {
+  const list = stackMaterial([], { name: "首领魂核", slot: "material", id: "c1" });
+  const result = stackMaterial(list, { name: "锁子甲", slot: "armor", id: "a1" });
+  assert.equal(result.length, 2);
+  assert.equal(result[1].slot, "armor");
+  assert.equal(result[1].count, undefined); // 装备不写 count 字段
+});
+
+test("salvageReward：装备拆解返还 1 基础材料与 10% 价值金币", () => {
+  const { rewards } = salvageReward({ name: "雾松短剑", slot: "weapon", value: 120, id: "w1" });
+  assert.equal(rewards.length, 2);
+  const material = rewards.find((reward) => reward.slot === "material");
+  assert.ok(material);
+  assert.equal(material.name, "黑铁矿石"); // 与掉落基础材料同名，堆叠共用
+  assert.equal(rewards.find((reward) => reward.kind === "gold").amount, 12);
+});
+
+test("salvageReward：材料 / 消耗品 / 货币不可拆解（返回空返还）", () => {
+  assert.deepEqual(salvageReward({ slot: "material", id: "m1" }).rewards, []);
+  assert.deepEqual(salvageReward({ slot: "consumable", kind: "health_potion" }).rewards, []);
+  assert.deepEqual(salvageReward({ slot: "currency", kind: "gold" }).rewards, []);
+  assert.deepEqual(salvageReward(null).rewards, []);
+});
+
+test("normalizeInventory：恢复存档时合并重复同名材料，无 count 的旧条目视为 1 件", () => {
+  const list = normalizeInventory([
+    { name: "黑铁矿石", slot: "material", id: "m1" },
+    { name: "黑铁矿石", slot: "material", id: "m2", count: 3 },
+    { name: "锁子甲", slot: "armor", id: "a1" },
+    { name: "首领魂核", slot: "material", id: "c1" }
+  ]);
+  assert.equal(list.length, 3);
+  const ore = list.find((entry) => entry.name === "黑铁矿石");
+  assert.equal(ore.count, 4); // 1（无 count 旧条目）+ 3
+  assert.equal(ore.id, "m1"); // 保留首件 id
+  const armor = list.find((entry) => entry.slot === "armor");
+  assert.equal(armor.count, undefined); // 装备不写 count
 });

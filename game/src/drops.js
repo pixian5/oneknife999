@@ -1,5 +1,5 @@
 import { clamp, distance, weightedPick } from "./util.js";
-import { AFFIX_POOL } from "./config.js";
+import { AFFIX_POOL, BASIC_MATERIAL } from "./config.js";
 
 // 《一刀999》掉落与场景节点收益纯逻辑：掉落掷点、拾取结算与战术节点效果。
 // 不依赖 DOM 与游戏全局状态，随机数 / 时间由参数注入，便于单元测试与未来服务端共享。
@@ -69,6 +69,49 @@ export function computePickup(drop, { player, hero }) {
   if (drop.kind === "gold") return { patch: { gold: player.gold + drop.amount }, log: { type: "gold", amount: drop.amount } };
   if (drop.kind === "marks") return { patch: { marks: player.marks + 3 }, log: { type: "marks", amount: 3 } };
   return { toInventory: true, log: { type: "equipment" } };
+}
+
+// 材料堆叠：同类材料（同名同品质）进背包时合并 count，避免基础材料占满 12 格背包。
+// 返回新 inventory（纯函数，可单测）；仅对 slot === "material" 的掉落生效。
+export function stackMaterial(inventory, drop) {
+  const list = inventory || [];
+  if (drop?.slot !== "material") return [...list, drop];
+  const existing = list.find((entry) => entry.slot === "material" && entry.name === drop.name);
+  if (existing) {
+    return list.map((entry) => (entry === existing ? { ...entry, count: (entry.count || 1) + 1 } : entry));
+  }
+  return [...list, { ...drop, count: 1 }];
+}
+
+// 拆解返还（docs/03：返还 50% 基础强化材料与少量金币）：输入背包装备，返回返还物列表。
+// 装备拆解得到 1 件基础材料（BASIC_MATERIAL，同名堆叠）+ 10% 价值金币；材料/消耗品/货币不可拆解。
+export function salvageReward(item) {
+  if (!item || item.slot === "material" || item.slot === "consumable" || item.slot === "currency") return { rewards: [] };
+  return {
+    rewards: [
+      { ...BASIC_MATERIAL, id: `salvage-${item.id}` },
+      { kind: "gold", amount: Math.max(1, Math.round((item.value || 0) * 0.1)) }
+    ]
+  };
+}
+
+// 背包规范化：合并历史 / 迁移存档中重复的同名材料（旧档条目无 count 字段，视为 1 件）。
+// 存档恢复与任何外部读入的背包都先过一遍，保证材料堆叠在运行时始终成立。
+export function normalizeInventory(inventory) {
+  const result = [];
+  for (const entry of inventory || []) {
+    if (entry?.slot === "material") {
+      const existing = result.find((item) => item.slot === "material" && item.name === entry.name);
+      if (existing) {
+        existing.count = (existing.count || 1) + (entry.count || 1);
+        continue;
+      }
+      result.push({ ...entry, count: entry.count || 1 });
+    } else {
+      result.push(entry);
+    }
+  }
+  return result;
 }
 
 // 战术节点（site）激活效果：覆盖 rally/scout/fortify/bridge/resonance/compass/banner/breach/purify/decree。
