@@ -55,7 +55,25 @@ import {
   renderTravelConfirm
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, CURRENT_SAVE_VERSION } from "./persist.js";
-import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience } from "./combat.js";
+import {
+  computeDamage,
+  computeKillReward,
+  computeIncomingDamage,
+  applyExperience,
+  advanceMonsterAttack,
+  MONSTER_ATTACK_RULES
+} from "./combat.js";
+import {
+  SKILL_RULES,
+  applyArmorBreak,
+  tickArmorBreak,
+  pickPierceTargets,
+  resolveChargePoint,
+  resolveKnockback,
+  createBoneGuard,
+  pickSummonTarget,
+  advanceHealZone
+} from "./skills.js";
 import {
   rollDropItem,
   rollDropCount,
@@ -74,6 +92,9 @@ import { keyLabel } from "./keybinds.js";
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
 let pendingTravel = null;
+// 0.3.4 围攻上限：同一时刻只允许 1 只怪蓄力。旧实现每帧只判定「最近的一只」敌人，
+// 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
+const MAX_WINDUP_ATTACKERS = 1;
 
 export function createEntities(map) {
   const result = [];
@@ -96,7 +117,13 @@ export function createEntities(map) {
       spawnX: spawn[0],
       spawnY: spawn[1],
       patrolRadius: 55 + Math.random() * 50,
-      aggro: false
+      aggro: false,
+      friendly: false,
+      // 0.3.4 攻击前摇：初始冷却按一个完整周期随机错开，避免玩家一进圈就被整群怪同时抬手。
+      attackCooldown: rand(1.2, 2.9),
+      windup: 0,
+      windupTotal: MONSTER_ATTACK_RULES.normal.windup,
+      armorBreakTimer: 0
     });
   });
   const b = map.boss;
@@ -116,10 +143,15 @@ export function createEntities(map) {
     y: b.y,
     alive: true,
     boss: true,
+    friendly: false,
     hitFlash: 0,
     phase: 1,
     respawn: 0,
     phaseTimer: 0,
+    attackCooldown: 0.6,
+    windup: 0,
+    windupTotal: MONSTER_ATTACK_RULES.boss.windup,
+    armorBreakTimer: 0,
     specialTimer: FAST_FORWARD ? 0.25 : b.specialInterval,
     summonTimer: b.summonInterval || 0
   });
@@ -155,6 +187,11 @@ export function createEntities(map) {
       wander: Math.random() * 6,
       hostile: false,
       aggro: false,
+      friendly: false,
+      attackCooldown: 0.8,
+      windup: 0,
+      windupTotal: MONSTER_ATTACK_RULES.normal.windup,
+      armorBreakTimer: 0,
       respawn: 0
     });
   }
@@ -174,12 +211,16 @@ export function loadMap(mapId, spawnX, spawnY, silent) {
   setMoveTarget(null);
   state.player.invulnerable = 3;
   state.player.poison = 0;
+  // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
+  state.player.attackGate = 0;
   state.entities = createEntities(map);
   state.drops = [];
   state.particles = [];
   state.texts = [];
   state.hazards = [];
   state.hazardsSpawned = 0;
+  // 生息法阵属于当前场景的瞬态区域：换图 / 复活时清空，避免在营地继续回血。
+  state.healZones = [];
   state.hoveredEntityId = null;
   // 换图 / 死亡复活时清空瞬时打击反馈，避免连击数与震屏跨场景残留。
   fx.combo = 0;
@@ -220,12 +261,14 @@ export function findTarget() {
   // 自动索敌不锁定流浪武者：PK 必须显式点击目标（docs/05 主动攻击规则）。
   return (
     state.entities
-      .filter((entity) => entity.alive && !entity.npc && distance(state.player, entity) < 310)
+      .filter((entity) => entity.alive && !entity.npc && !entity.friendly && distance(state.player, entity) < 310)
       .sort((a, b) => distance(state.player, a) - distance(state.player, b))[0] || null
   );
 }
 
 export function selectTarget(entity) {
+  // 召唤物是友军：点击不锁定，避免玩家普攻指向自己的骨卫。
+  if (entity?.friendly) return;
   // 20 级前不能主动攻击玩家（docs/05 PK 保护）。
   if (entity?.npc && state.player.level < PK_RULES.minLevelToAttack) {
     showToast(`Lv.${PK_RULES.minLevelToAttack} 前不能主动攻击其他玩家（PK 保护）`);
@@ -270,7 +313,7 @@ export function resolveDamage(target, multiplier, skillName, kind) {
 
 export function nearestTargets(range, limit = 1) {
   return state.entities
-    .filter((entity) => entity.alive && distance(state.player, entity) <= range)
+    .filter((entity) => entity.alive && !entity.friendly && distance(state.player, entity) <= range)
     .sort((a, b) => distance(state.player, a) - distance(state.player, b))
     .slice(0, limit);
 }
@@ -314,13 +357,25 @@ export function castSkill(index) {
     return;
   }
   const target = findTarget();
+  // 生息法阵（0.3.4）：在脚下展开 4 秒持续回复区，每秒回 8% 最大生命，离开立即失效。
   if (skill.kind === "治疗") {
     state.player.resource -= skill.cost;
-    state.player.hp = clamp(state.player.hp + Math.round(hero.hp * 0.28), 0, playerMaxHp());
     state.player.cooldowns[index] = skill.cd;
-    textAt(`+${Math.round(hero.hp * 0.28)}`, state.player.x, state.player.y - 30, "#a88ce3", 15);
-    log("生息法阵恢复生命，并为一刀时刻积累势能。", "loot");
+    state.healZones = [
+      {
+        x: state.player.x,
+        y: state.player.y,
+        radius: skill.area || SKILL_RULES.healZone.radius,
+        life: SKILL_RULES.healZone.duration,
+        tick: SKILL_RULES.healZone.tick
+      }
+    ];
     state.player.charge = clamp(state.player.charge + 18, 0, 100);
+    log(
+      `生息法阵展开：${SKILL_RULES.healZone.duration} 秒内站在阵中每秒恢复 ${Math.round(SKILL_RULES.healZone.perSecond * 100)}% 生命，离开即失效。`,
+      "loot"
+    );
+    showToast("生息法阵展开：留在阵中持续回复，离开失效");
     return;
   }
   if (!target) {
@@ -334,13 +389,77 @@ export function castSkill(index) {
   }
   state.player.resource -= skill.cost;
   state.player.cooldowns[index] = skill.cd;
+  // 召唤骨卫（0.3.4）：生成 12 秒实体，自动跟随并索敌，不再是一次性伤害。
   if (skill.kind === "召唤") {
-    log("骨卫在场景中现身，接下来 12 秒会协助攻击。", "loot");
+    const guard = createBoneGuard({
+      player: state.player,
+      hero,
+      level: state.player.level,
+      id: `bone-guard-${Date.now()}`
+    });
+    state.entities.push(guard);
     state.player.charge = clamp(state.player.charge + 12, 0, 100);
+    log(
+      `骨卫在场景中现身：${SKILL_RULES.summon.duration} 秒内跟随你并自动索敌，按你 ${Math.round(SKILL_RULES.summon.attackRatio * 100)}% 的普攻伤害出手。`,
+      "loot"
+    );
+    showToast(`骨卫已现身：${SKILL_RULES.summon.duration} 秒内自动索敌`);
+    renderAll();
+    return;
   }
   // 技能升级（docs/02 原型简化）：每级 +6% 技能倍率。
   const skillLevel = state.player.skillLevels?.[index] || 0;
   const multiplier = skill.damage * (1 + SKILL_UPGRADE.multiplierPerLevel * skillLevel);
+  // 震地冲（0.3.4）：向目标突进 140px、击退目标并获得 0.2 秒无敌，替代原地结算。
+  if (skill.kind === "冲锋") {
+    const point = resolveChargePoint({ from: state.player, to: target, stopGap: (target.radius || 0) + 16 });
+    const map = activeMap();
+    state.player.x = clamp(point.x, 55, map.width - 55);
+    state.player.y = clamp(point.y, 55, map.height - 55);
+    state.player.invulnerable = Math.max(state.player.invulnerable, SKILL_RULES.charge.invulnerable);
+    resolveDamage(target, multiplier, skill.name, skill.kind);
+    if (target.alive) {
+      const knocked = resolveKnockback({
+        origin: state.player,
+        target,
+        bounds: { minX: 55, maxX: map.width - 55, minY: 55, maxY: map.height - 55 }
+      });
+      target.x = knocked.x;
+      target.y = knocked.y;
+    }
+    log(`震地冲：向前突进 ${Math.round(point.travel)} 像素并击退目标，获得 ${SKILL_RULES.charge.invulnerable.toFixed(1)} 秒无敌。`, "loot");
+    showToast(`震地冲：突进 ${Math.round(point.travel)}px，击退目标`);
+    return;
+  }
+  // 破甲斩（0.3.4）：命中后目标防御 -15%，持续 4 秒。
+  if (skill.kind === "破甲") {
+    resolveDamage(target, multiplier, skill.name, skill.kind);
+    if (target.alive) {
+      applyArmorBreak(target);
+      log(
+        `破甲：<b>${target.name}</b> 防御降低 ${Math.round(SKILL_RULES.armorBreak.defenseRatio * 100)}%，持续 ${SKILL_RULES.armorBreak.duration} 秒。`,
+        "loot"
+      );
+      showToast(`破甲生效：${target.name} 防御 -${Math.round(SKILL_RULES.armorBreak.defenseRatio * 100)}%`);
+    }
+    return;
+  }
+  // 雷矛术（0.3.4）：沿锁定方向穿透，最多命中直线上的 3 个目标。
+  if (skill.kind === "穿透") {
+    const hits = pickPierceTargets({
+      origin: state.player,
+      aim: target,
+      entities: state.entities,
+      range: skill.range,
+      maxTargets: SKILL_RULES.pierce.maxTargets
+    });
+    const list = hits.length ? hits : [target];
+    list.forEach((entity) => resolveDamage(entity, multiplier, null, skill.kind));
+    fx.pierce = { x1: state.player.x, y1: state.player.y, x2: target.x, y2: target.y, life: 0.18 };
+    log(`<b>${skill.name}</b> 穿透命中 ${list.length} 个目标（最多 ${SKILL_RULES.pierce.maxTargets} 个）。`, "loot");
+    if (list.length > 1) showToast(`${skill.name} 穿透 ${list.length} 个目标`);
+    return;
+  }
   if (skill.kind === "范围") {
     nearestTargets(skill.range, 5).forEach((entity) => resolveDamage(entity, multiplier, skill.name, skill.kind));
   } else resolveDamage(target, multiplier, skill.name, skill.kind);
@@ -643,25 +762,66 @@ export function syncCampaignGrowth(silent = false) {
 }
 
 export function playerDamage(dt) {
-  if (state.player.invulnerable > 0) return;
   const atWell = nearWaterWell();
   const atRestPoint = nearRestPoint();
   const atSanctuary = atWell || atRestPoint || nearTown();
-  const attacker = state.entities
-    .filter((entity) => entity.alive && distance(state.player, entity) < entity.radius + 70)
-    .sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
-  if (!atSanctuary && attacker && Math.random() <= dt * (attacker.boss ? 0.6 : 0.32)) {
-    // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
-    const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: activeHero().defense });
-    state.player.hp = Math.max(0, state.player.hp - amount);
-    // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧（仅视觉，不改变结算）。
-    attacker.attackFlash = 0.18;
-    textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13);
-    spark(state.player.x, state.player.y, "#f16d66", 4);
-    if (activeMap().boss.poisonStacks && attacker.boss) {
-      state.player.poison = clamp(state.player.poison + 1, 0, 5);
-      if (state.player.poison >= 5) showToast("毒层已满，靠近水井净化");
+  // 0.3.4 攻击前摇：每个存活敌人独立推进「蓄力 → 出手」节奏。
+  // 蓄力期间 updateMonsterAI 会让怪物停步；前摇结束时玩家若已拉开距离 / 处于无敌，攻击落空。
+  // 全局闸门 attackGate：任意一只怪出手后，所有怪物都要等 gate 秒才能再次抬手，
+  // 这样「被 6 只怪围住」的承伤速率与旧实现（每帧只判定最近一只怪）持平，不会随怪物数量线性爆炸。
+  const readyToWindup = [];
+  let windingUp = 0;
+  state.entities.forEach((attacker) => {
+    if (!attacker.alive || attacker.friendly) return;
+    const rules = attacker.boss ? MONSTER_ATTACK_RULES.boss : MONSTER_ATTACK_RULES.normal;
+    const step = advanceMonsterAttack(
+      { windup: attacker.windup, windupTotal: attacker.windupTotal, cooldown: attacker.attackCooldown },
+      dt,
+      rules
+    );
+    attacker.windup = step.windup;
+    attacker.windupTotal = step.windupTotal;
+    attacker.attackCooldown = step.cooldown;
+    const reach = attacker.radius + 70;
+    const inRange = !atSanctuary && distance(state.player, attacker) <= reach;
+    // 只有已进入战斗的敌人才会抬手（首领视为始终接战）：避免路过时被一圈未反应过来的巡逻怪同时围攻。
+    const engaged = Boolean(attacker.boss || attacker.aggro);
+    if (step.strike) {
+      // 出手即锁定全局闸门：不论命中还是落空，下一次怪物抬手都要重新等待。
+      state.player.attackGate = rules.gate;
+      if (inRange && state.player.invulnerable <= 0) {
+        // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
+        const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: activeHero().defense });
+        if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${amount}`);
+        state.player.hp = Math.max(0, state.player.hp - amount);
+        // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧。
+        attacker.attackFlash = 0.18;
+        textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13);
+        spark(state.player.x, state.player.y, "#f16d66", 4);
+        if (activeMap().boss.poisonStacks && attacker.boss) {
+          state.player.poison = clamp(state.player.poison + 1, 0, 5);
+          if (state.player.poison >= 5) showToast("毒层已满，靠近水井净化");
+        }
+      } else if (!atSanctuary) {
+        // 落空：只保留视觉提示，不造成伤害。
+        attacker.attackFlash = 0.12;
+        textAt("落空", attacker.x, attacker.y - attacker.radius - 10, "#8d9ca0", 11);
+      }
+      return;
     }
+    if (step.windup > 0) {
+      windingUp += 1;
+      return;
+    }
+    // 只有闸门空闲、已接战、玩家在范围内时才进入前摇；无敌期间不进入，避免空转。
+    if (engaged && inRange && state.player.invulnerable <= 0 && state.player.attackGate <= 0) readyToWindup.push(attacker);
+  });
+  // 闸门空闲时把前摇名额给最近的一只怪（与旧实现「只判定最近一只」一致）。
+  if (readyToWindup.length && MAX_WINDUP_ATTACKERS > windingUp) {
+    const closest = readyToWindup.sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
+    const rules = closest.boss ? MONSTER_ATTACK_RULES.boss : MONSTER_ATTACK_RULES.normal;
+    closest.windup = rules.windup;
+    closest.windupTotal = rules.windup;
   }
   // 危险区地面危险区伤害（BOSS阶段二以上）
   state.hazards.forEach((h) => {
@@ -669,7 +829,7 @@ export function playerDamage(dt) {
     h.life -= dt;
     if (h.life <= 0) {
       h.snap = true;
-      if (!atSanctuary && distance(state.player, h) < h.r) {
+      if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: activeHero().defense });
         state.player.hp = Math.max(0, state.player.hp - amount);
         textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
@@ -681,8 +841,8 @@ export function playerDamage(dt) {
   state.hazards.forEach((h) => {
     if (h.snap) h.fade -= dt;
   });
-  // 中毒持续伤害
-  if (state.player.poison > 0 && !atSanctuary) {
+  // 中毒持续伤害（无敌期间只保留毒层，不结算伤害）
+  if (state.player.poison > 0 && !atSanctuary && state.player.invulnerable <= 0) {
     state.player.poisonTimer = (state.player.poisonTimer || 0) - dt;
     if (state.player.poisonTimer <= 0) {
       state.player.poisonTimer = 1.2;
@@ -824,11 +984,22 @@ export function updateEntities(dt) {
   state.entities.forEach((entity) => {
     entity.hitFlash = Math.max(0, entity.hitFlash - dt);
     entity.attackFlash = Math.max(0, (entity.attackFlash || 0) - dt);
+    // 破甲计时对所有可受击目标生效；过期后 computeDamage 自动恢复原防御。
+    if (entity.armorBreakTimer > 0) tickArmorBreak(entity, dt);
+    // 召唤物：骨卫走独立的跟随 / 索敌逻辑，不参与怪物巡逻与复活。
+    if (entity.summoned) {
+      updateSummon(entity, dt);
+      return;
+    }
     if (!entity.alive) {
       entity.respawn -= dt;
       if (entity.respawn <= 0) {
         entity.alive = true;
         entity.hp = entity.maxHp;
+        // 复活时清空攻击节奏与破甲状态，避免重生立刻抬手或保留旧破甲。
+        entity.windup = 0;
+        entity.attackCooldown = entity.boss ? 0.8 : rand(1.2, 2.9);
+        entity.armorBreakTimer = 0;
         if (entity.boss) {
           entity.phase = 1;
           entity.specialTimer = map.boss.specialInterval;
@@ -841,6 +1012,42 @@ export function updateEntities(dt) {
     if (!entity.boss) updateMonsterAI(entity, dt);
     if (entity.boss) updateBoss(entity, dt);
   });
+  // 召唤时限结束的骨卫从实体表移除，避免留下 alive=false 但无 respawn 的残影。
+  state.entities = state.entities.filter((entity) => !(entity.summoned && !entity.alive));
+}
+
+// 骨卫 AI（0.3.4）：优先跟随玩家，附近有敌人时自动索敌并按固定冷却出手；
+// 伤害复用玩家伤害公式的 40% 倍率，命中反馈与普攻一致。
+export function updateSummon(guard, dt) {
+  if (!guard.alive) return;
+  guard.summonLife -= dt;
+  if (guard.summonLife <= 0) {
+    guard.alive = false;
+    spark(guard.x, guard.y, "#cfd8cf", 12);
+    log("骨卫的召唤时限结束，化作骨尘散去。", "warn");
+    return;
+  }
+  guard.attackCooldown = Math.max(0, (guard.attackCooldown || 0) - dt);
+  const foe = pickSummonTarget({ guard, entities: state.entities });
+  const anchor = { x: state.player.x - 38, y: state.player.y + 30 };
+  const chase = foe && distance(state.player, foe) <= SKILL_RULES.summon.engageRange;
+  const moveTo = chase ? foe : anchor;
+  const gap = Math.hypot(moveTo.x - guard.x, moveTo.y - guard.y);
+  const stopGap = chase ? guard.radius + (foe.radius || 0) + SKILL_RULES.summon.attackGap : 6;
+  if (gap > stopGap) {
+    const speed = chase ? 180 : 150;
+    guard.x += ((moveTo.x - guard.x) / gap) * speed * dt;
+    guard.y += ((moveTo.y - guard.y) / gap) * speed * dt;
+  }
+  const map = activeMap();
+  guard.x = clamp(guard.x, 55, map.width - 55);
+  guard.y = clamp(guard.y, 55, map.height - 55);
+  const reach = guard.radius + (foe?.radius || 0) + SKILL_RULES.summon.attackGap;
+  if (foe && distance(guard, foe) <= reach && guard.attackCooldown <= 0) {
+    guard.attackCooldown = SKILL_RULES.summon.cooldown;
+    guard.attackFlash = 0.18;
+    resolveDamage(foe, SKILL_RULES.summon.attackRatio, null, "普通");
+  }
 }
 
 // 普通怪 / 流浪武者 AI：绕刷新点巡逻 → 靠近玩家进入仇恨追击 → 距离过远脱战回归。
@@ -854,6 +1061,8 @@ export function updateMonsterAI(entity, dt) {
   const canAggro = !entity.npc || entity.hostile;
   if (!entity.aggro && canAggro && !sanctuary && player.invulnerable <= 0 && distToPlayer < 190) entity.aggro = true;
   if (entity.aggro && (distToPlayer > 340 || anchorDistance > 430 || sanctuary)) entity.aggro = false;
+  // 0.3.4 攻击前摇：蓄力期间原地不动，玩家可在红色蓄力环收拢前走位躲开（前摇结束落空）。
+  if (entity.windup > 0) return;
   let targetX;
   let targetY;
   let speed;
@@ -928,7 +1137,12 @@ export function updateBoss(boss, dt) {
           alive: true,
           hitFlash: 0,
           wander: Math.random() * 6,
-          poisonTimer: 0
+          poisonTimer: 0,
+          friendly: false,
+          attackCooldown: 0.5,
+          windup: 0,
+          windupTotal: MONSTER_ATTACK_RULES.normal.windup,
+          armorBreakTimer: 0
         });
         log(`<b>${boss.name}</b> 召唤了一只 ${type.name}。`, "warn");
         spark(boss.x + 60, boss.y, "#7a5a3a", 8);
@@ -971,11 +1185,35 @@ export function spawnHazard(boss) {
   if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
 }
 
+// 生息法阵结算（0.3.4）：站在阵中每秒回 8% 最大生命，离开立即失效，4 秒后自然结束。
+export function updateHealZones(dt) {
+  if (!state?.healZones?.length) return;
+  state.healZones = state.healZones.filter((zone) => {
+    const result = advanceHealZone({ zone, player: state.player, dt, maxHp: playerMaxHp() });
+    if (result.left) {
+      log("离开生息法阵，持续回复中断。", "warn");
+      showToast("已离开生息法阵");
+      return false;
+    }
+    zone.life = result.life;
+    zone.tick = result.tick;
+    if (result.heal > 0) {
+      state.player.hp = clamp(state.player.hp + result.heal, 0, playerMaxHp());
+      textAt(`+${result.heal}`, state.player.x, state.player.y - 30, "#a88ce3", 15);
+      spark(state.player.x, state.player.y, "#a88ce3", 5);
+    }
+    return result.active;
+  });
+}
+
 export function update(dt) {
   if (!state) return;
   const hero = activeHero();
   state.player.attackTimer = Math.max(0, state.player.attackTimer - dt);
   state.player.invulnerable = Math.max(0, state.player.invulnerable - dt);
+  // 全局出手闸门（0.3.4）：任意怪物出手后需等 gate 秒，任何怪才能再次抬手。
+  // 这里必须逐帧递减，否则闸门一旦被写入就会永久锁死怪物的攻击。
+  state.player.attackGate = Math.max(0, (state.player.attackGate || 0) - dt);
   state.player.cooldowns = state.player.cooldowns.map((cd) => Math.max(0, cd - dt));
   if (state.player.resource < hero.resource)
     state.player.resource = clamp(state.player.resource + hero.resource * 0.008 * dt, 0, hero.resource);
@@ -985,8 +1223,14 @@ export function update(dt) {
   fx.comboTimer = combo.timer;
   fx.shake = Math.max(0, fx.shake - dt);
   fx.levelUp = Math.max(0, fx.levelUp - dt);
+  // 穿透光束只做视觉衰减，不参与伤害结算。
+  if (fx.pierce) {
+    fx.pierce.life -= dt;
+    if (fx.pierce.life <= 0) fx.pierce = null;
+  }
   movePlayer(dt);
   updateEntities(dt);
+  updateHealZones(dt);
   playerDamage(dt);
   state.particles.forEach((particle) => {
     particle.x += particle.vx * dt;
@@ -1298,16 +1542,19 @@ if (TEST_MODE) {
               equipmentIds: Object.fromEntries(
                 Object.entries(state.player.equipment || {}).map(([slot, item]) => [slot, item?.id || null])
               ),
-              entities: state.entities.map((entity) => ({
-                id: entity.id,
-                x: entity.x,
-                y: entity.y,
-                hp: entity.hp,
-                alive: entity.alive,
-                boss: Boolean(entity.boss),
-                npc: Boolean(entity.npc),
-                phase: entity.phase || 0
-              })),
+              // 骨卫等友军不进入 e2e 快照：测试脚本把快照里的实体都当可攻击怪物，会误锁定友军。
+              entities: state.entities
+                .filter((entity) => !entity.friendly)
+                .map((entity) => ({
+                  id: entity.id,
+                  x: entity.x,
+                  y: entity.y,
+                  hp: entity.hp,
+                  alive: entity.alive,
+                  boss: Boolean(entity.boss),
+                  npc: Boolean(entity.npc),
+                  phase: entity.phase || 0
+                })),
               hazardsSpawned: state.hazardsSpawned || 0,
               progress: state.mapProgress,
               logs: state.logs.slice(-6).map((entry) => entry.message)

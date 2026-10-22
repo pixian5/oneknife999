@@ -147,7 +147,8 @@ export function setupInput() {
   canvas.addEventListener("pointerdown", (event) => {
     pointer.down = true;
     const point = canvasPoint(event);
-    const target = state?.entities.find((entity) => entity.alive && distance(point, entity) < entity.radius + 22);
+    // 友军（骨卫）不参与点击锁定，点击其位置视为走位指令。
+    const target = state?.entities.find((entity) => entity.alive && !entity.friendly && distance(point, entity) < entity.radius + 22);
     if (target) selectTarget(target);
     else setMoveTarget(point);
   });
@@ -160,7 +161,7 @@ export function setupInput() {
     pointer.x = point.x;
     pointer.y = point.y;
     const hovered = state.entities
-      .filter((entity) => entity.alive)
+      .filter((entity) => entity.alive && !entity.friendly)
       .sort((a, b) => Number(b.boss) - Number(a.boss))
       .find((entity) => distance(point, entity) < entity.radius + 18);
     state.hoveredEntityId = hovered?.id || null;

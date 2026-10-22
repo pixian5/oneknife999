@@ -7,8 +7,9 @@ import { clamp, distance } from "./util.js";
 
 export let state = null;
 
-// 打击感瞬时状态（0.3.3）：连击、屏幕震动、升级闪光。仅存在于内存，不写入存档。
-export const fx = { combo: 0, comboTimer: 0, shake: 0, shakePower: 0, levelUp: 0 };
+// 打击感瞬时状态（0.3.3）：连击、屏幕震动、升级闪光；0.3.4 追加穿透光束。
+// 仅存在于内存，不写入存档。
+export const fx = { combo: 0, comboTimer: 0, shake: 0, shakePower: 0, levelUp: 0, pierce: null };
 
 export function resetFx() {
   fx.combo = 0;
@@ -16,6 +17,7 @@ export function resetFx() {
   fx.shake = 0;
   fx.shakePower = 0;
   fx.levelUp = 0;
+  fx.pierce = null;
 }
 
 // 只允许通过 setState 替换整个状态对象；state 内部字段仍可原位修改。
@@ -69,6 +71,8 @@ export function createState(classId) {
       oneMomentUsed: false,
       attackTimer: 0,
       invulnerable: 0,
+      // 全局怪物出手闸门：任意一只怪出手后，所有怪都要等闸门归零才能再次抬手。
+      attackGate: 0,
       cooldowns: [0, 0, 0, 0],
       targetId: null,
       previewSkill: null,
@@ -89,6 +93,8 @@ export function createState(classId) {
     mapProgress: {},
     hazards: [],
     hazardsSpawned: 0,
+    // 生息法阵（0.3.4）：瞬态区域，不写入存档；换图 / 死亡复活时清空。
+    healZones: [],
     hoveredEntityId: null
   };
 }

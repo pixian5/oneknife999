@@ -34,7 +34,8 @@ export function registerComboKill(combo, rules = COMBO_RULES) {
 // 返回 { kind, target, label, color }；target 需提供 x / y / name。
 export function resolveGuideTarget({ player, entities, progress, boss, forwardExit }) {
   const list = entities || [];
-  const alive = list.filter((entity) => entity.alive && !entity.npc);
+  // 召唤物是友军：指引箭头不应指向骨卫。
+  const alive = list.filter((entity) => entity.alive && !entity.npc && !entity.friendly);
   const nearestMob = () => {
     const mobs = alive.filter((entity) => !entity.boss);
     return mobs.sort((a, b) => distance(player, a) - distance(player, b))[0] || null;

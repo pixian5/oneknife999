@@ -9,7 +9,7 @@ import {
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { routePoint } from "./geometry.js";
-import { $, clamp, rand, formatNumber } from "./util.js";
+import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
 import {
   state,
@@ -217,10 +217,12 @@ export function drawWorld() {
   drawTacticalPoints(map);
   drawExits(map);
   drawHazards();
+  drawHealZones();
   state.drops.forEach(drawDrop);
   for (const entity of state.entities) {
     if (entity.alive) drawEntity(entity);
   }
+  drawPierceBeam();
   drawSkillRangePreview();
   drawPlayer();
   // 0.3.3：目标指引箭头 + 升级光环在世界坐标系内绘制，跟随相机但不受 HUD 布局影响。
@@ -652,6 +654,55 @@ export function drawHazards() {
   ctx.restore();
 }
 
+// 生息法阵（0.3.4）：紫色回复圈，剩余时间越少外环越淡；玩家在圈内时加亮内圈提示生效。
+export function drawHealZones() {
+  if (!state.healZones?.length) return;
+  ctx.save();
+  state.healZones.forEach((zone) => {
+    const ratio = clamp(zone.life / 4, 0, 1);
+    const inside = distance(state.player, zone) <= zone.radius;
+    ctx.fillStyle = `rgba(168, 140, 227, ${inside ? 0.18 : 0.1})`;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(168, 140, 227, ${0.35 + ratio * 0.45})`;
+    ctx.lineWidth = inside ? 3 : 2;
+    ctx.setLineDash([9, 6]);
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 剩余时间刻度环：外圈按剩余秒数收缩，直观提示法阵还剩多久。
+    ctx.strokeStyle = "rgba(198, 176, 240, .8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius + 6, -Math.PI / 2, -Math.PI / 2 + ratio * Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// 雷矛穿透光束（0.3.4）：短暂的一道直线，只做视觉提示，伤害已在 skills.pickPierceTargets 结算。
+export function drawPierceBeam() {
+  if (!fx.pierce) return;
+  const beam = fx.pierce;
+  const alpha = clamp(beam.life / 0.18, 0, 1);
+  ctx.save();
+  ctx.strokeStyle = `rgba(120, 182, 236, ${alpha})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(beam.x1, beam.y1);
+  ctx.lineTo(beam.x2, beam.y2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(214, 238, 255, ${alpha * 0.7})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(beam.x1, beam.y1);
+  ctx.lineTo(beam.x2, beam.y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawEntity(entity) {
   ctx.save();
   const selected = entity.id === state.player.targetId;
@@ -718,6 +769,25 @@ export function drawEntity(entity) {
       ctx.arc(entity.x, entity.y, entity.radius * scale + 14, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+  // 0.3.4 攻击前摇：红色蓄力环随前摇收拢，收拢到底即出手；玩家可据此走位躲开（落空）。
+  if (entity.windup > 0 && entity.windupTotal > 0) {
+    const ratio = clamp(entity.windup / entity.windupTotal, 0, 1);
+    ctx.strokeStyle = `rgba(241, 109, 102, ${0.4 + (1 - ratio) * 0.5})`;
+    ctx.lineWidth = 2 + (1 - ratio) * 2;
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.radius * scale + 10 + ratio * 26, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // 召唤物（骨卫）：青色虚线环标识友军，避免误认为可攻击怪物。
+  if (entity.friendly) {
+    ctx.strokeStyle = "rgba(98, 213, 198, .6)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.radius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
   // 0.3.3 怪物命中玩家的瞬间：朝玩家方向闪一道红色挥击弧（纯视觉反馈，不改变伤害结算）。
   if (entity.attackFlash > 0) {
