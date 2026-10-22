@@ -1,4 +1,4 @@
-import { CLASSES } from "./config.js";
+import { CLASSES, EQUIPMENT_SLOT_KEYS, equipmentHpBonus, equipmentDefenseBonus } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { clamp, distance } from "./util.js";
 
@@ -56,7 +56,10 @@ export function createState(classId) {
       cooldowns: [0, 0, 0, 0],
       targetId: null,
       previewSkill: null,
-      equipment: { weapon: null, neck: null, boots: null },
+      skillPoints: 0,
+      skillLevels: [0, 0, 0, 0],
+      sin: 0,
+      equipment: Object.fromEntries(EQUIPMENT_SLOT_KEYS.map((slotKey) => [slotKey, null])),
       poison: 0,
       visitedMaps: { ash_outskirts: true }
     },
@@ -106,12 +109,23 @@ export function primaryExit() {
   return map.exits.find((exit) => isForwardExit(exit)) || null;
 }
 
+// 装备生命加成：12 部位固定值 + 生命词缀（公式见 config.js）。
 export function equipmentHp() {
-  return Object.values(state.player.equipment).reduce((sum, item) => sum + (item?.slot === "neck" ? 45 : 0), 0);
+  return EQUIPMENT_SLOT_KEYS.reduce((sum, slotKey) => sum + equipmentHpBonus(state.player.equipment?.[slotKey], slotKey), 0);
+}
+
+// 装备防御加成：防御词缀之和，供承伤公式使用。
+export function equipmentDefense() {
+  return EQUIPMENT_SLOT_KEYS.reduce((sum, slotKey) => sum + equipmentDefenseBonus(state.player.equipment?.[slotKey]), 0);
 }
 
 export function playerMaxHp() {
   return activeHero().hp + state.player.level * 18 + equipmentHp();
+}
+
+// 是否红名（docs/05：罪恶值 ≥ 300）。
+export function isRedName() {
+  return (state.player.sin || 0) >= 300;
 }
 
 export function nearWaterWell() {

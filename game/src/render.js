@@ -1,4 +1,4 @@
-import { monsterProfile } from "./config.js";
+import { monsterProfile, EQUIPMENT_SLOTS, EQUIPMENT_SLOT_KEYS, effectiveItemPower, SKILL_UPGRADE, PK_RULES } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber } from "./util.js";
@@ -162,12 +162,16 @@ function paintGroundLayer(target, map) {
 }
 
 function getGroundLayer(map) {
-  if (groundLayer?.mapId === map.id) return groundLayer.canvas;
+  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr。
+  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr) return groundLayer.canvas;
   const layer = document.createElement("canvas");
-  layer.width = map.width;
-  layer.height = map.height;
-  paintGroundLayer(layer.getContext("2d"), map);
-  groundLayer = { mapId: map.id, canvas: layer };
+  const scale = Math.max(1, dpr);
+  layer.width = map.width * scale;
+  layer.height = map.height * scale;
+  const layerCtx = layer.getContext("2d");
+  layerCtx.scale(scale, scale);
+  paintGroundLayer(layerCtx, map);
+  groundLayer = { mapId: map.id, dpr: scale, canvas: layer };
   return layer;
 }
 
@@ -182,7 +186,7 @@ export function drawWorld() {
   ctx.translate(-view.x, -view.y);
   ctx.fillStyle = "#1a2c23";
   ctx.fillRect(view.x, view.y, width, height);
-  ctx.drawImage(getGroundLayer(map), 0, 0);
+  ctx.drawImage(getGroundLayer(map), 0, 0, map.width, map.height);
   drawTacticalPoints(map);
   drawExits(map);
   drawHazards();
@@ -552,9 +556,41 @@ export function drawEntity(entity) {
   }
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
   ctx.fillStyle = entity.color;
-  ctx.beginPath();
-  ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2);
-  ctx.fill();
+  if (entity.npc) {
+    // 流浪武者：菱形轮廓 + 白名，与怪物在画面上直接区分。
+    ctx.save();
+    ctx.translate(entity.x, entity.y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-entity.radius * 0.8, -entity.radius * 0.8, entity.radius * 1.6, entity.radius * 1.6);
+    ctx.restore();
+  } else {
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2);
+    ctx.fill();
+    // 四类怪形变：尖刺 / 双环 / 方肩 / 双角，让同类怪在画面上可辨识。
+    const morph = entity.morph ?? 0;
+    if (morph === 1) {
+      ctx.beginPath();
+      ctx.arc(entity.x - entity.radius * 0.45, entity.y, entity.radius * 0.36, 0, Math.PI * 2);
+      ctx.arc(entity.x + entity.radius * 0.45, entity.y, entity.radius * 0.36, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (morph === 2) {
+      ctx.fillRect(entity.x - entity.radius, entity.y - entity.radius * 0.4, entity.radius * 2, entity.radius * 0.8);
+    } else if (morph === 3) {
+      ctx.beginPath();
+      ctx.moveTo(entity.x - entity.radius * 0.7, entity.y - entity.radius * 0.9);
+      ctx.lineTo(entity.x - entity.radius * 0.2, entity.y - entity.radius * 0.3);
+      ctx.lineTo(entity.x - entity.radius * 0.9, entity.y - entity.radius * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(entity.x + entity.radius * 0.7, entity.y - entity.radius * 0.9);
+      ctx.lineTo(entity.x + entity.radius * 0.2, entity.y - entity.radius * 0.3);
+      ctx.lineTo(entity.x + entity.radius * 0.9, entity.y - entity.radius * 0.2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
   ctx.beginPath();
   ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
@@ -584,10 +620,14 @@ export function drawNameplate(entity) {
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
   roundedRect(ctx, left, top, width, 31, 3);
   ctx.fill();
-  ctx.fillStyle = entity.boss ? "#f3b1a8" : "#c7d2cb";
-  ctx.font = `${entity.boss ? 11 : 9}px sans-serif`;
+  ctx.fillStyle = entity.npc ? "#eef4ef" : entity.boss ? "#f3b1a8" : "#c7d2cb";
+  ctx.font = `${entity.boss || entity.npc ? 11 : 9}px sans-serif`;
   ctx.textAlign = "center";
-  ctx.fillText(`Lv.${entity.level} ${entity.name}${entity.boss ? ` · P${entity.phase}` : ""}`, entity.x, top + 11);
+  ctx.fillText(
+    `Lv.${entity.level} ${entity.name}${entity.npc ? " · 玩家" : ""}${entity.boss ? ` · P${entity.phase}` : ""}`,
+    entity.x,
+    top + 11
+  );
   ctx.fillStyle = "#8d9ca0";
   ctx.font = "8px sans-serif";
   ctx.fillText(`${Math.ceil(entity.hp)} / ${entity.maxHp}`, entity.x, top + 21);
@@ -823,6 +863,19 @@ export function renderPlayer() {
   setText($("goldText"), formatNumber(state.player.gold));
   setText($("markText"), `${state.player.marks} / 800`);
   setText($("potionCount"), state.player.potion);
+  // 战斗统计与罪恶值：PK 状态一眼可见（红名用红色胶囊）。
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  setText($("statsLine"), `击杀 ${formatNumber(state.player.totalKills || 0)} · 死亡 ${state.player.deaths || 0} · 通关 ${cleared}/100`);
+  const sin = state.player.sin || 0;
+  const sinEl = $("sinPill");
+  if (sin > 0) {
+    sinEl.classList.remove("hidden");
+    setText(sinEl, sin >= PK_RULES.redNameThreshold ? `红名 · 罪恶 ${sin}` : `罪恶 ${sin}`);
+    setClass(sinEl, "red", sin >= PK_RULES.redNameThreshold);
+  } else sinEl.classList.add("hidden");
+  const points = state.player.skillPoints || 0;
+  $("skillBtn").classList.toggle("has-points", points > 0);
+  setText($("skillPointBadge"), String(points));
   const questProgress = state.quest.completed ? 100 : (state.quest.kills / state.quest.need) * 70 + (state.quest.bossDefeated ? 30 : 0);
   setStyle($("questBar"), "width", `${questProgress}%`);
   setText($("questText"), `${state.quest.kills} / ${state.quest.need} 普通怪 · Boss ${state.quest.bossDefeated ? "已击败" : "未击败"}`);
@@ -1026,9 +1079,10 @@ export function renderSkills() {
         .map((skill, index) => {
           // 拆出范围文案，避免单行模板字符串超过 400 字符；输出 HTML 与拆分前一致。
           const rangeText = skill.area ? `范围：以角色为中心 ${skill.areaLabel}` : `施法距离：${Math.round(skill.range / 30)} 格`;
+          const skillLevel = state.player.skillLevels?.[index] || 0;
           return (
-            `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}">` +
-            `<span class="skill-key">${index + 1}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
+            `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}${skillLevel ? ` Lv.${skillLevel}` : ""}">` +
+            `<span class="skill-key">${index + 1}${skillLevel ? `·${skillLevel}` : ""}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
             `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
             `<span class="cooldown"></span>` +
             `</button>`
@@ -1054,19 +1108,23 @@ export function renderSkills() {
 }
 
 export function renderEquipment() {
-  const labels = { weapon: "武器", neck: "项链", boots: "靴子" };
-  const signature = Object.values(labels)
-    .map((_, index) => state.player.equipment[Object.keys(labels)[index]]?.id || "-")
-    .join("|");
+  // 12 部位（docs/03）；点击已穿戴的槽位 = 尝试强化。
+  const signature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
+    const item = state.player.equipment?.[slotKey];
+    return item ? `${item.id}:${item.enhance || 0}:${item.blessing || 0}` : "-";
+  }).join("|");
   if (!panelChanged($("equipmentGrid"), signature)) return;
   setHtml(
     $("equipmentGrid"),
-    Object.keys(labels)
-      .map((slot) => {
-        const item = state.player.equipment[slot];
-        return `<button class="equipment-slot ${item ? "filled" : ""}" title="${item ? `${item.name}：${item.desc}` : `${labels[slot]}空位`}">${item ? `<span class="slot-glyph">${item.glyph}</span><span class="slot-name">${labels[slot]}</span>` : `<span class="slot-glyph">+</span><span class="slot-name">${labels[slot]}</span>`}</button>`;
-      })
-      .join("")
+    EQUIPMENT_SLOT_KEYS.map((slotKey) => {
+      const item = state.player.equipment?.[slotKey];
+      const label = EQUIPMENT_SLOTS[slotKey].label;
+      if (!item)
+        return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位"><span class="slot-glyph">+</span><span class="slot-name">${label}</span></button>`;
+      const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n点击强化（+8 起需材料，失败不降级）`;
+      return `<button class="equipment-slot filled" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
+    }).join("")
   );
 }
 export function renderInventory() {
@@ -1099,16 +1157,81 @@ export function renderBoss() {
       : `已击破 · ${Math.ceil(boss.respawn)} 秒后刷新`
   );
 }
+// 技能升级弹窗：每行展示旧值 → 新值与升级按钮（docs/02：面板展示旧/新值）。
+export function renderSkillModal() {
+  const modal = $("skillModal");
+  if (modal.classList.contains("hidden")) return;
+  const hero = activeHero();
+  const points = state.player.skillPoints || 0;
+  setText($("skillModalPoints"), `可用技能点：${points}`);
+  setHtml(
+    $("skillModalList"),
+    hero.skills
+      .map((skill, index) => {
+        const level = state.player.skillLevels?.[index] || 0;
+        const nextMultiplier = Math.round(skill.damage * (1 + SKILL_UPGRADE.multiplierPerLevel * (level + 1)) * 100);
+        const nowMultiplier = Math.round(skill.damage * (1 + SKILL_UPGRADE.multiplierPerLevel * level) * 100);
+        const maxed = level >= SKILL_UPGRADE.maxLevel;
+        return (
+          `<div class="skill-row">` +
+          `<div class="skill-row-info"><strong>${skill.name}</strong><small>Lv.${level} · 倍率 ${nowMultiplier}%${maxed ? "" : ` → ${nextMultiplier}%`}</small><span>${skill.desc}</span></div>` +
+          `<button class="link-button" data-upgrade-skill="${index}" ${maxed || points < 1 ? "disabled" : ""}>${maxed ? "已满级" : "升级（1 点）"}</button>` +
+          `</div>`
+        );
+      })
+      .join("")
+  );
+}
+
+// 任务链（原型 v1）：当前章节 10 个剧情节点的完成状态一览。
+export function renderQuestChain() {
+  const map = activeMap();
+  const chapterFirst = (map.chapter - 1) * 10;
+  const signature = `chapter:${map.chapter}:${MAP_ORDER.slice(chapterFirst, chapterFirst + 10)
+    .map((id) => (state.mapProgress?.[id]?.completed ? 1 : 0))
+    .join("")}:${state.currentMapId}`;
+  if (!panelChanged($("questChainList"), signature)) return;
+  setText($("questChainTitle"), `第 ${map.chapter} 章 · 任务链`);
+  setHtml(
+    $("questChainList"),
+    MAP_ORDER.slice(chapterFirst, chapterFirst + 10)
+      .map((id, index) => {
+        const entry = MAPS[id];
+        const done = Boolean(state.mapProgress?.[id]?.completed);
+        const current = id === state.currentMapId;
+        return `<span class="quest-chain-node ${done ? "done" : ""} ${current ? "current" : ""}" title="${entry.story.beatTitle}：${entry.story.summary}">${done ? "✓" : current ? "▸" : index + 1} ${entry.story.beatTitle}</span>`;
+      })
+      .join("")
+  );
+}
+
+// 低等级进图确认弹层（替代 window.confirm；传 null / 空对象隐藏）。
+export function renderTravelConfirm(pending = null) {
+  const overlay = $("travelConfirm");
+  const { exit, target } = pending || {};
+  if (!exit || !target) {
+    overlay.classList.add("hidden");
+    return;
+  }
+  overlay.classList.remove("hidden");
+  setText(
+    $("travelConfirmText"),
+    `即将进入 ${target.name}（推荐 Lv.${target.levelMin}-${target.levelMax}），你当前 Lv.${state.player.level}。危险等级：${target.dangerLabel}`
+  );
+}
+
 export function renderAll() {
   if (!state) return;
   drawWorld();
   renderMapHeader();
   renderMapObjective();
+  renderQuestChain();
   renderRegion();
   renderPlayer();
   renderTarget();
   renderNormalAttack();
   renderSkills();
+  renderSkillModal();
   renderEquipment();
   renderInventory();
   renderLog();

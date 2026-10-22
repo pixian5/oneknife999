@@ -8,7 +8,7 @@ const { browserLaunchOptions } = require("./browser-options.cjs");
 // 3) 大写字母与方向键（Shift/CapsLock 状态）必须可以移动。
 const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1";
 const ROOT = BASE_URL.split("?")[0];
-const STORAGE_KEY = "oneknife999-prototype-save-v3";
+const STORAGE_KEY = "oneknife999-prototype-save-v4";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -21,6 +21,7 @@ const pressKey = (page, key, down) =>
   );
 
 function makeSavedRun() {
+  // v4 存档格式：12 装备槽位 + 技能点 / 技能等级 / 罪恶值字段。
   const equipment = {
     weapon: {
       id: "test-weapon",
@@ -33,11 +34,20 @@ function makeSavedRun() {
       value: 1,
       desc: "回归测试用"
     },
+    helmet: null,
     neck: null,
-    boots: null
+    armor: null,
+    braceletL: null,
+    braceletR: null,
+    ringL: null,
+    ringR: null,
+    belt: null,
+    boots: null,
+    medal: null,
+    talisman: null
   };
   return {
-    saveVersion: 3,
+    saveVersion: 4,
     classId: "warrior",
     currentMapId: "ash_outskirts",
     player: {
@@ -62,6 +72,9 @@ function makeSavedRun() {
       previewSkill: null,
       equipment,
       poison: 0,
+      skillPoints: 4,
+      skillLevels: [0, 0, 0, 0],
+      sin: 0,
       visitedMaps: { ash_outskirts: true }
     },
     inventory: [

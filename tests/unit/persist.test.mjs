@@ -21,13 +21,45 @@ test("migrateSave：v2 旧档缺少等级时等级下限回退为 1", () => {
 });
 
 test("migrateSave：当前版本存档不做迁移但会归一版本号", () => {
-  const current = { saveVersion: 3, classId: "taoist", player: { level: 40 } };
+  const current = { saveVersion: CURRENT_SAVE_VERSION, classId: "taoist", player: { level: 40 } };
   const result = migrateSave(current);
   assert.ok(result);
   assert.equal(result.migrated, false);
-  assert.equal(result.fromVersion, 3);
+  assert.equal(result.fromVersion, CURRENT_SAVE_VERSION);
   assert.equal(result.saved.saveVersion, CURRENT_SAVE_VERSION);
   assert.equal(result.saved.player.migrationLevelFloor, undefined, "当前版本存档不应被写入迁移字段");
+});
+
+test("migrateSave：v3 存档升级到 v4（12 部位补齐、技能点按等级折算、罪恶值归零）", () => {
+  const legacyWeapon = { id: "w1", slot: "weapon", power: 20 };
+  const legacy = {
+    saveVersion: 3,
+    classId: "warrior",
+    currentMapId: "stage_050",
+    player: { level: 31, equipment: { weapon: legacyWeapon, neck: null, boots: null } },
+    equipment: { weapon: legacyWeapon, neck: null, boots: null },
+    inventory: [],
+    mapProgress: {}
+  };
+  const result = migrateSave(legacy);
+  assert.ok(result, "v3 存档应能迁移");
+  assert.equal(result.fromVersion, 3);
+  assert.equal(result.saved.saveVersion, CURRENT_SAVE_VERSION);
+  const equipment = result.saved.equipment;
+  assert.equal(Object.keys(equipment).length, 12, "装备应扩展为 12 部位");
+  assert.equal(equipment.weapon, legacyWeapon, "既有装备不应丢失");
+  for (const slotKey of ["helmet", "armor", "braceletL", "braceletR", "ringL", "ringR", "belt", "medal", "talisman"])
+    assert.equal(equipment[slotKey], null, `${slotKey} 应补齐为空位`);
+  assert.equal(result.saved.player.skillPoints, 30, "技能点 = (等级-1) × 1");
+  assert.deepEqual(result.saved.player.skillLevels, [0, 0, 0, 0]);
+  assert.equal(result.saved.player.sin, 0);
+});
+
+test("migrateSave：v2 旧档直接迁移到当前版本（跨多级迁移链）", () => {
+  const result = migrateSave({ classId: "mage", player: { level: 16 } });
+  assert.equal(result.fromVersion, 2);
+  assert.equal(result.saved.player.skillPoints, 15, "跨级迁移同样获得技能点折算");
+  assert.equal(Object.keys(result.saved.equipment).length, 12);
 });
 
 test("migrateSave：拒绝读取更高版本存档（禁止降级）", () => {

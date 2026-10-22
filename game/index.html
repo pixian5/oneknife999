@@ -19,6 +19,11 @@
         </div>
         <div class="server-status"><span class="status-dot"></span> 烬阳-01 <span class="status-divider"></span> 延迟 42ms</div>
         <div class="top-actions">
+          <button class="icon-button" id="skillBtn" title="技能升级（快捷键 K）">技能<span class="point-badge hidden" id="skillPointBadge">0</span></button>
+          <button class="icon-button" id="muteBtn" title="开关音效">音效</button>
+          <button class="icon-button" id="exportBtn" title="导出存档为 JSON 文件">导出</button>
+          <button class="icon-button" id="importBtn" title="从 JSON 文件导入存档">导入</button>
+          <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
           <button class="icon-button" id="saveBtn" title="保存当前进度">保存</button>
           <button class="icon-button" id="resetBtn" title="重新开始本次体验">重置</button>
         </div>
@@ -68,7 +73,8 @@
               <div class="meter-label"><span>升级进度</span><b id="expText">0 / 120</b></div>
               <div class="meter exp"><span id="expBar"></span></div>
             </div>
-            <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span></div>
+            <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span><span class="sin-pill hidden" id="sinPill">罪恶 0</span></div>
+            <div class="stat-row stats-line" id="statsLine">击杀 0 · 死亡 0 · 通关 0/100</div>
           </section>
 
           <section class="quest-card panel-block">
@@ -82,6 +88,11 @@
           <section class="region-card panel-block">
             <div class="section-heading"><span><i class="section-icon">★</i> 区域导航</span><span class="region-tip">走出口切换</span></div>
             <div class="region-list" id="regionList"></div>
+          </section>
+
+          <section class="quest-chain-card panel-block">
+            <div class="section-heading"><span><i class="section-icon">◈</i> <span id="questChainTitle">任务链</span></span><span class="quest-chain-tip">本章进度</span></div>
+            <div class="quest-chain-list" id="questChainList"></div>
           </section>
 
           <section class="equipment-card panel-block">
@@ -125,6 +136,26 @@
       </div>
       <div class="class-options" id="classOptions"></div>
       <div class="modal-footnote">本原型使用服务器权威规则的前端模拟：掉落、升级和装备结果可在右侧实时查看。</div>
+    </div>
+
+    <div class="travel-confirm hidden" id="travelConfirm" role="dialog" aria-modal="true" aria-label="确认进入下一张地图">
+      <div class="travel-confirm-box">
+        <strong>确认进入</strong>
+        <p id="travelConfirmText">目标地图</p>
+        <div class="travel-confirm-actions">
+          <button class="icon-button" data-travel-cancel>取消（Esc）</button>
+          <button class="icon-button primary" data-travel-ok>仍要进入</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="class-modal skill-modal hidden" id="skillModal" role="dialog" aria-modal="true" aria-label="技能升级">
+      <div class="skill-modal-box">
+        <div class="section-heading"><span><i class="section-icon">⚔</i> 技能升级</span><b id="skillModalPoints">可用技能点：0</b></div>
+        <p class="skill-modal-tip">升级获得技能点；每级提高该技能倍率 +6%（原型简化，上限 10 级）。按 K 或点击右上角「技能」关闭。</p>
+        <div class="skill-modal-list" id="skillModalList"></div>
+        <button class="icon-button" data-close-modal>关闭</button>
+      </div>
     </div>
 
     <div class="toast" id="toast" role="status"></div>

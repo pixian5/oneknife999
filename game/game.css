@@ -149,3 +149,37 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
   .map-header { padding-bottom: 7px; }.world-footer { padding-top: 5px; }
   .map-objective { top: 12px; right: 12px; width: min(250px, calc(100% - 24px)); }.boss-alert { display: none; }
 }
+
+/* ============ 0.2.5 新增：技能点角标 / 罪恶胶囊 / 统计行 / 任务链 / 弹层 ============ */
+.hidden { display: none !important; }
+.point-badge { display: inline-block; min-width: 15px; margin-left: 5px; padding: 1px 4px; border-radius: 8px; background: var(--amber); color: #17140c; font-size: 9px; font-weight: 700; text-align: center; }
+.icon-button.primary { border-color: rgba(231, 179, 107, .55); color: var(--amber); }
+.sin-pill { padding: 2px 7px; border: 1px solid rgba(241, 109, 102, .4); color: #f3b1a8; font-size: 10px; }
+.sin-pill.red { background: rgba(241, 109, 102, .18); font-weight: 700; }
+.stats-line { margin-top: 5px; color: var(--muted-2); font-size: 10px; }
+.quest-chain-card { padding: 9px 10px; }
+.quest-chain-tip { color: var(--muted-2); font-size: 10px; }
+.quest-chain-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.quest-chain-node { padding: 2px 7px; border: 1px solid var(--line); color: var(--muted-2); font-size: 9px; white-space: nowrap; }
+.quest-chain-node.done { border-color: rgba(98, 213, 198, .3); color: var(--teal); }
+.quest-chain-node.current { border-color: var(--amber); color: var(--amber); }
+.travel-confirm { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; padding: 20px; background: rgba(6, 11, 14, .72); backdrop-filter: blur(8px); }
+.travel-confirm-box { width: min(420px, 100%); padding: 18px; border: 1px solid rgba(231, 179, 107, .4); background: rgba(14, 24, 29, .97); }
+.travel-confirm-box strong { color: var(--amber); font-size: 15px; }
+.travel-confirm-box p { margin: 10px 0 14px; color: var(--muted); line-height: 1.6; font-size: 12px; }
+.travel-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.skill-modal { justify-content: center; }
+.skill-modal-box { width: min(560px, 100%); max-height: 82vh; overflow-y: auto; padding: 18px; border: 1px solid rgba(98, 213, 198, .3); background: rgba(13, 23, 28, .98); }
+.skill-modal-box .section-heading b { color: var(--amber); font-size: 12px; }
+.skill-modal-tip { margin: 8px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.skill-modal-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.skill-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); background: #101b20; }
+.skill-row-info { flex: 1; min-width: 0; }
+.skill-row-info strong { color: var(--ink); font-size: 13px; }
+.skill-row-info small { display: block; margin-top: 3px; color: var(--amber); font-size: 10px; }
+.skill-row-info span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.skill-row .link-button { flex: 0 0 auto; }
+.skill-row .link-button:disabled { opacity: .45; cursor: not-allowed; }
+.equipment-slot .slot-enhance { position: absolute; top: 2px; right: 3px; color: var(--amber); font-size: 8px; font-weight: 700; }
+.equipment-slot .slot-bless { position: absolute; bottom: 12px; right: 3px; color: var(--teal); font-size: 7px; }
+.equipment-grid { grid-template-columns: repeat(6, 1fr); }

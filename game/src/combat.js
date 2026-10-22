@@ -1,11 +1,13 @@
 // 《一刀999》战斗结算纯逻辑：伤害计算与击杀收益。
 // 不依赖 DOM 与游戏全局状态，随机数由参数注入，便于单元测试与未来服务端共享。
+import { effectiveItemPower } from "./config.js";
 
 // 计算一次攻击的伤害。
 // target 需提供 defense/maxHp/boss；player 需提供 level/charge/equipment；hero 为职业配置。
 // 返回 { damage, critical, chargeGain }：伤害、是否触发满破势爆发、本次应积累的破势值。
+// 装备战力按有效值计入（基础 power + 强化加成 + 攻击词缀，见 config.js effectiveItemPower）。
 export function computeDamage({ target, hero, player, multiplier, kind, fastForward = false, random = Math.random }) {
-  const weaponPower = Object.values(player.equipment || {}).reduce((sum, item) => sum + (item?.power || 0), 0);
+  const weaponPower = Object.values(player.equipment || {}).reduce((sum, item) => sum + effectiveItemPower(item), 0);
   const base = hero.attack + player.level * 4 + weaponPower * 0.9;
   const variance = random() * 0.2 + 0.9;
   const defense = target.defense || 0;

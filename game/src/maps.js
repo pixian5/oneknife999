@@ -1,8 +1,12 @@
-import { MONSTER_FLAVOR, MONSTER_BEHAVIORS } from "./config.js";
+import { MONSTER_FLAVOR, MONSTER_BEHAVIORS, EQUIPMENT_SLOTS } from "./config.js";
 import { seededRandom, distanceToPath, pathLength, pointOnPath, routePoint } from "./geometry.js";
 
 // 《一刀999》地图数据：4 张手工地图 + 96 张确定性生成地图，
 // 以及关卡顺序、通关规则、剧情节点与战术节点契约。
+
+// 12 部位生成掉落的命名辅助（槽位定义见 config.js 的 EQUIPMENT_SLOTS）。
+const slotLabel = (slotKey) => EQUIPMENT_SLOTS[slotKey]?.label || slotKey;
+const slotGlyph = (slotKey) => EQUIPMENT_SLOTS[slotKey]?.glyph || "装";
 
 export const MAPS = {
   ash_outskirts: {
@@ -1178,6 +1182,19 @@ export function generatedMap(stageNumber) {
         color: "#a88ce3",
         desc: `第 ${stageNumber} 关护符 · 生命与战力成长`
       },
+      // 12 部位轮转：每关除武器/项链/战靴外再掉两个轮转部位，96 关覆盖全身 12 槽位。
+      ...["helmet", "armor", "belt", "medal", "talisman", "ringL", "ringR", "braceletL", "braceletR"]
+        .slice((stageNumber - 5) % 9, ((stageNumber - 5) % 9) + 2)
+        .map((slotKey, index) => ({
+          name: `${chapter.short}${slotLabel(slotKey)}·${stageNumber}`,
+          slot: slotKey,
+          quality: index === 0 ? "purple" : "blue",
+          glyph: slotGlyph(slotKey),
+          power: anchored(40 - index * 4, 0.66),
+          value: anchored(150, 4),
+          color: index === 0 ? "#a88ce3" : "#78b6ec",
+          desc: `第 ${stageNumber} 关${slotLabel(slotKey)} · 攻守成长`
+        })),
       {
         name: `${chapter.short}行靴·${stageNumber}`,
         slot: "boots",

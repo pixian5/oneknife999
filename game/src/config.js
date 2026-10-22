@@ -1,8 +1,9 @@
 // 《一刀999》静态配置：职业、怪物资料、掉落池与运行环境标记。
 // 只包含数据与纯函数，不依赖游戏运行时状态。
 
-export const STORAGE_KEY = "oneknife999-prototype-save-v3";
-export const LEGACY_STORAGE_KEY = "oneknife999-prototype-save-v2";
+export const STORAGE_KEY = "oneknife999-prototype-save-v4";
+export const LEGACY_STORAGE_KEY = "oneknife999-prototype-save-v3";
+export const LEGACY_STORAGE_KEY_V2 = "oneknife999-prototype-save-v2";
 // 允许在无 DOM 环境（如 Node 单测、未来服务端共享）导入本模块
 const hasWindow = typeof window !== "undefined";
 const URL_FLAGS = new URLSearchParams(hasWindow ? window.location.search : "");
@@ -374,4 +375,100 @@ export function monsterProfile(entity, map) {
           : "碑裂震击：低血量后制造地裂圈";
   const summon = map.boss.summonMob !== undefined ? "召唤腐工：周期召来普通怪物" : `阶段转换：共 ${map.boss.phases} 个阶段`;
   return { intro: MONSTER_FLAVOR[entity.name] || "当前区域的首领。", skills: [special, summon] };
+}
+
+// ============ 0.2.5 装备 / 强化 / 词缀 / 技能升级 / PK 配置（对齐 docs/02、03、05、11） ============
+
+// 12 装备部位（docs/03）：键名即存档与 equipment 对象的字段；hp 为该部位提供的固定生命加成。
+export const EQUIPMENT_SLOTS = {
+  weapon: { label: "武器", glyph: "刃", hp: 0 },
+  helmet: { label: "头盔", glyph: "盔", hp: 40 },
+  neck: { label: "项链", glyph: "玉", hp: 45 },
+  armor: { label: "衣服", glyph: "甲", hp: 60 },
+  braceletL: { label: "左手镯", glyph: "镯", hp: 20 },
+  braceletR: { label: "右手镯", glyph: "镯", hp: 20 },
+  ringL: { label: "左戒指", glyph: "戒", hp: 15 },
+  ringR: { label: "右戒指", glyph: "戒", hp: 15 },
+  belt: { label: "腰带", glyph: "带", hp: 30 },
+  boots: { label: "靴子", glyph: "靴", hp: 0 },
+  medal: { label: "勋章", glyph: "勋", hp: 35 },
+  talisman: { label: "玉佩", glyph: "佩", hp: 35 }
+};
+export const EQUIPMENT_SLOT_KEYS = Object.keys(EQUIPMENT_SLOTS);
+
+// 强化 +1~+15（docs/03）：失败不降级、不销毁；+10 起失败积累祝福值，满 100 下一次必成。
+// 金币消耗 = ENHANCE_BASE_COST × 1.5^(目标等级)；+8 起额外消耗 1 件材料类物品。
+export const ENHANCE_RULES = {
+  max: 15,
+  baseCost: 70,
+  costGrowth: 1.5,
+  materialFromLevel: 8,
+  rates: [
+    { from: 1, to: 5, rate: 1.0, blessingOnFail: 0 },
+    { from: 6, to: 8, rate: 0.7, blessingOnFail: 15 },
+    { from: 9, to: 12, rate: 0.4, blessingOnFail: 12 },
+    { from: 13, to: 15, rate: 0.2, blessingOnFail: 10 }
+  ],
+  powerStep: 0.08 // 每级强化按基础 power 的 8% 提升有效战力
+};
+
+// 强化结算纯函数：返回 { canEnhance, reason, cost, materialNeeded, rate }。
+export function enhanceQuote(item, playerGold, inventory) {
+  const level = item?.enhance || 0;
+  if (!item || item.slot === "material" || item.slot === "consumable" || item.slot === "currency")
+    return { canEnhance: false, reason: "该物品不能强化", cost: 0, materialNeeded: 0, rate: 0 };
+  if (level >= ENHANCE_RULES.max) return { canEnhance: false, reason: "已达强化上限 +15", cost: 0, materialNeeded: 0, rate: 0 };
+  const target = level + 1;
+  const tier = ENHANCE_RULES.rates.find((rule) => target >= rule.from && target <= rule.to) || ENHANCE_RULES.rates.at(-1);
+  const cost = Math.round(ENHANCE_RULES.baseCost * Math.pow(ENHANCE_RULES.costGrowth, target));
+  const materialNeeded = target >= ENHANCE_RULES.materialFromLevel ? 1 : 0;
+  const hasMaterial = !materialNeeded || (inventory || []).some((entry) => entry.slot === "material");
+  const rate = item.blessing >= 100 ? 1 : tier.rate;
+  if (playerGold < cost) return { canEnhance: false, reason: `金币不足（需要 ${cost}）`, cost, materialNeeded, rate };
+  if (!hasMaterial) return { canEnhance: false, reason: "+8 起需要 1 件材料类物品", cost, materialNeeded, rate };
+  return { canEnhance: true, reason: "", cost, materialNeeded, rate };
+}
+
+// 词缀池（docs/03 七组的原型子集：主属性 / 生存 / 资源）。
+// value 为随关号缩放的区间；随机数由调用方注入，保证可单测。
+export const AFFIX_POOL = [
+  { group: "主属性", key: "attack", label: "攻击", base: 4, perStage: 0.35 },
+  { group: "生存", key: "hp", label: "生命", base: 14, perStage: 1.1 },
+  { group: "生存", key: "defense", label: "防御", base: 1, perStage: 0.16 },
+  { group: "资源", key: "regen", label: "恢复", base: 1, perStage: 0.06, percent: true }
+];
+
+// 技能升级（docs/02「每级提高倍率」的原型简化：每级 +6% 技能倍率，上限 10 级）。
+export const SKILL_UPGRADE = { maxLevel: 10, multiplierPerLevel: 0.06, pointsPerLevel: 1 };
+
+// PK 单机演示（docs/05）：主动击杀白名武者 +100 罪恶值；≥300 红名；红名死亡掉落 1 件穿戴装备；
+// 20 级前不能主动攻击玩家；罪恶值只在危险区击杀普通怪时下降（每只 -2），安全区挂机不下降。
+export const PK_RULES = {
+  minLevelToAttack: 20,
+  sinPerKill: 100,
+  redNameThreshold: 300,
+  sinDecayPerDangerKill: 2,
+  dropOnRedDeath: 1
+};
+
+// 装备有效战力：基础 power + 强化加成 + 攻击词缀。
+export function effectiveItemPower(item) {
+  if (!item) return 0;
+  const enhance = item.enhance || 0;
+  const affixAttack = (item.affixes || []).filter((affix) => affix.key === "attack").reduce((sum, affix) => sum + affix.value, 0);
+  return Math.round((item.power || 0) * (1 + ENHANCE_RULES.powerStep * enhance) + affixAttack);
+}
+
+// 装备提供的生命加成：部位固定值 + 生命词缀（强化不放大生命）。
+export function equipmentHpBonus(item, slotKey) {
+  if (!item) return 0;
+  const slotBase = EQUIPMENT_SLOTS[slotKey]?.hp || 0;
+  const affixHp = (item.affixes || []).filter((affix) => affix.key === "hp").reduce((sum, affix) => sum + affix.value, 0);
+  return slotBase + affixHp;
+}
+
+// 装备提供的防御加成：防御词缀之和（原型不做部位基础防御）。
+export function equipmentDefenseBonus(item) {
+  if (!item) return 0;
+  return (item.affixes || []).filter((affix) => affix.key === "defense").reduce((sum, affix) => sum + affix.value, 0);
 }

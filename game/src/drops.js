@@ -1,4 +1,5 @@
 import { clamp, distance, weightedPick } from "./util.js";
+import { AFFIX_POOL } from "./config.js";
 
 // 《一刀999》掉落与场景节点收益纯逻辑：掉落掷点、拾取结算与战术节点效果。
 // 不依赖 DOM 与游戏全局状态，随机数 / 时间由参数注入，便于单元测试与未来服务端共享。
@@ -14,14 +15,32 @@ export const BOSS_MARK_SHARD = {
   desc: "拾取后获得 3 枚首领印记"
 };
 
+// 为装备滚 0~2 条词缀（docs/03 主属性/生存/资源三组的原型实现）。
+// 数值区间按掉落者等级缩放；同组最多 1 条；随机数由参数注入。
+export function rollAffixes({ level = 1, count, random = Math.random }) {
+  const target = count ?? (random() < 0.35 ? (random() < 0.3 ? 2 : 1) : 0);
+  if (target <= 0) return [];
+  const picked = [];
+  const pool = [...AFFIX_POOL];
+  for (let index = 0; index < target && pool.length; index += 1) {
+    const entry = pool.splice(Math.floor(random() * pool.length), 1)[0];
+    const scale = entry.base + entry.perStage * Math.max(0, level - 1);
+    const value = Math.max(1, Math.round(scale * (0.7 + random() * 0.6)));
+    picked.push({ group: entry.group, key: entry.key, label: entry.label, value, percent: Boolean(entry.percent) });
+  }
+  return picked;
+}
+
 // 掷出一件掉落物：先抽地图专属物品，再用权重池决定最终物品，最后生成位置与金币数量。
-// 随机调用顺序与旧实现保持一致（地图物品 → 权重池 → 唯一 id → x → y → 金币数量）。
+// 装备类物品追加词缀滚动（随机调用顺序：地图物品 → 权重池 → 词缀数 → 词缀 → 唯一 id → x → y → 金币数量）。
 export function rollDropItem({ source, mapDrops, commonDrops, random = Math.random, now = Date.now(), roll = 0 }) {
   const mapItem = mapDrops[Math.floor(random() * mapDrops.length)];
   const pool = commonDrops.map((item) => ({ item, weight: item.weight }));
   pool.push({ item: mapItem, weight: source.boss ? 62 : 20 });
   if (source.boss) pool.push({ item: BOSS_MARK_SHARD, weight: 18 });
   const rolled = weightedPick(pool, random);
+  const isEquipment = rolled.slot && !["consumable", "currency", "material"].includes(rolled.slot);
+  const affixes = isEquipment ? rollAffixes({ level: source.level, random }) : undefined;
   const item = {
     ...rolled,
     id: `item-${now}-${roll}-${random()}`,
@@ -29,6 +48,7 @@ export function rollDropItem({ source, mapDrops, commonDrops, random = Math.rand
     y: source.y + (random() * 48 - 24),
     source: source.name
   };
+  if (affixes && affixes.length) item.affixes = affixes;
   if (item.kind === "gold") item.amount = Math.round(source.boss ? random() * 80 + 70 : random() * 22 + 12);
   return item;
 }

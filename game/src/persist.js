@@ -1,10 +1,10 @@
-import { CLASSES, STORAGE_KEY, LEGACY_STORAGE_KEY } from "./config.js";
+import { CLASSES, STORAGE_KEY, LEGACY_STORAGE_KEY, LEGACY_STORAGE_KEY_V2, EQUIPMENT_SLOT_KEYS, SKILL_UPGRADE } from "./config.js";
 import { state } from "./runtime.js";
 
 // 《一刀999》存档读写：localStorage 存档落盘、版本迁移表驱动的 schema 升级与清理。
 
 // 当前存档 schema 版本：每次结构变化 +1，并在下方迁移表补一个纯函数即可。
-export const CURRENT_SAVE_VERSION = 3;
+export const CURRENT_SAVE_VERSION = 4;
 
 // 迁移表：键 = 源版本号，值 = 把存档从「键版本」升级到「键版本 + 1」的纯函数。
 // 约定：纯函数只读写传入对象（可返回新对象），不触碰 localStorage 与游戏状态。
@@ -14,6 +14,21 @@ const SAVE_MIGRATIONS = {
   2: (saved) => {
     saved.player ||= {};
     saved.player.migrationLevelFloor = Math.max(1, Number(saved.player.level) || 1);
+    return saved;
+  },
+  // v3 → v4：装备从 3 部位扩展到 12 部位（缺失槽位补 null）；
+  // 新增技能点（按既有等级折算，官方不直售技能等级，等级本身来自百图通关数）
+  // 与技能等级数组、罪恶值字段。
+  3: (saved) => {
+    saved.player ||= {};
+    const equipment = { ...(saved.equipment || saved.player.equipment || {}) };
+    for (const slotKey of EQUIPMENT_SLOT_KEYS) equipment[slotKey] = equipment[slotKey] || null;
+    saved.equipment = equipment;
+    saved.player.equipment = equipment;
+    const level = Math.max(1, Number(saved.player.level) || 1);
+    saved.player.skillPoints = Math.max(0, (level - 1) * SKILL_UPGRADE.pointsPerLevel);
+    saved.player.skillLevels = [0, 0, 0, 0];
+    saved.player.sin = 0;
     return saved;
   }
 };
@@ -55,11 +70,12 @@ export function persistGame() {
   return true;
 }
 
-// 读取存档并升级到当前版本：优先当前 key，没有时读取 v2 旧 key（不删除旧档）。
+// 读取存档并升级到当前版本：优先当前 key，再依次回退 v3 / v2 旧 key（不删除旧档）。
 // 返回 { saved, migrated, fromVersion }，无存档或无法迁移时返回 null。
 export function readSavedGame() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY_V2);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !CLASSES[parsed.classId]) return null;
@@ -71,8 +87,9 @@ export function readSavedGame() {
   }
 }
 
-// 清除 v3 当前存档与 v2 旧存档。
+// 清除 v4 当前存档与 v3 / v2 旧存档。
 export function clearStorage() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(LEGACY_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_STORAGE_KEY_V2);
 }

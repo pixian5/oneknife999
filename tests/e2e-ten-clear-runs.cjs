@@ -257,7 +257,7 @@ async function clearMap(page, mapId) {
       await advance(page, 160);
       snap = await snapshot(page);
       if (!snap.progress[mapId]?.resourceClaimed || snap.player.gold <= goldBefore) throw new Error("支路秘藏未完成领取：" + mapId);
-      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
       if (!saved?.mapProgress?.[mapId]?.resourceClaimed) throw new Error("支路秘藏领取未自动保存：" + mapId);
       process.stdout.write(`BRANCH ${mapId} CLAIMED+SAVED\n`);
     }
@@ -294,7 +294,7 @@ async function clearMap(page, mapId) {
 }
 
 async function assertAutoSaveCheckpoint(page, mapId) {
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
   if (!saved?.mapProgress?.[mapId]?.completed) throw new Error(`${mapId} 通关后未自动保存：${JSON.stringify(saved?.mapProgress?.[mapId])}`);
   await page.reload({ waitUntil: "domcontentloaded" });
   await advance(page, 200);
@@ -471,7 +471,7 @@ async function runJourney(browser, runIndex) {
   const cacheSnapshot = await snapshot(page);
   if (!cacheSnapshot.progress[MAP_ORDER[0]]?.resourceClaimed)
     throw new Error(`秘藏补给箱未完成一次性搜索：${JSON.stringify(cacheSnapshot)}`);
-  const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
   if (!cacheSave?.mapProgress?.[MAP_ORDER[0]]?.resourceClaimed) throw new Error("秘藏搜索结果未自动保存");
   const site = firstMap.tacticalPoints.find((point) => point.kind === "site");
   if (!(await moveToPoint(page, site, MAP_ORDER[0], 48))) throw new Error("无法抵达首张地图场景交互节点");
@@ -480,7 +480,7 @@ async function runJourney(browser, runIndex) {
   const siteSnapshot = await snapshot(page);
   if (!siteSnapshot.progress[MAP_ORDER[0]]?.siteClaimed || !siteSnapshot.logs.some((message) => message.includes("已激活")))
     throw new Error("场景交互节点未生效：" + JSON.stringify(siteSnapshot));
-  const siteSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  const siteSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
   if (!siteSave?.mapProgress?.[MAP_ORDER[0]]?.siteClaimed) throw new Error("场景交互节点未自动保存");
   const claimedCharge = siteSnapshot.player.charge;
   await page.keyboard.press("f");
@@ -499,7 +499,15 @@ async function runJourney(browser, runIndex) {
     await assertAutoSaveCheckpoint(page, mapId);
     if (mapIndex < MAP_ORDER.length - 1) {
       await page.keyboard.press("t");
-      await advance(page, 250);
+      await advance(page, 150);
+      // 0.2.5：低等级进高压图改为游戏内确认弹层（替代 window.confirm），出现时确认进入。
+      const confirmVisible = await page.evaluate(() => !document.querySelector("#travelConfirm").classList.contains("hidden"));
+      if (confirmVisible) {
+        await page.locator("[data-travel-ok]").click();
+        await advance(page, 200);
+      } else {
+        await advance(page, 100);
+      }
       const next = await snapshot(page);
       if (next.currentMapId !== MAP_ORDER[mapIndex + 1]) throw new Error(`${mapId} 通关后未进入下一地图`);
     }
@@ -521,7 +529,7 @@ async function assertLegacyMigration(browser) {
   await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
-    localStorage.removeItem("oneknife999-prototype-save-v3");
+    localStorage.removeItem("oneknife999-prototype-save-v4");
     localStorage.setItem(
       "oneknife999-prototype-save-v2",
       JSON.stringify({
@@ -544,23 +552,24 @@ async function assertLegacyMigration(browser) {
   const snap = await snapshot(page);
   const stored = await page.evaluate(() => ({
     v2: localStorage.getItem("oneknife999-prototype-save-v2"),
-    v3: JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null")
+    v4: JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null")
   }));
   if (snap?.currentMapId !== "red_sand_desert" || snap.player.level !== 16 || !snap.progress.red_sand_desert?.completed)
     throw new Error(`v2 迁移状态错误：${JSON.stringify(snap)}`);
-  if (!stored.v2 || stored.v3?.saveVersion !== 3 || stored.v3?.player?.migrationLevelFloor !== 16)
+  if (!stored.v2 || stored.v4?.saveVersion !== 4 || stored.v4?.player?.migrationLevelFloor !== 16)
     throw new Error(`v2 迁移存储错误：${JSON.stringify(stored)}`);
-  process.stdout.write("MIGRATION v2->v3 SAVED+RESTORED\n");
+  process.stdout.write("MIGRATION v2->v4 SAVED+RESTORED\n");
   await page.locator("#resetBtn").click();
   const resetStorage = await page.evaluate(() => ({
     v2: localStorage.getItem("oneknife999-prototype-save-v2"),
-    v3: localStorage.getItem("oneknife999-prototype-save-v3")
+    v3: localStorage.getItem("oneknife999-prototype-save-v3"),
+    v4: localStorage.getItem("oneknife999-prototype-save-v4")
   }));
-  if (resetStorage.v2 || resetStorage.v3) throw new Error(`重置后旧存档仍存在：${JSON.stringify(resetStorage)}`);
+  if (resetStorage.v2 || resetStorage.v3 || resetStorage.v4) throw new Error(`重置后旧存档仍存在：${JSON.stringify(resetStorage)}`);
   await page.reload({ waitUntil: "domcontentloaded" });
   await advance(page, 200);
   if (await snapshot(page)) throw new Error(`重置后刷新不应自动恢复存档：${JSON.stringify(await snapshot(page))}`);
-  process.stdout.write("RESET v2+v3 CLEARED+RESTORED\n");
+  process.stdout.write("RESET v2+v3+v4 CLEARED+RESTORED\n");
   await context.close();
 }
 
@@ -571,10 +580,25 @@ async function assertAssetAutosave(browser) {
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     localStorage.clear();
+    // v4 存档：12 装备槽位 + 技能点 / 技能等级 / 罪恶值字段。
+    const equipment = {
+      weapon: null,
+      helmet: null,
+      neck: null,
+      armor: null,
+      braceletL: null,
+      braceletR: null,
+      ringL: null,
+      ringR: null,
+      belt: null,
+      boots: null,
+      medal: null,
+      talisman: null
+    };
     localStorage.setItem(
-      "oneknife999-prototype-save-v3",
+      "oneknife999-prototype-save-v4",
       JSON.stringify({
-        saveVersion: 3,
+        saveVersion: 4,
         classId: "warrior",
         currentMapId: "ash_outskirts",
         player: {
@@ -586,7 +610,10 @@ async function assertAssetAutosave(browser) {
           gold: 40,
           marks: 0,
           potion: 3,
-          equipment: { weapon: null, neck: null, boots: null }
+          equipment,
+          skillPoints: 0,
+          skillLevels: [0, 0, 0, 0],
+          sin: 0
         },
         inventory: [
           {
@@ -601,7 +628,7 @@ async function assertAssetAutosave(browser) {
             desc: "资产保存回归"
           }
         ],
-        equipment: { weapon: null, neck: null, boots: null },
+        equipment,
         mapProgress: {}
       })
     );
@@ -616,7 +643,7 @@ async function assertAssetAutosave(browser) {
     item.click();
   });
   await advance(page, 100);
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v3") || "null"));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
   if (saved?.player?.equipment?.weapon?.id !== "asset-test-weapon" || saved.inventory?.length !== 0)
     throw new Error(`装备变更未自动保存：${JSON.stringify(saved)}`);
   process.stdout.write("ASSET EQUIP SAVED+RESTORED\n");
@@ -635,7 +662,7 @@ async function assertCorruptedSaveFallback(browser) {
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem("oneknife999-prototype-save-v3", '{"saveVersion":3,"classId":"warrior","currentMapId":"ash_outki');
+    localStorage.setItem("oneknife999-prototype-save-v4", '{"saveVersion":4,"classId":"warrior","currentMapId":"ash_outki');
   });
   await page.reload({ waitUntil: "domcontentloaded" });
   await advance(page, 200);
