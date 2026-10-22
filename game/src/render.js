@@ -2,7 +2,7 @@ import { monsterProfile, EQUIPMENT_SLOTS, EQUIPMENT_SLOT_KEYS, effectiveItemPowe
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber } from "./util.js";
-import { state, moveTarget, activeMap, activeHero, mapProgress, playerMaxHp, isForwardExit } from "./runtime.js";
+import { state, moveTarget, activeMap, activeHero, mapProgress, playerMaxHp, isForwardExit, questStatus, chapterStats } from "./runtime.js";
 
 // 《一刀999》渲染层：Canvas 世界绘制、右侧 HUD 的 DOM 渲染与屏幕反馈。
 
@@ -1191,26 +1191,59 @@ export function renderSkillModal() {
   );
 }
 
-// 任务链（原型 v1）：当前章节 10 个剧情节点的完成状态一览。
+// 任务链（原型 v2，0.2.9）：两级状态机展示——当前任务卡（步骤/奖励/经验进度）
+// + 当前章 10 个剧情节点三态（✓ 完成 / ◉ 当前 / ○ 未到）+ 章末承接提示。
+// 状态由 questStatus / chapterStats 从 mapProgress 派生，奖励在通关时自动发放。
 export function renderQuestChain() {
   const map = activeMap();
-  const chapterFirst = (map.chapter - 1) * 10;
-  const signature = `chapter:${map.chapter}:${MAP_ORDER.slice(chapterFirst, chapterFirst + 10)
-    .map((id) => (state.mapProgress?.[id]?.completed ? 1 : 0))
-    .join("")}:${state.currentMapId}`;
+  const stats = chapterStats();
+  const view = objectiveView();
+  const progress = mapProgress();
+  const signature = [
+    "v2",
+    map.chapter,
+    stats.done,
+    progress.kills,
+    progress.need,
+    progress.bossDefeated,
+    progress.completed,
+    progress.rewardClaimed,
+    state.player.exp,
+    state.currentMapId
+  ].join("|");
   if (!panelChanged($("questChainList"), signature)) return;
-  setText($("questChainTitle"), `第 ${map.chapter} 章 · 任务链`);
+  const chapterName = map.story.chapterTitle;
+  setText($("questChainTitle"), `${chapterName} · 任务链`);
+  setText($("questChainTip"), `${stats.done}/${stats.total} 完成`);
+  const bossMark = progress.bossDefeated ? "首领已破" : progress.kills >= progress.need ? "前往首领" : "首领未破";
+  const expText = `经验 ${state.player.exp}/100（等级由通关数决定）`;
+  const rewardText = progress.rewardClaimed ? `通关奖励已领：60 金币 + 8 首领印记` : `通关奖励：60 金币 + 8 首领印记`;
+  const nextChapter = stats.complete ? (map.chapter < 10 ? `第 ${map.chapter + 1} 章已解锁` : "十章已全部完成") : "";
+  const nodes = stats.ids
+    .map((id, index) => {
+      const entry = MAPS[id];
+      const qs = questStatus(id);
+      const mark = qs.completed ? "✓" : qs.status === "active" ? "◉" : "○";
+      const cls = qs.completed ? "done" : qs.status === "active" ? "current" : "";
+      return `<span class="quest-chain-node ${cls}" title="${entry.story.beatTitle}：${entry.story.summary}">${mark} ${entry.story.beatTitle}</span>`;
+    })
+    .join("");
   setHtml(
     $("questChainList"),
-    MAP_ORDER.slice(chapterFirst, chapterFirst + 10)
-      .map((id, index) => {
-        const entry = MAPS[id];
-        const done = Boolean(state.mapProgress?.[id]?.completed);
-        const current = id === state.currentMapId;
-        return `<span class="quest-chain-node ${done ? "done" : ""} ${current ? "current" : ""}" title="${entry.story.beatTitle}：${entry.story.summary}">${done ? "✓" : current ? "▸" : index + 1} ${entry.story.beatTitle}</span>`;
-      })
-      .join("")
+    `<div class="quest-current">
+       <div class="qc-title">${view.complete ? "本关已完成" : `当前任务 · ${entryTitle()}`}</div>
+       <div class="qc-goal">${view.complete ? "前往出口进入下一关" : `${view.text} · ${bossMark}`}</div>
+       <div class="qc-reward">${rewardText} · ${expText}</div>
+     </div>
+     <div class="quest-chain-list">${nodes}</div>
+     ${nextChapter ? `<div class="qc-chapter-done">${nextChapter}</div>` : ""}`
   );
+}
+
+// 当前关剧情节点标题（任务卡标题用，beatTitle 已含关号：如「001 · 异兆 · 灰烬村外」）。
+function entryTitle() {
+  const map = activeMap();
+  return `${map.story.beatTitle} · ${map.name}`;
 }
 
 // 低等级进图确认弹层（替代 window.confirm；传 null / 空对象隐藏）。

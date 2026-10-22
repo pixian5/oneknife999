@@ -104,6 +104,25 @@ export function isForwardExit(exit, mapId = state.currentMapId) {
   return MAP_ORDER.indexOf(exit.target) > MAP_ORDER.indexOf(mapId);
 }
 
+// 任务链状态机（原型 v2）：两级状态——关级三态 + 章级进度，全部由 mapProgress 派生，不新增存档字段。
+// 关级三态：available（未到达，非当前关且未完成）/ active（当前关进行中）/ completed（已通关，
+// 奖励在 checkMapCompletion 通关时自动发放：60 金币 + 8 首领印记，故 completed 已含 claimed）。
+export function questStatus(mapId = state.currentMapId) {
+  const progress = state.mapProgress?.[mapId];
+  if (!progress || !progress.completed) {
+    return { status: mapId === state.currentMapId ? "active" : "available", completed: false };
+  }
+  return { status: "completed", completed: true, rewardClaimed: Boolean(progress.rewardClaimed) };
+}
+
+// 章级进度：当前章 10 关的完成统计（用于任务链标题进度与章末承接展示）。
+export function chapterStats(chapterIndex = Math.floor(MAP_ORDER.indexOf(state.currentMapId) / 10)) {
+  const first = chapterIndex * 10;
+  const ids = MAP_ORDER.slice(first, first + 10);
+  const done = ids.filter((id) => state.mapProgress?.[id]?.completed).length;
+  return { chapterIndex, ids, done, total: ids.length, complete: done >= ids.length };
+}
+
 export function primaryExit() {
   const map = activeMap();
   return map.exits.find((exit) => isForwardExit(exit)) || null;
