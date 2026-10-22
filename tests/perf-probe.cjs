@@ -60,7 +60,7 @@ function summarize(frames) {
     while (Date.now() < endAt) {
       const key = keys[step % keys.length];
       await page.keyboard.down(key);
-      await page.keyboard.press("j");
+      await page.keyboard.press("x");
       await page.waitForTimeout(600);
       await page.keyboard.up(key);
       await page.keyboard.press(String((step % 4) + 1));

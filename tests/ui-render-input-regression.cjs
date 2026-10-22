@@ -169,7 +169,7 @@ async function verifyBossRespawnCountdown(page) {
   assert.ok(restore.slotFilled, "首个背包格应显示预置物品");
 
   await page.evaluate(() => {
-    window.__autoAttack = setInterval(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "j" })), 660);
+    window.__autoAttack = setInterval(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "x" })), 660);
   });
   let bossDead = false;
   for (let i = 0; i < 120 && !bossDead; i += 1) {

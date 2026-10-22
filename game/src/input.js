@@ -1,7 +1,8 @@
-import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress } from "./runtime.js";
-import { canvas, canvasPoint, showToast, objectiveView, renderAll } from "./render.js";
+import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress, keybindCapture } from "./runtime.js";
+import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybindPanel } from "./render.js";
 import { $, distance } from "./util.js";
 import { isMuted, toggleMute, unlockAudio } from "./audio.js";
+import { loadKeybinds, actionForKey, setKeybind, resetKeybinds } from "./keybinds.js";
 import {
   normalAttack,
   collectDrops,
@@ -78,6 +79,8 @@ function refreshMuteLabel() {
 }
 
 export function setupInput() {
+  // 先载入玩家自定义键位，保证后续 keydown 查表与 HUD 首帧文案就是最新绑定。
+  loadKeybinds();
   // 浏览器自动播放策略：首次真实交互解锁 AudioContext。
   const unlock = () => {
     unlockAudio();
@@ -88,24 +91,55 @@ export function setupInput() {
   window.addEventListener("keydown", unlock);
   window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
+
+    // 改键捕获：设置面板点击某个动作后，下一次按键直接写入该动作（Esc 取消）。
+    if (keybindCapture.action) {
+      event.preventDefault();
+      if (key === "escape") {
+        keybindCapture.action = null;
+        renderKeybindPanel();
+        showToast("已取消改键");
+        return;
+      }
+      const result = setKeybind(keybindCapture.action, key);
+      if (!result.ok) {
+        // 校验失败保持捕获态，玩家可以直接换一个键重试。
+        showToast(result.error);
+        return;
+      }
+      keybindCapture.action = null;
+      renderKeybindPanel();
+      renderAll();
+      showToast(`已绑定：${result.key.toUpperCase()}`);
+      return;
+    }
+
     keys[key] = true;
     if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
-    if (key === "escape") cancelTravel();
-    if (key === "j") normalAttack();
-    if (key === "f") collectDrops();
-    if (key === "q") usePotion();
-    if (key === "r") oneMoment();
-    if (key === "k") {
-      // K：打开/关闭技能升级弹窗
+    if (key === "escape") {
+      cancelTravel();
+      $("settingsModal").classList.add("hidden");
+      $("skillModal").classList.add("hidden");
+      renderAll();
+    }
+
+    // 0.3.2：动作全部走 keybinds 查表，默认普攻为 X（紧邻 1-4 技能键）。
+    const action = actionForKey(key);
+    if (!action) return;
+    if (action === "attack") normalAttack();
+    if (action === "potion") usePotion();
+    if (action === "pickup") collectDrops();
+    if (action === "ultimate") oneMoment();
+    if (action === "skillUpgrade") {
       $("skillModal").classList.toggle("hidden");
       renderAll();
     }
-    if (key === "t") {
+    if (action === "travel") {
       const exit = primaryExit();
       if (exit) tryTravel(exit);
       else showToast(mapProgress().completed ? "100 张地图已全部通关" : objectiveView().text);
     }
-    if (/^[1-4]$/.test(key)) castSkill(Number(key) - 1);
+    if (/^skill[1-4]$/.test(action)) castSkill(Number(action.slice(5)) - 1);
   });
   window.addEventListener("keyup", (event) => {
     keys[event.key.toLowerCase()] = false;
@@ -165,6 +199,34 @@ export function setupInput() {
   $("skillBtn").addEventListener("click", () => {
     $("skillModal").classList.toggle("hidden");
     renderAll();
+  });
+  // 键位设置弹窗：点击动作进入捕获态，下一次按键即绑定（Esc 取消，校验失败保持捕获）。
+  $("settingsBtn").addEventListener("click", () => {
+    keybindCapture.action = null;
+    $("skillModal").classList.add("hidden");
+    $("settingsModal").classList.toggle("hidden");
+    renderKeybindPanel();
+  });
+  $("settingsModal").addEventListener("click", (event) => {
+    const keyButton = event.target.closest("[data-keybind-action]");
+    if (keyButton) {
+      keybindCapture.action = keyButton.dataset.keybindAction;
+      renderKeybindPanel();
+      showToast("请按下新的按键（Esc 取消）");
+      return;
+    }
+    if (event.target.closest("[data-close-settings]")) {
+      keybindCapture.action = null;
+      $("settingsModal").classList.add("hidden");
+      renderKeybindPanel();
+    }
+  });
+  $("keybindReset").addEventListener("click", () => {
+    resetKeybinds();
+    keybindCapture.action = null;
+    renderKeybindPanel();
+    renderAll();
+    showToast("键位已恢复默认（普攻 X）");
   });
   // 技能升级弹窗内的升级按钮（事件委托，弹窗内容重建不需要重绑）
   $("skillModal").addEventListener("click", (event) => {

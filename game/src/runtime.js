@@ -18,6 +18,9 @@ export const pointer = { x: 0, y: 0, down: false };
 // 虚拟摇杆状态：x / y 为归一化方向（[-1, 1]），active 表示当前有手指或鼠标按住。
 export const joystick = { x: 0, y: 0, active: false };
 
+// 键位捕获状态：设置面板点击某个动作后进入等待按键，此时其余游戏快捷键全部屏蔽。
+export const keybindCapture = { action: null };
+
 export let moveTarget = null;
 export function setMoveTarget(value) {
   moveTarget = value;

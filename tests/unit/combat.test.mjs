@@ -1,7 +1,7 @@
 // 纯函数单元测试：战斗结算（combat.js）。运行方式：npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeDamage, computeKillReward, computeIncomingDamage } from "../../game/src/combat.js";
+import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience } from "../../game/src/combat.js";
 
 // 队列式假随机：按给定顺序返回随机值，用尽后回退为 0，保证结果完全可复现。
 const queueRandom = (values) => {
@@ -109,19 +109,22 @@ test("computeDamage：伤害下限为 1，随机数由调用方注入", () => {
   assert.equal(result.damage, 1);
 });
 
-test("computeKillReward：普通怪只有首次进度击杀给经验", () => {
+test("computeKillReward：普通怪首次进度击杀给满额经验，清完目标后继续刷怪给 50% 经验（0.3.2）", () => {
   const rule = { kills: 8, mapsPerLevel: 1 };
   const first = computeKillReward({ target: MOB, quest: { kills: 0, need: 8, bossDefeated: false }, rule });
   assert.deepEqual(first, {
     firstProgressKill: true,
-    expGain: Math.max(1, Math.floor(70 / rule.mapsPerLevel / rule.kills)),
+    expGain: Math.max(1, Math.ceil(100 / rule.mapsPerLevel / rule.kills)),
     marksGain: 0,
     chargeGain: 12,
     resourceGainRatio: 0.08
   });
+  // 首关 8 只进度怪 + 首领经验 ≥ 100，正常通关必能触发一次升级。
+  assert.ok(first.expGain * rule.kills + Math.round(30 / rule.mapsPerLevel) >= 100, "首关击杀经验合计应足够升 1 级");
   const repeat = computeKillReward({ target: MOB, quest: { kills: 8, need: 8, bossDefeated: false }, rule });
   assert.equal(repeat.firstProgressKill, false);
-  assert.equal(repeat.expGain, 0);
+  assert.equal(repeat.expGain, Math.max(1, Math.round(first.expGain * 0.5)), "清完目标后仍给一半经验，避免打怪毫无反馈");
+  assert.equal(repeat.marksGain, 0);
 });
 
 test("computeKillReward：首领首次击杀给 35 印记、32 破势与按地图数折算的经验", () => {
@@ -136,8 +139,32 @@ test("computeKillReward：首领首次击杀给 35 印记、32 破势与按地�
   assert.equal(reward.chargeGain, 32);
   const again = computeKillReward({ target: BOSS, quest: { kills: 8, need: 8, bossDefeated: true }, rule: { kills: 8, mapsPerLevel: 4 } });
   assert.equal(again.firstProgressKill, false);
-  assert.equal(again.expGain, 0);
+  assert.equal(again.expGain, Math.max(1, Math.round(reward.expGain * 0.5)), "重复击杀首领同样给一半经验");
   assert.equal(again.marksGain, 35, "重复击杀首领仍给印记（刷新后击杀）");
+});
+
+test("applyExperience：经验可连续升级，并在本关等级上限处封顶", () => {
+  const single = applyExperience({ level: 1, exp: 90, nextExp: 100, expGain: 10, levelCap: 2 });
+  assert.deepEqual(single, { level: 2, exp: 0, nextExp: 100, levelsGained: 1 });
+  const multi = applyExperience({ level: 1, exp: 0, nextExp: 100, expGain: 250, levelCap: 4 });
+  assert.equal(multi.level, 3);
+  assert.equal(multi.exp, 50);
+  assert.equal(multi.levelsGained, 2);
+  const capped = applyExperience({ level: 2, exp: 0, nextExp: 100, expGain: 500, levelCap: 2 });
+  assert.equal(capped.level, 2, "达到本关上限后不再升级");
+  assert.equal(capped.exp, 100, "封顶时经验停在满格，进度条不溢出");
+  assert.equal(capped.levelsGained, 0);
+});
+
+test("applyExperience：非法输入被夹到安全范围", () => {
+  // nextExp 为 0 / 缺失时回退到默认 100，避免出现「需要 0 经验」的非法状态。
+  assert.deepEqual(applyExperience({ level: 1, exp: 0, nextExp: 0, expGain: 0, levelCap: 2 }), {
+    level: 1,
+    exp: 0,
+    nextExp: 100,
+    levelsGained: 0
+  });
+  assert.equal(applyExperience({ level: 1, exp: 0, nextExp: 100, expGain: -20, levelCap: 2 }).exp, 0);
 });
 
 test("computeIncomingDamage：与 docs/11 基线公式一致（减伤随攻击者等级衰减）", () => {

@@ -53,7 +53,7 @@ import {
   renderTravelConfirm
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, CURRENT_SAVE_VERSION } from "./persist.js";
-import { computeDamage, computeKillReward, computeIncomingDamage } from "./combat.js";
+import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience } from "./combat.js";
 import {
   rollDropItem,
   rollDropCount,
@@ -65,6 +65,7 @@ import {
 } from "./drops.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
+import { keyLabel } from "./keybinds.js";
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 
@@ -227,7 +228,7 @@ export function selectTarget(entity) {
   setMoveTarget(null);
   if (entity) {
     log(`锁定目标：<b>${entity.name}</b>${entity.boss ? ` · 阶段 ${entity.phase}/${activeMap().boss.phases}` : ""}`);
-    showToast(`${entity.name} 已锁定，按 J 或点击普攻攻击`);
+    showToast(`${entity.name} 已锁定，按 ${keyLabel("attack")} 或点击普攻攻击`);
   }
   renderTarget();
 }
@@ -347,6 +348,40 @@ export function oneMoment() {
   showToast("一刀时刻：下一次核心爆发已命中");
 }
 
+// 当前关卡的等级上限：主线曲线等级 + 1（0.3.2 击杀升级）。
+// 只允许在关内领先主线一级，避免刷怪无限升级；通关时 syncCampaignGrowth 不会把已获得的等级降回去。
+// 原型最高 41 级（第 100 关通关），所以上限再夹到 41，防止终局刷到 42。
+export function currentLevelCap() {
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  return Math.min(41, campaignGrowth(cleared).level + 1);
+}
+
+// 击杀获得经验并结算升级：升级时补满生命与职业资源、发放技能点并播放音效。
+// 返回本次提升的等级数（0 表示未升级）。
+function gainExperience(amount) {
+  const result = applyExperience({
+    level: state.player.level,
+    exp: state.player.exp,
+    nextExp: state.player.nextExp,
+    expGain: amount,
+    levelCap: currentLevelCap()
+  });
+  state.player.level = result.level;
+  state.player.exp = result.exp;
+  state.player.nextExp = result.nextExp;
+  if (!result.levelsGained) return 0;
+  state.player.skillPoints = (state.player.skillPoints || 0) + SKILL_UPGRADE.pointsPerLevel * result.levelsGained;
+  state.player.hp = playerMaxHp();
+  state.player.resource = activeHero().resource;
+  sfx.levelup();
+  log(
+    `<b>等级提升</b>：击杀经验达到 Lv.${state.player.level}，技能点 +${SKILL_UPGRADE.pointsPerLevel * result.levelsGained}（按 ${keyLabel("skillUpgrade")} 打开技能）。本关最高可到 Lv.${currentLevelCap()}。`,
+    "loot"
+  );
+  showToast(`升级成功：Lv.${state.player.level}（技能点 +${result.levelsGained}，按 ${keyLabel("skillUpgrade")} 打开技能）`);
+  return result.levelsGained;
+}
+
 // 击杀结算：收益数值来自 combat.js，这里负责写回进度、日志与掉落触发。
 export function defeat(target) {
   target.alive = false;
@@ -367,7 +402,8 @@ export function defeat(target) {
   else sfx.kill();
   const hero = activeHero();
   const reward = computeKillReward({ target, quest: state.quest, rule: MAP_CLEAR_RULES[state.currentMapId] });
-  state.player.exp = Math.min(99, state.player.exp + reward.expGain);
+  // 0.3.2：经验真实结算并可升级（本关上限 = 主线等级 +1），不再把经验截断在 99。
+  gainExperience(reward.expGain);
   state.player.gold += target.gold;
   state.player.totalKills += 1;
   state.player.kills += 1;
@@ -551,7 +587,11 @@ export function syncCampaignGrowth(silent = false) {
   const previousLevel = state.player.level;
   const migrationFloor = Math.max(0, Number(state.player.migrationLevelFloor) || 0);
   const floorActive = migrationFloor > growth.level;
-  state.player.level = floorActive ? migrationFloor : growth.level;
+  // 0.3.2：击杀升级允许领先主线 1 级；通关同步时取「主线等级 / 已获得等级（上限 +1）/ 迁移下限」的最大值，
+  // 因此不会把玩家刚刷出来的等级降回去，也不会让刷怪无限超出百图成长曲线。
+  const earnedLevel = Math.min(Math.max(0, Number(state.player.level) || 0), growth.level + 1);
+  state.player.level = floorActive ? migrationFloor : Math.max(growth.level, earnedLevel);
+  // 经验始终对齐主线曲线（0/50/100），保证跨刷新恢复与百图 e2e 的成长断言一致。
   state.player.exp = floorActive ? 0 : growth.exp;
   state.player.nextExp = growth.nextExp;
   if (!floorActive && migrationFloor) delete state.player.migrationLevelFloor;

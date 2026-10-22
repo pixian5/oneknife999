@@ -7,10 +7,22 @@ import {
   PK_RULES,
   QUEST_REWARD
 } from "./config.js";
-import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
+import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber } from "./util.js";
-import { state, moveTarget, activeMap, activeHero, mapProgress, playerMaxHp, isForwardExit, questStatus, chapterStats } from "./runtime.js";
+import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
+import {
+  state,
+  moveTarget,
+  activeMap,
+  activeHero,
+  mapProgress,
+  playerMaxHp,
+  isForwardExit,
+  questStatus,
+  chapterStats,
+  keybindCapture
+} from "./runtime.js";
 
 // 《一刀999》渲染层：Canvas 世界绘制、右侧 HUD 的 DOM 渲染与屏幕反馈。
 
@@ -868,8 +880,14 @@ export function renderPlayer() {
   setText($("actionResourceName"), hero.resourceName);
   setText($("actionResourceText"), `${Math.ceil(state.player.resource)} / ${maxResource}`);
   setStyle($("actionResourceBar"), "width", `${clamp((state.player.resource / maxResource) * 100, 0, 100)}%`);
+  // 0.3.2：经验条真实可升，副标题同时显示本关等级上限，避免玩家误以为「打怪永远不升级」。
+  // 上限 = 主线曲线等级 + 1（终局封顶 41），与 main.js 的 currentLevelCap 保持一致。
+  const clearedMaps = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  const levelCap = Math.min(41, campaignGrowth(clearedMaps).level + 1);
+  setText($("expLabel"), `升级进度 · 本关最高 Lv.${levelCap}`);
   setText($("expText"), `${state.player.exp} / ${state.player.nextExp}`);
   setStyle($("expBar"), "width", `${clamp((state.player.exp / state.player.nextExp) * 100, 0, 100)}%`);
+  setText($("potionKey"), keyLabel("potion"));
   setText($("goldText"), formatNumber(state.player.gold));
   setText($("markText"), `${state.player.marks} / 800`);
   setText($("potionCount"), state.player.potion);
@@ -1067,22 +1085,26 @@ export function renderRegion() {
 
 export function renderNormalAttack() {
   const hero = activeHero();
-  if (normalAttackSignature === hero.name) return;
-  normalAttackSignature = hero.name;
+  // 签名包含当前普攻键位：改键后立即重建按钮上的按键角标。
+  const signature = `${hero.name}|${keyLabel("attack")}`;
+  if (normalAttackSignature === signature) return;
+  normalAttackSignature = signature;
   const resourceEffect =
     state.classId === "warrior" ? "命中额外获得 6 怒气。" : state.classId === "mage" ? "发射炎弹并消耗 8 法力。" : "命中获得 4 符力。";
   setHtml(
     $("normalAttackBtn"),
-    `<span class="attack-key">J</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip"><b>普通攻击</b><span>对当前锁定目标造成 100% 主属性伤害。${resourceEffect}</span><em>靠近目标后可连续使用</em></span>`
+    `<span class="attack-key">${keyLabel("attack")}</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip"><b>普通攻击</b><span>对当前锁定目标造成 100% 主属性伤害。${resourceEffect}</span><em>靠近目标后可连续使用 · 可在「设置」中修改按键</em></span>`
   );
 }
 
 export function renderSkills() {
   const hero = activeHero();
-  // 骨架只在换职业时重建；冷却角标与禁用态逐按钮更新，
+  // 骨架只在换职业或改技能键位时重建；冷却角标与禁用态逐按钮更新，
   // 避免冷却期间每秒整段 innerHTML 重建导致键盘焦点丢失（可访问性回归）。
-  if (skillSkeletonSignature !== state.classId) {
-    skillSkeletonSignature = state.classId;
+  const skillKeys = [0, 1, 2, 3].map((index) => keyLabel(`skill${index + 1}`)).join("");
+  const skeletonSignature = `${state.classId}|${skillKeys}`;
+  if (skillSkeletonSignature !== skeletonSignature) {
+    skillSkeletonSignature = skeletonSignature;
     setHtml(
       $("skillBar"),
       hero.skills
@@ -1092,7 +1114,7 @@ export function renderSkills() {
           const skillLevel = state.player.skillLevels?.[index] || 0;
           return (
             `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}${skillLevel ? ` Lv.${skillLevel}` : ""}">` +
-            `<span class="skill-key">${index + 1}${skillLevel ? `·${skillLevel}` : ""}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
+            `<span class="skill-key">${keyLabel(`skill${index + 1}`)}${skillLevel ? `·${skillLevel}` : ""}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
             `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
             `<span class="cooldown"></span>` +
             `</button>`
@@ -1230,7 +1252,7 @@ export function renderQuestChain() {
   setText($("questChainTitle"), `${chapterName} · 任务链`);
   setText($("questChainTip"), `${stats.done}/${stats.total} 完成`);
   const bossMark = progress.bossDefeated ? "首领已破" : progress.kills >= progress.need ? "前往首领" : "首领未破";
-  const expText = `经验 ${state.player.exp}/100（等级由通关数决定）`;
+  const expText = `经验 ${state.player.exp}/${state.player.nextExp}（击杀可升级，本关上限 Lv.${Math.min(41, campaignGrowth(MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length).level + 1)}）`;
   const rewardText = progress.rewardClaimed
     ? `通关奖励已领：${QUEST_REWARD.gold} 金币 + ${QUEST_REWARD.marks} 首领印记`
     : `通关奖励：${QUEST_REWARD.gold} 金币 + ${QUEST_REWARD.marks} 首领印记`;
@@ -1294,4 +1316,31 @@ export function renderAll() {
   renderLog();
   renderBoss();
   setText($("coords"), `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`);
+  // 操作提示与弹窗说明跟随自定义键位，避免玩家改键后看到旧按键。
+  setText(
+    $("combatHint"),
+    `WASD / 摇杆移动 · ${keyLabel("attack")} 普攻 · ${keyLabel("skill1")}-${keyLabel("skill4")} 技能 · ${keyLabel("pickup")} 拾取 · ${keyLabel("travel")} 前往目标出口 · 前进出口需完成当前关卡`
+  );
+  setText(
+    $("skillModalTip"),
+    `升级获得技能点；每级提高该技能倍率 +6%（原型简化，上限 10 级）。按 ${keyLabel("skillUpgrade")} 或点击右上角「技能」关闭。`
+  );
+  $("skillBtn").title = `技能升级（快捷键 ${keyLabel("skillUpgrade")}）`;
+  $("potionBtn").title = `使用生命药水（快捷键 ${keyLabel("potion")}）`;
+}
+
+// 键位设置面板：只在打开弹窗 / 改键 / 重置时重建，静止帧不参与逐帧渲染。
+export function renderKeybindPanel() {
+  const capturing = keybindCapture.action;
+  setHtml(
+    $("keybindList"),
+    KEYBIND_ACTIONS.map((action) => {
+      const isCapturing = capturing === action.id;
+      return (
+        `<div class="keybind-row"><div class="keybind-row-info"><strong>${action.label}</strong><span>${action.hint}</span></div>` +
+        `<button class="keybind-key${isCapturing ? " capturing" : ""}" data-keybind-action="${action.id}">${isCapturing ? "按任意键…" : keyLabel(action.id)}</button></div>`
+      );
+    }).join("")
+  );
+  setText($("settingsHint"), capturing ? "等待新的按键（Esc 取消）" : "点击右侧按键后再按新键");
 }

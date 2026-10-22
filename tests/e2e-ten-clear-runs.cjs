@@ -98,7 +98,9 @@ async function canvasGeometry(page, worldPoint) {
 
 async function moveEntityIntoView(page, entityId, expectedMap) {
   let lastGeometry = null;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  // 0.3.2：尝试次数由 30 提到 60，并支持斜向移动——角色中途倒下会复活到营地，
+  // 需要重新走完全程；只按单轴走容易在复活后耗尽次数（stage_029 曾因此失败）。
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     const snap = await snapshot(page);
     if (snap.currentMapId !== expectedMap) return false;
     const entity = snap.entities.find((item) => item.id === entityId && item.alive);
@@ -118,10 +120,14 @@ async function moveEntityIntoView(page, entityId, expectedMap) {
     const dy = entity.y - snap.player.y;
     const horizontalKey = dx < 0 ? "a" : "d";
     const verticalKey = dy < 0 ? "w" : "s";
-    const key = Math.abs(dx) > Math.abs(dy) * 0.45 ? horizontalKey : verticalKey;
-    await page.keyboard.down(key);
+    // 两个轴都需要走时同时按住，斜向移动可显著缩短接近时间。
+    const horizontalNeeded = Math.abs(dx) > 24;
+    const verticalNeeded = Math.abs(dy) > 24;
+    if (horizontalNeeded) await page.keyboard.down(horizontalKey);
+    if (verticalNeeded) await page.keyboard.down(verticalKey);
     await advance(page, 520);
-    await page.keyboard.up(key);
+    if (horizontalNeeded) await page.keyboard.up(horizontalKey);
+    if (verticalNeeded) await page.keyboard.up(verticalKey);
   }
   throw new Error(`无法把目标 ${entityId} 移入视野：${JSON.stringify(lastGeometry)}`);
 }
@@ -223,9 +229,9 @@ async function defeatEntity(page, entityId, mapId) {
     const geometry = await canvasGeometry(page, current);
     await page.mouse.click(geometry.x, geometry.y);
     if (current.boss) {
-      const bossActions = ["j", "1", "2", "4", "r"];
+      const bossActions = ["x", "1", "2", "4", "r"];
       await page.keyboard.press(bossActions[guard % bossActions.length]);
-    } else await page.keyboard.press("j");
+    } else await page.keyboard.press("x");
     const baseHp = { warrior: 350, mage: 235, taoist: 280 }[snap.classId] || 280;
     if (current.boss && guard % 12 === 0 && snap.player.hp < baseHp + snap.player.level * 18 * 0.75) await page.keyboard.press("q");
     await page.keyboard.press("f");
@@ -303,8 +309,12 @@ async function assertAutoSaveCheckpoint(page, mapId) {
     throw new Error(`${mapId} 刷新后未恢复通关进度：${JSON.stringify(restored)}`);
   const clearedMaps = MAP_ORDER.indexOf(mapId) + 1;
   const expected = expectedGrowth(clearedMaps);
-  if (restored.player.level !== expected.level || restored.player.exp !== expected.exp || restored.player.nextExp !== 100)
-    throw new Error(`${mapId} 成长节奏错误：期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(restored.player)}`);
+  // 0.3.2 起击杀可升级，允许领先主线曲线 1 级（上限 41）；经验仍必须与主线对齐，防止经验条与等级脱节。
+  const allowedLevels = [expected.level, Math.min(41, expected.level + 1)];
+  if (!allowedLevels.includes(restored.player.level) || restored.player.exp !== expected.exp || restored.player.nextExp !== 100)
+    throw new Error(
+      `${mapId} 成长节奏错误：期望等级 ${allowedLevels.join("/")}、经验 ${expected.exp}，实际 ${JSON.stringify(restored.player)}`
+    );
   // 经济与接口契约：gold/marks 必须随进度累积，snapshot 必须暴露资产字段（否则跨刷新清零无从发现）。
   if (typeof restored.player.gold !== "number" || typeof restored.player.marks !== "number" || typeof restored.player.deaths !== "number")
     throw new Error(`${mapId} snapshot 缺少经济/死亡字段（E2E 接口契约）：${JSON.stringify(restored.player)}`);

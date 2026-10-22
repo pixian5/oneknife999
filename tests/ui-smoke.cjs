@@ -58,6 +58,22 @@ async function verifyViewport(browser, viewport) {
   const previewSkill = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.previewSkill);
   assert.equal(previewSkill, 1, `${viewport.name} 范围技能悬停未启用角色中心范围预览`);
 
+  // 0.3.2 键位：普攻默认 X（紧邻 1-4 技能键），设置面板可改键并同步 HUD，恢复默认后回到 X
+  const attackKey = page.locator("#normalAttackBtn .attack-key");
+  assert.equal((await attackKey.textContent()).trim(), "X", `${viewport.name} 普攻默认键位不是 X`);
+  await page.locator("#settingsBtn").click();
+  await page.locator('[data-keybind-action="attack"]').click();
+  await page.keyboard.press("z");
+  await page.waitForTimeout(100);
+  assert.equal((await page.locator('[data-keybind-action="attack"]').textContent()).trim(), "Z", `${viewport.name} 改键未生效`);
+  assert.match(await page.locator("#combatHint").textContent(), /Z 普攻/, `${viewport.name} 操作提示未跟随改键`);
+  assert.equal((await attackKey.textContent()).trim(), "Z", `${viewport.name} 普攻按钮角标未跟随改键`);
+  await page.locator("#keybindReset").click();
+  await page.waitForTimeout(100);
+  assert.equal((await attackKey.textContent()).trim(), "X", `${viewport.name} 恢复默认未回到 X`);
+  await page.locator("[data-close-settings]").click();
+  await page.waitForTimeout(100);
+
   // 虚拟摇杆：按住向右拖到圆盘外，等待约 400ms 后角色应向右移动；松开后摇杆复位
   const pad = page.locator("#joystickPad");
   const padBox = await pad.boundingBox();
