@@ -1615,6 +1615,8 @@ if (TEST_MODE) {
                 x: state.player.x,
                 y: state.player.y,
                 hp: state.player.hp,
+                // 含装备生命加成的真实上限：探针 / e2e 判断「半血」时必须用它，否则会误判。
+                maxHp: playerMaxHp(),
                 resource: state.player.resource,
                 poison: state.player.poison,
                 charge: state.player.charge,
