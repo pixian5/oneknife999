@@ -164,6 +164,13 @@ export function equipmentDefense() {
   return EQUIPMENT_SLOT_KEYS.reduce((sum, slotKey) => sum + equipmentDefenseBonus(state.player.equipment?.[slotKey]), 0);
 }
 
+// 玩家总防御（0.3.7）：职业基础防御 + 装备防御词缀。
+// 此前承伤只取职业基础防御，导致重铸出的「防御」词缀完全不生效；
+// 统一走这里，避免后续再有调用点漏算装备。
+export function playerDefense() {
+  return activeHero().defense + equipmentDefense();
+}
+
 export function playerMaxHp() {
   return activeHero().hp + state.player.level * 18 + equipmentHp();
 }

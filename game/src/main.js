@@ -31,6 +31,7 @@ import {
   isForwardExit,
   primaryExit,
   playerMaxHp,
+  playerDefense,
   nearWaterWell,
   nearRestPoint,
   nearTown,
@@ -800,7 +801,8 @@ export function playerDamage(dt) {
       state.player.attackGate = rules.gate;
       if (inRange && state.player.invulnerable <= 0) {
         // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
-        const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: activeHero().defense });
+        // 防御取「职业基础 + 装备防御词缀」（0.3.7 起装备防御真正参与结算）。
+        const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: playerDefense() });
         if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${amount}`);
         state.player.hp = Math.max(0, state.player.hp - amount);
         // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧。
@@ -839,7 +841,7 @@ export function playerDamage(dt) {
     if (h.life <= 0) {
       h.snap = true;
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
-        const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: activeHero().defense });
+        const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
         state.player.hp = Math.max(0, state.player.hp - amount);
         textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
@@ -1645,6 +1647,8 @@ if (TEST_MODE) {
                   x: entity.x,
                   y: entity.y,
                   hp: entity.hp,
+                  // 探针 / e2e 需要目标上限计算百分比（此前漏字段会打印 NaN）。
+                  maxHp: entity.maxHp,
                   alive: entity.alive,
                   boss: Boolean(entity.boss),
                   npc: Boolean(entity.npc),

@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CLASSES,
   EQUIPMENT_SLOTS,
   EQUIPMENT_SLOT_KEYS,
   enhanceQuote,
@@ -12,6 +13,7 @@ import {
   SKILL_UPGRADE,
   PK_RULES
 } from "../../game/src/config.js";
+import { setState, playerDefense } from "../../game/src/runtime.js";
 import { rollAffixes } from "../../game/src/drops.js";
 
 // 队列式假随机：按给定顺序返回，用尽后回退 0。
@@ -77,6 +79,38 @@ test("equipmentHpBonus：部位固定生命 + 生命词缀；防御词缀只进�
   assert.equal(equipmentDefenseBonus(armor), 5);
   assert.equal(equipmentHpBonus(null, "helmet"), 0);
   assert.equal(equipmentHpBonus({ slot: "weapon" }, "weapon"), 0, "武器不提供固定生命");
+});
+
+test("playerDefense：职业基础防御 + 装备防御词缀（0.3.7 接线，承伤必须吃到装备防御）", () => {
+  setState({
+    classId: "warrior",
+    player: {
+      equipment: {
+        armor: { slot: "armor", affixes: [{ key: "defense", value: 12 }] },
+        boots: { slot: "boots", affixes: [{ key: "defense", value: 8 }] }
+      }
+    }
+  });
+  assert.equal(playerDefense(), CLASSES.warrior.defense + 20, "防御词缀要累加进玩家总防御");
+  // 未穿戴装备时退回职业基础防御，不应出现 NaN / undefined。
+  setState({ classId: "mage", player: {} });
+  assert.equal(playerDefense(), CLASSES.mage.defense);
+  // 攻击 / 生命词缀不参与防御。
+  setState({
+    classId: "taoist",
+    player: {
+      equipment: {
+        weapon: {
+          slot: "weapon",
+          affixes: [
+            { key: "attack", value: 30 },
+            { key: "hp", value: 50 }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(playerDefense(), CLASSES.taoist.defense);
 });
 
 test("enhanceQuote：金币成本按 1.5^目标等级增长，+8 起需要材料，祝福满必成", () => {
