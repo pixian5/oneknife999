@@ -110,6 +110,21 @@
             <div class="section-heading"><span><i class="section-icon">04</i> 随身背包</span><span class="inventory-tip">点击装备</span></div>
             <div class="inventory-grid" id="inventoryGrid"></div>
           </section>
+
+          <!-- 0.3.5 城镇杂货商：走进城镇后按 F（拾取键）打开，离开城镇自动收起 -->
+          <section class="shop-card panel-block hidden" id="shopCard">
+            <div class="section-heading">
+              <span><i class="section-icon">¤</i> 城镇杂货商</span>
+              <button class="link-button" id="shopClose" title="关闭面板（F）">关闭</button>
+            </div>
+            <p class="shop-tip" id="shopTip">金币 0 · 重铸卷 ×0</p>
+            <div class="shop-goods" id="shopGoods"></div>
+            <div class="section-heading shop-reforge-heading">
+              <span><i class="section-icon">✦</i> 词缀重铸</span>
+              <span class="inventory-tip">每次只重掷一条</span>
+            </div>
+            <div class="shop-reforge" id="shopReforge"></div>
+          </section>
         </aside>
       </section>
 

@@ -11,6 +11,7 @@ import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
+import { SHOP_GOODS, reforgeQuote } from "./shop.js";
 import {
   state,
   moveTarget,
@@ -1356,6 +1357,40 @@ export function renderInventory() {
     }).join("")
   );
 }
+
+// 城镇杂货商面板（0.3.5）：只在城镇内展示。
+// 价格与购买资格来自 shop.js；写回金币 / 背包由 main.js 的 buyGoods / reforgeEquipped 负责。
+export function renderShopPanel() {
+  const card = $("shopCard");
+  if (!card || !state) return;
+  setClass(card, "hidden", !state.shopOpen);
+  if (!state.shopOpen) return;
+  const gold = state.player.gold;
+  const scrolls = state.player.reforgeScroll || 0;
+  setText($("shopTip"), `金币 ${formatNumber(gold)} · 词缀重铸卷 ×${scrolls}（按 F 关闭）`);
+  // 签名包含金币、卷轴与已穿戴装备的词缀状态：任一变化都重建商品 / 重铸列表。
+  const equipmentSignature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
+    const item = state.player.equipment?.[slotKey];
+    return item ? `${item.id}:${item.enhance || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}` : "-";
+  }).join("|");
+  if (!panelChanged($("shopGoods"), `v1|${gold}|${scrolls}|${equipmentSignature}`)) return;
+  setHtml(
+    $("shopGoods"),
+    SHOP_GOODS.map((good) => {
+      const affordable = gold >= good.price;
+      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><span class="shop-good-glyph" style="color:${good.color}">${good.glyph}</span><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
+    }).join("")
+  );
+  const rows = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
+    const item = state.player.equipment?.[slotKey];
+    if (!item) return "";
+    const quote = reforgeQuote(item, { gold, scrolls });
+    const affixText =
+      (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、") || "无词缀";
+    return `<div class="shop-reforge-row"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
+  }).join("");
+  setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
+}
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
   if (!boss) return;
@@ -1485,6 +1520,7 @@ export function renderAll() {
   renderSkillModal();
   renderEquipment();
   renderInventory();
+  renderShopPanel();
   renderLog();
   renderBoss();
   setText($("coords"), `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`);

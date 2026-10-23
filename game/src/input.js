@@ -16,6 +16,9 @@ import {
   equipItem,
   salvageItem,
   enhanceItem,
+  buyGoods,
+  reforgeEquipped,
+  closeShop,
   upgradeSkill,
   saveGame,
   resetGame,
@@ -283,5 +286,16 @@ export function setupInput() {
   $("equipmentGrid").addEventListener("click", (event) => {
     const button = event.target.closest("[data-equip-slot]");
     if (button) enhanceItem(button.dataset.equipSlot);
+  });
+  // 城镇杂货商（0.3.5）：购买与词缀重铸都走事件委托，面板重建不需要重绑。
+  $("shopClose").addEventListener("click", closeShop);
+  $("shopCard").addEventListener("click", (event) => {
+    const buyButton = event.target.closest("[data-buy]");
+    if (buyButton) {
+      buyGoods(buyButton.dataset.buy);
+      return;
+    }
+    const reforgeButton = event.target.closest("[data-reforge]");
+    if (reforgeButton) reforgeEquipped(reforgeButton.dataset.reforge);
   });
 }

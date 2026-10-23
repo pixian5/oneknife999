@@ -10,7 +10,8 @@ import {
   ENHANCE_RULES,
   SKILL_UPGRADE,
   PK_RULES,
-  QUEST_REWARD
+  QUEST_REWARD,
+  BASIC_MATERIAL
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth, mapLayoutSignature, pathTurnCount } from "./maps.js";
 import { pathLength } from "./geometry.js";
@@ -83,6 +84,7 @@ import {
   salvageReward,
   normalizeInventory
 } from "./drops.js";
+import { buyShopItem, reforgeQuote, reforgeAffix } from "./shop.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -221,6 +223,8 @@ export function loadMap(mapId, spawnX, spawnY, silent) {
   state.hazardsSpawned = 0;
   // 生息法阵属于当前场景的瞬态区域：换图 / 复活时清空，避免在营地继续回血。
   state.healZones = [];
+  // 杂货商面板只在城镇内有效，换图 / 复活时收起，避免跨场景残留。
+  state.shopOpen = false;
   state.hoveredEntityId = null;
   // 换图 / 死亡复活时清空瞬时打击反馈，避免连击数与震屏跨场景残留。
   fx.combo = 0;
@@ -676,6 +680,11 @@ export function collectDrops() {
     const site = (activeMap().tacticalPoints || []).find((point) => point.kind === "site" && distance(state.player, point) < point.radius);
     if (site) {
       activateSitePoint(site);
+      return;
+    }
+    // 0.3.5：城镇内没有可拾取物时，F 改为与杂货商交易（开 / 关面板）。
+    if (nearTown()) {
+      toggleShop();
       return;
     }
     showToast(cache ? "秘藏补给箱已被搜索" : "附近没有可拾取物品");
@@ -1229,6 +1238,8 @@ export function update(dt) {
     if (fx.pierce.life <= 0) fx.pierce = null;
   }
   movePlayer(dt);
+  // 杂货商面板只在城镇内有效：走出城镇范围立即收起（面板内容仍由 renderAll 刷新）。
+  if (state.shopOpen && !nearTown()) state.shopOpen = false;
   updateEntities(dt);
   updateHealZones(dt);
   playerDamage(dt);
@@ -1394,6 +1405,88 @@ export function salvageItem(itemId) {
   persistGame();
   renderPlayer();
   renderInventory();
+}
+
+// ============ 城镇杂货商与词缀重铸（0.3.5，docs/07 金币消耗出口） ============
+
+// 开 / 关杂货商面板：只在城镇内可用；离开城镇后由 update 自动收起。
+export function toggleShop() {
+  if (!state) return;
+  if (!nearTown()) {
+    showToast("需要回到城镇才能与杂货商交易");
+    return;
+  }
+  state.shopOpen = !state.shopOpen;
+  renderAll();
+  if (state.shopOpen) showToast("杂货商：可用金币购买药水、材料与词缀重铸卷");
+}
+
+export function closeShop() {
+  if (!state?.shopOpen) return;
+  state.shopOpen = false;
+  renderAll();
+}
+
+// 购买商品：金币扣减与写回（药水 / 材料 / 重铸卷）集中在这里，价格校验在 shop.js。
+export function buyGoods(goodId) {
+  if (!state) return;
+  if (!nearTown()) {
+    state.shopOpen = false;
+    showToast("离开城镇后杂货商不再营业");
+    renderAll();
+    return;
+  }
+  const purchase = buyShopItem(goodId, { gold: state.player.gold });
+  if (!purchase.ok) {
+    showToast(purchase.reason);
+    return;
+  }
+  const good = purchase.good;
+  state.player.gold -= purchase.price;
+  if (good.effect === "potion") state.player.potion += 1;
+  else if (good.effect === "scroll") state.player.reforgeScroll = (state.player.reforgeScroll || 0) + 1;
+  else if (good.effect === "material") {
+    // 与掉落共用堆叠：同名材料合并 count，不额外占背包格。
+    state.inventory = stackMaterial(state.inventory || [], { ...BASIC_MATERIAL, id: `shop-${Date.now()}` });
+  }
+  const owned =
+    good.effect === "potion"
+      ? `生命药水 ×${state.player.potion}`
+      : good.effect === "scroll"
+        ? `词缀重铸卷 ×${state.player.reforgeScroll || 0}`
+        : `黑铁矿石 ×${(state.inventory || []).find((entry) => entry.slot === "material" && entry.name === BASIC_MATERIAL.name)?.count || 1}`;
+  sfx.pickup();
+  log(`杂货商：花费 ${purchase.price} 金币购买 <b>${good.name}</b>，当前${owned}。`, "loot");
+  showToast(`${good.name} 已购买，剩余金币 ${state.player.gold}`);
+  persistGame();
+  renderAll();
+}
+
+// 词缀重铸：重掷穿戴装备的一条词缀（白板装备则新附一条），消耗 1 张重铸卷与金币。
+export function reforgeEquipped(slotKey) {
+  if (!state) return;
+  const item = state.player.equipment?.[slotKey];
+  const quote = reforgeQuote(item, { gold: state.player.gold, scrolls: state.player.reforgeScroll || 0 });
+  if (!quote.canReforge) {
+    showToast(quote.reason);
+    return;
+  }
+  const result = reforgeAffix(item, { level: state.player.level, random: Math.random });
+  state.player.gold -= quote.cost;
+  state.player.reforgeScroll = Math.max(0, (state.player.reforgeScroll || 0) - quote.scrollNeeded);
+  state.player.equipment[slotKey] = result.item;
+  const describe = (affix) => (affix ? `${affix.label} +${affix.value}${affix.percent ? "%" : ""}` : "无词缀");
+  sfx.enhanceSuccess();
+  textAt(`重铸 ${describe(result.newAffix)}`, state.player.x, state.player.y - 34, "#a88ce3", 14);
+  log(
+    `词缀重铸：<b style="color:${item.color}">${item.name}</b> ${
+      result.index >= 0 ? `${describe(result.oldAffix)} → ${describe(result.newAffix)}` : `新附 ${describe(result.newAffix)}`
+    }，消耗 ${quote.cost} 金币与 ${quote.scrollNeeded} 张词缀重铸卷。`,
+    "loot"
+  );
+  showToast(`${item.name} 重铸完成：${describe(result.newAffix)}`);
+  persistGame();
+  renderAll();
 }
 
 // 技能升级（docs/02「每级提高倍率」的原型简化：每级 +6% 技能倍率，升级获得技能点）。

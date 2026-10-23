@@ -79,6 +79,8 @@ export function createState(classId) {
       skillPoints: 0,
       skillLevels: [0, 0, 0, 0],
       sin: 0,
+      // 词缀重铸卷（0.3.5）：城镇杂货商购买，重铸词缀时消耗 1 张；旧存档缺省为 0。
+      reforgeScroll: 0,
       equipment: Object.fromEntries(EQUIPMENT_SLOT_KEYS.map((slotKey) => [slotKey, null])),
       poison: 0,
       visitedMaps: { ash_outskirts: true }
@@ -95,6 +97,8 @@ export function createState(classId) {
     hazardsSpawned: 0,
     // 生息法阵（0.3.4）：瞬态区域，不写入存档；换图 / 死亡复活时清空。
     healZones: [],
+    // 城镇杂货商面板开关（0.3.5）：瞬态 UI 状态，不写入存档；离开城镇时自动关闭。
+    shopOpen: false,
     hoveredEntityId: null
   };
 }

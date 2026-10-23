@@ -210,3 +210,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 .skill-button.no-resource { opacity: .5; }
 .skill-button.no-resource small { color: #f3b1a8; }
 .normal-attack-button.holding { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(231, 179, 107, .25) inset; }
+
+/* 0.3.5 城镇杂货商与词缀重铸：侧栏内面板，不遮挡画布（F 打开 / 自动收起） */
+.shop-card { padding-bottom: 14px; }
+.shop-tip { margin: 8px 0 10px; color: var(--muted); font-size: 10px; }
+.shop-goods, .shop-reforge { display: flex; flex-direction: column; gap: 6px; }
+.shop-good, .shop-reforge-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); background: #101b20; }
+.shop-good.unaffordable { opacity: .55; }
+.shop-good-glyph { flex: 0 0 auto; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; font-family: Georgia, serif; font-size: 12px; }
+.shop-good-info { flex: 1; min-width: 0; }
+.shop-good-info strong { display: block; color: var(--ink); font-size: 11px; font-weight: 600; }
+.shop-good-info small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.shop-good .link-button, .shop-reforge-row .link-button { flex: 0 0 auto; font-size: 10px; }
+.shop-good .link-button:disabled, .shop-reforge-row .link-button:disabled { opacity: .4; cursor: not-allowed; }
+.shop-reforge-heading { margin-top: 12px; }
+.shop-empty { margin: 6px 0 0; color: var(--muted-2); font-size: 10px; }
