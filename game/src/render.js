@@ -19,6 +19,7 @@ import {
   activeHero,
   mapProgress,
   playerMaxHp,
+  playerDefense,
   isForwardExit,
   questStatus,
   chapterStats,
@@ -1022,14 +1023,21 @@ export function renderPlayer() {
   const maxResource = hero.resource;
   // 战力汇总：装备按「有效战力」计入（含强化 +15 与攻击词缀收益，docs/03），
   // 使 HUD 数值能反映强化与词缀的实际提升，而非只显示基础 power。
-  const power =
-    hero.attack +
-    state.player.level * 4 +
-    Object.values(state.player.equipment).reduce((sum, item) => sum + (item ? effectiveItemPower(item) : 0), 0) +
-    hero.defense * 2;
+  const equippedPower = Object.values(state.player.equipment).reduce((sum, item) => sum + (item ? effectiveItemPower(item) : 0), 0);
+  const power = hero.attack + state.player.level * 4 + equippedPower + hero.defense * 2;
+  // 0.3.8 三围展示：此前玩家重铸出「防御」词缀后完全看不到收益（面板只有综合战力）。
+  // - 攻击与 computeDamage 的 base 公式一致（装备战力 ×0.9），不是简单相加；
+  // - 生命取 playerMaxHp()（含部位基础加成与生命词缀）；
+  // - 防御取 playerDefense()（职业基础 + 防御词缀），与承伤结算同源。
+  const attackStat = Math.round(hero.attack + state.player.level * 4 + equippedPower * 0.9);
+  const hpStat = playerMaxHp();
+  const defenseStat = playerDefense();
   const signature = [
     state.classId,
     power,
+    attackStat,
+    hpStat,
+    defenseStat,
     Math.ceil(state.player.resource),
     state.player.exp,
     state.player.nextExp,
@@ -1047,6 +1055,9 @@ export function renderPlayer() {
   setText($("className"), hero.name);
   setText($("playerName"), `${hero.name} · 灰烬旅人`);
   setText($("powerText"), formatNumber(power));
+  setText($("hpStat"), formatNumber(hpStat));
+  setText($("attackStat"), formatNumber(attackStat));
+  setText($("defenseStat"), formatNumber(defenseStat));
   setText($("actionResourceName"), hero.resourceName);
   setText($("actionResourceText"), `${Math.ceil(state.player.resource)} / ${maxResource}`);
   setStyle($("actionResourceBar"), "width", `${clamp((state.player.resource / maxResource) * 100, 0, 100)}%`);
