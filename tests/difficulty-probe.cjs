@@ -5,8 +5,11 @@
 // 可调环境变量：
 //   ONEKNIFE_PROBE_STAGES=5,15          抽样关卡号（默认 5,15；单关约 5~10 分钟真实耗时，
 //                                       ONEKNIFE_PROBE_STAGES=5,15,25 可用于发布前全量抽样）
+//   ONEKNIFE_PROBE_RUNS=3               每关重复次数，取死亡数 / 耗时中位数（0.3.9）。
+//                                       单次结果波动很大（同一代码在第 15 关测出过 0/1/5 死），
+//                                       中位数才有参考价值；快速验证可用 ONEKNIFE_PROBE_RUNS=1。
 //   ONEKNIFE_PROBE_CLASS=warrior        职业（warrior / mage / taoist）
-//   ONEKNIFE_PROBE_MAX_DEATHS=6         单关死亡上限（默认 6）
+//   ONEKNIFE_PROBE_MAX_DEATHS=6         单关死亡上限（默认 6，每一次运行都必须满足）
 //   ONEKNIFE_PROBE_MAX_SECONDS=900      单关模拟耗时上限，单位秒（默认 900）
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -24,6 +27,9 @@ const STAGE_NUMBERS = (process.env.ONEKNIFE_PROBE_STAGES || "5,15")
   .filter((value) => Number.isInteger(value) && value > 0);
 const MAX_DEATHS = Number(process.env.ONEKNIFE_PROBE_MAX_DEATHS || 6);
 const MAX_SECONDS = Number(process.env.ONEKNIFE_PROBE_MAX_SECONDS || 900);
+// 每关重复次数：单次结果受「死亡 → 首领回血重置」的连锁放大影响，波动可达 0~5 死，
+// 只跑一次无法区分「数值回退」和「一次操作失误」，因此默认跑 3 次取中位数。
+const PROBE_RUNS = Math.max(1, Number(process.env.ONEKNIFE_PROBE_RUNS || 3));
 const SAVE_KEY = "oneknife999-prototype-save-v4";
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
 const BASE_ATTACK = { warrior: 33, mage: 41, taoist: 30 };
@@ -243,8 +249,9 @@ async function defeatEntity(page, entityId, mapId, safePoint) {
     if (!current) return elapsed;
     // 真实最大生命由游戏侧给出（含装备生命加成）；漏算装备会把「半血」误判成「满血」。
     const maxHp = snap.player.maxHp || (BASE_HP[snap.classId] || 280) + snap.player.level * 18;
-    // 药水：血量掉到 55% 就喝（每 4 个循环检查一次，避免无意义连按）。
-    if (guard % 4 === 0 && (snap.player.potion || 0) > 0 && snap.player.hp < maxHp * 0.55) await page.keyboard.press("q");
+    // 药水：血量掉到 65% 就喝（0.3.9 从 55% 上调）。55% 时往往已经进入「一次重击就死」的区间，
+    // 死亡又会让首领回血重置，连锁放大成整场拉锯；提前喝能把波动压下来。
+    if (guard % 3 === 0 && (snap.player.potion || 0) > 0 && snap.player.hp < maxHp * 0.65) await page.keyboard.press("q");
     const nearSafePoint = Math.hypot(snap.player.x - safePoint.x, snap.player.y - safePoint.y) <= 54;
     // 阈值放到 60% / 3 层毒：85% 就撤退会让「撤退—回营地—再进场」无限循环，反而测不出 DPS。
     const needsRecovery = snap.player.poison >= 3 || snap.player.hp < maxHp * 0.6;
@@ -276,7 +283,7 @@ async function defeatEntity(page, entityId, mapId, safePoint) {
   throw new Error(`探针击杀 ${entityId} 超时（模拟 ${Math.round(elapsed / 1000)}s）：${JSON.stringify(await snapshot(page))}`);
 }
 
-async function probeStage(page, stage) {
+async function probeStage(page, stage, run = 1, runTotal = 1) {
   const mapId = stage.mapId;
   const { MAPS } = await mapsModulePromise;
   const map = MAPS[mapId];
@@ -286,7 +293,7 @@ async function probeStage(page, stage) {
     .map((item) => `${item.slot}:${item.name}(战力 ${Math.round(item.power)})`)
     .join("、");
   process.stdout.write(
-    `PROBE START stage ${stage.stageNumber} (${mapId}) Lv.${mainlineLevel(stage.stageNumber - 1)} class=${CLASS_ID} gear=${gearName}\n`
+    `PROBE START stage ${stage.stageNumber} (${mapId}) run=${run}/${runTotal} Lv.${mainlineLevel(stage.stageNumber - 1)} class=${CLASS_ID} gear=${gearName}\n`
   );
   await injectStageSave(page, stage.stageNumber, mapId, stage.needs, gear);
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -316,16 +323,17 @@ async function probeStage(page, stage) {
   const deaths = (snap.player.deaths || 0) - deathsBefore;
   const seconds = Math.round(elapsedMs / 1000);
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds}\n`
   );
-  if (deaths > MAX_DEATHS) throw new Error(`${mapId} 非快进死亡 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
-  return { stageNumber: stage.stageNumber, mapId, deaths, seconds };
+  // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，
+  // 只跑一次就按单次判定会把偶发失误误报成难度回退。耗时仍在单次判，因为它代表「能否推进」。
+  return { stageNumber: stage.stageNumber, mapId, deaths, seconds, deathsOverLimit: deaths > MAX_DEATHS };
 }
 
 // 每关用全新的 context + page：连续在同一页面注入存档时，上一关的虚拟时钟 /
 // 自动推进 / 存档写回会干扰下一关（实测同页连跑第 15 关死亡数会从 2 次暴涨到 17 次）。
-async function runStageInFreshPage(browser, stage) {
+async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const page = await context.newPage();
@@ -333,12 +341,20 @@ async function runStageInFreshPage(browser, stage) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    const result = await probeStage(page, stage);
+    const result = await probeStage(page, stage, run, runTotal);
     if (errors.length) throw new Error(`第 ${stage.stageNumber} 关页面异常：` + errors.join(" | "));
     return result;
   } finally {
     await context.close();
   }
+}
+
+// 中位数：偶数个时取中间两个的平均并四舍五入，保证报告里是整数。
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[middle];
+  return Math.round((sorted[middle - 1] + sorted[middle]) / 2);
 }
 
 (async () => {
@@ -356,10 +372,30 @@ async function runStageInFreshPage(browser, stage) {
       return { stageNumber, mapId: entry.id, need: entry.need, needs, safePoint: entry.safePoint };
     });
     const results = [];
-    for (const stage of stages) results.push(await runStageInFreshPage(browser, stage));
+    for (const stage of stages) {
+      const runs = [];
+      for (let run = 1; run <= PROBE_RUNS; run += 1) runs.push(await runStageInFreshPage(browser, stage, run, PROBE_RUNS));
+      const deaths = median(runs.map((item) => item.deaths));
+      const seconds = median(runs.map((item) => item.seconds));
+      // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
+      for (const [index, run] of runs.entries()) {
+        if (run.deathsOverLimit) {
+          process.stdout.write(
+            `PROBE WARN stage ${stage.stageNumber} run ${index + 1}/${PROBE_RUNS} deaths=${run.deaths} 超过单次上限 ${MAX_DEATHS}（计入中位数判定）\n`
+          );
+        }
+      }
+      if (deaths > MAX_DEATHS) throw new Error(`${stage.mapId} 非快进死亡中位数 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
+      results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, deaths, seconds, runs });
+    }
     const totalDeaths = results.reduce((sum, item) => sum + item.deaths, 0);
     process.stdout.write(
-      `DIFFICULTY PROBE PASS stages=${results.map((item) => `${item.stageNumber}:${item.deaths}死/${item.seconds}s`).join(" ")} totalDeaths=${totalDeaths}\n`
+      `DIFFICULTY PROBE PASS runs=${PROBE_RUNS} stages=${results
+        .map(
+          (item) =>
+            `${item.stageNumber}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}]`
+        )
+        .join(" ")} totalDeaths(median)=${totalDeaths}\n`
     );
   } finally {
     await browser.close();
