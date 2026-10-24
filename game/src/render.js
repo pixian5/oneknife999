@@ -34,6 +34,20 @@ import { COMBO_RULES, resolveGuideTarget } from "./feedback.js";
 
 export const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
+
+// 战斗实体贴图缓存（0.4.4）：玩家 / 怪物 / Boss 用生成的美术贴图替换几何图形。
+// Image 加载是异步的——首次帧可能未就绪，此时 img.complete 为假，自动回退原几何绘制；
+// 加载完成后游戏每帧重绘自然生效，无需额外回调。
+const spriteCache = new Map();
+function loadSprite(key, src) {
+  if (!spriteCache.has(key)) {
+    const img = new Image();
+    img.src = src;
+    spriteCache.set(key, img);
+  }
+  return spriteCache.get(key);
+}
+const spriteReady = (img) => img && img.complete && img.naturalWidth > 0;
 const wrap = document.querySelector("#canvasWrap");
 
 let dpr = 1;
@@ -720,15 +734,33 @@ export function drawEntity(entity) {
     ctx.stroke();
   }
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
-  ctx.fillStyle = entity.color;
-  if (entity.npc) {
+  // 0.4.4 战斗贴图：怪物用 monster-{名}.png、首领用 boss-{名}.jpg；
+  // 贴图未加载完成时回退原几何图形，保证任何时刻都有可辨识的实体。
+  const sprite = entity.npc
+    ? null
+    : entity.boss
+      ? loadSprite(`boss-${entity.name}`, `assets/boss-${entity.name}.jpg`)
+      : loadSprite(`monster-${entity.name}`, `assets/monster-${entity.name}.png`);
+  if (spriteReady(sprite)) {
+    const size = entity.radius * 2 * scale;
+    ctx.save();
+    if (entity.boss) {
+      ctx.beginPath();
+      ctx.arc(entity.x, entity.y, size / 2, 0, Math.PI * 2);
+      ctx.clip();
+    }
+    ctx.drawImage(sprite, entity.x - size / 2, entity.y - size / 2, size, size);
+    ctx.restore();
+  } else if (entity.npc) {
     // 流浪武者：菱形轮廓 + 白名，与怪物在画面上直接区分。
+    ctx.fillStyle = entity.color;
     ctx.save();
     ctx.translate(entity.x, entity.y);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-entity.radius * 0.8, -entity.radius * 0.8, entity.radius * 1.6, entity.radius * 1.6);
     ctx.restore();
   } else {
+    ctx.fillStyle = entity.color;
     ctx.beginPath();
     ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2);
     ctx.fill();
@@ -756,10 +788,13 @@ export function drawEntity(entity) {
       ctx.fill();
     }
   }
-  ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
-  ctx.beginPath();
-  ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
-  ctx.fill();
+  // 眼睛点只在无贴图时绘制（贴图自带形象）
+  if (!spriteReady(sprite)) {
+    ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
+    ctx.beginPath();
+    ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (entity.boss) {
     ctx.strokeStyle = "rgba(241, 109, 102, .65)";
     ctx.lineWidth = 3;
@@ -913,19 +948,30 @@ export function drawPlayer() {
   ctx.fillRect(left + 6, top + 15, 76, 5);
   ctx.fillStyle = "#f16d66";
   ctx.fillRect(left + 6, top + 15, 76 * clamp(state.player.hp / maxHp, 0, 1), 5);
-  ctx.fillStyle = hero.color;
-  ctx.beginPath();
-  ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
-  ctx.fill();
+  // 0.4.4 玩家战斗贴图：三职业立绘裁出的头像图（圆形遮罩），未加载完成回退原几何圆
+  const playerSprite = loadSprite(`player-${state.player.classId}`, `assets/player-${state.player.classId}.png`);
+  if (spriteReady(playerSprite)) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 24, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(playerSprite, state.player.x - 24, state.player.y - 24, 48, 48);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = hero.color;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#102027";
+    ctx.beginPath();
+    ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.strokeStyle = "rgba(255,255,255,.7)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = "#102027";
-  ctx.beginPath();
-  ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
-  ctx.fill();
   if (state.player.poison > 0) {
     ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`;
     ctx.beginPath();
