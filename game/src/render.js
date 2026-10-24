@@ -1297,6 +1297,7 @@ export function renderSkills() {
           const skillLevel = state.player.skillLevels?.[index] || 0;
           return (
             `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}${skillLevel ? ` Lv.${skillLevel}` : ""}">` +
+            `<img class="skill-icon" src="assets/skill-${state.classId}-${index}.png" alt="">` +
             `<span class="skill-key">${keyLabel(`skill${index + 1}`)}${skillLevel ? `·${skillLevel}` : ""}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
             `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
             `<span class="cooldown"></span>` +
