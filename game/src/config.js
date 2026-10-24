@@ -489,3 +489,17 @@ export function equipmentDefenseBonus(item) {
   if (!item) return 0;
   return (item.affixes || []).filter((affix) => affix.key === "defense").reduce((sum, affix) => sum + affix.value, 0);
 }
+
+// 装备三围汇总（0.4.0）：一次算全「有效战力 / 生命加成 / 防御加成」。
+// 面板、装备预览、重铸对比共用同一个入口，避免出现「预览值」和「穿上后的面板值」两套算法。
+export function equipmentTotals(equipment = {}) {
+  const totals = { power: 0, hp: 0, defense: 0 };
+  for (const slotKey of EQUIPMENT_SLOT_KEYS) {
+    const item = equipment?.[slotKey];
+    if (!item) continue;
+    totals.power += effectiveItemPower(item);
+    totals.hp += equipmentHpBonus(item, slotKey);
+    totals.defense += equipmentDefenseBonus(item);
+  }
+  return totals;
+}

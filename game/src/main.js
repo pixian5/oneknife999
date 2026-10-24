@@ -1477,16 +1477,18 @@ export function reforgeEquipped(slotKey) {
   state.player.gold -= quote.cost;
   state.player.reforgeScroll = Math.max(0, (state.player.reforgeScroll || 0) - quote.scrollNeeded);
   state.player.equipment[slotKey] = result.item;
+  // 0.4.0：记录重铸部位，商店面板对应行高亮 2 秒（瞬态，不写存档）。
+  state.reforgePulse = { slotKey, until: performance.now() + 2000 };
   const describe = (affix) => (affix ? `${affix.label} +${affix.value}${affix.percent ? "%" : ""}` : "无词缀");
   sfx.enhanceSuccess();
   textAt(`重铸 ${describe(result.newAffix)}`, state.player.x, state.player.y - 34, "#a88ce3", 14);
+  const transition =
+    result.index >= 0 ? `${describe(result.oldAffix)} → ${describe(result.newAffix)}` : `新附 ${describe(result.newAffix)}`;
   log(
-    `词缀重铸：<b style="color:${item.color}">${item.name}</b> ${
-      result.index >= 0 ? `${describe(result.oldAffix)} → ${describe(result.newAffix)}` : `新附 ${describe(result.newAffix)}`
-    }，消耗 ${quote.cost} 金币与 ${quote.scrollNeeded} 张词缀重铸卷。`,
+    `词缀重铸：<b style="color:${item.color}">${item.name}</b> ${transition}，消耗 ${quote.cost} 金币与 ${quote.scrollNeeded} 张词缀重铸卷。`,
     "loot"
   );
-  showToast(`${item.name} 重铸完成：${describe(result.newAffix)}`);
+  showToast(`${item.name} 重铸完成：${transition}`);
   persistGame();
   renderAll();
 }

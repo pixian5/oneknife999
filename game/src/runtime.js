@@ -1,4 +1,4 @@
-import { CLASSES, EQUIPMENT_SLOT_KEYS, equipmentHpBonus, equipmentDefenseBonus } from "./config.js";
+import { CLASSES, EQUIPMENT_SLOT_KEYS, equipmentHpBonus, equipmentDefenseBonus, equipmentTotals, effectiveItemPower } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { clamp, distance } from "./util.js";
 
@@ -173,6 +173,33 @@ export function playerDefense() {
 
 export function playerMaxHp() {
   return activeHero().hp + state.player.level * 18 + equipmentHp();
+}
+
+// 单件装备对三围的贡献（0.4.0）：攻击按伤害公式的 0.9 系数折算，生命 / 防御与承伤同源。
+export function equipmentItemStats(item) {
+  if (!item) return { attack: 0, hp: 0, defense: 0 };
+  return {
+    attack: Math.round(effectiveItemPower(item) * 0.9),
+    hp: equipmentHpBonus(item, item.slot),
+    defense: equipmentDefenseBonus(item)
+  };
+}
+
+// 装备预览（0.4.0）：假设把背包里这件装备换到对应部位，三围分别会变成多少。
+// 与 renderPlayer 的展示公式、playerMaxHp / playerDefense 完全同源；
+// 返回 before / after，由面板决定是否显示箭头（差值 0 时只显示单个数字）。
+export function previewEquipStats(item) {
+  if (!item || !EQUIPMENT_SLOT_KEYS.includes(item.slot)) return null;
+  const hero = activeHero();
+  const level = state.player.level;
+  const before = equipmentTotals(state.player.equipment || {});
+  const after = equipmentTotals({ ...(state.player.equipment || {}), [item.slot]: item });
+  const stats = (totals) => ({
+    attack: Math.round(hero.attack + level * 4 + totals.power * 0.9),
+    hp: hero.hp + level * 18 + totals.hp,
+    defense: hero.defense + totals.defense
+  });
+  return { slotKey: item.slot, before: stats(before), after: stats(after) };
 }
 
 // 是否红名（docs/05：罪恶值 ≥ 300）。

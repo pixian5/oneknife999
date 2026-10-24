@@ -20,6 +20,8 @@ import {
   mapProgress,
   playerMaxHp,
   playerDefense,
+  equipmentItemStats,
+  previewEquipStats,
   isForwardExit,
   questStatus,
   chapterStats,
@@ -1325,9 +1327,12 @@ export function renderSkills() {
 
 export function renderEquipment() {
   // 12 部位（docs/03）；点击已穿戴的槽位 = 尝试强化。
+  // 签名必须覆盖「本件贡献」展示的所有输入：词缀变化（重铸）也要重建，否则标题一直显示旧数值。
   const signature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
     const item = state.player.equipment?.[slotKey];
-    return item ? `${item.id}:${item.enhance || 0}:${item.blessing || 0}` : "-";
+    return item
+      ? `${item.id}:${item.enhance || 0}:${item.blessing || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}`
+      : "-";
   }).join("|");
   if (!panelChanged($("equipmentGrid"), signature)) return;
   setHtml(
@@ -1340,7 +1345,9 @@ export function renderEquipment() {
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
       const maxed = (item.enhance || 0) >= 15;
-      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n有效战力 ${powerValue}；点击强化（+8 起需材料，失败不降级）`;
+      // 0.4.0：已穿戴装备直接标出本件贡献，方便判断哪件在「拖后腿」。
+      const own = equipmentItemStats(item);
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n有效战力 ${powerValue}；本件贡献：攻击 +${own.attack} · 生命 +${own.hp} · 防御 +${own.defense}\n点击强化（+8 起需材料，失败不降级）`;
       return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
     }).join("")
   );
@@ -1348,7 +1355,13 @@ export function renderEquipment() {
 export function renderInventory() {
   const inventory = state.inventory || [];
   // 签名含 id 与 count：材料堆叠数量变化（count）也触发背包重渲染。
-  const signature = inventory.map((item) => `${item.id}:${item.count || 1}`).join(",");
+  // 0.4.0：预览依赖「同部位当前穿戴」，所以已穿戴装备的词缀 / 强化也要进签名，
+  // 否则换装或重铸后背包里的「装备后：旧→新」会停留在旧对比值。
+  const equippedSignature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
+    const item = state.player.equipment?.[slotKey];
+    return item ? `${item.id}:${item.enhance || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}` : "-";
+  }).join("|");
+  const signature = `${equippedSignature}||${inventory.map((item) => `${item.id}:${item.count || 1}:${item.enhance || 0}`).join(",")}`;
   if (!panelChanged($("inventoryGrid"), signature)) return;
   setText($("inventoryCount"), `${inventory.length}/12`);
   setHtml(
@@ -1363,7 +1376,14 @@ export function renderInventory() {
       }
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
-      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}`;
+      // 0.4.0 装备预览：拾取 / 背包里就能看到「穿上后三围变成多少」，
+      // 已穿同部位时显示 旧→新，让换装决策有数字依据（公式与 renderPlayer 同源）。
+      const preview = previewEquipStats(item);
+      const delta = (before, after) => (before === after ? `${after}` : `${before}→${after}`);
+      const previewText = preview
+        ? `装备后：攻击 ${delta(preview.before.attack, preview.after.attack)} · 生命 ${delta(preview.before.hp, preview.after.hp)} · 防御 ${delta(preview.before.defense, preview.after.defense)}`
+        : "";
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${previewText ? `\n${previewText}` : ""}`;
       return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
     }).join("")
   );
@@ -1380,11 +1400,13 @@ export function renderShopPanel() {
   const scrolls = state.player.reforgeScroll || 0;
   setText($("shopTip"), `金币 ${formatNumber(gold)} · 词缀重铸卷 ×${scrolls}（按 F 关闭）`);
   // 签名包含金币、卷轴与已穿戴装备的词缀状态：任一变化都重建商品 / 重铸列表。
+  // 0.4.0：重铸后的 2 秒高亮也进签名，到期时签名变化触发一次重建以移除动画类。
+  const pulse = state.reforgePulse && performance.now() < state.reforgePulse.until ? state.reforgePulse.slotKey : "";
   const equipmentSignature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
     const item = state.player.equipment?.[slotKey];
     return item ? `${item.id}:${item.enhance || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}` : "-";
   }).join("|");
-  if (!panelChanged($("shopGoods"), `v1|${gold}|${scrolls}|${equipmentSignature}`)) return;
+  if (!panelChanged($("shopGoods"), `v2|${gold}|${scrolls}|${pulse}|${equipmentSignature}`)) return;
   setHtml(
     $("shopGoods"),
     SHOP_GOODS.map((good) => {
@@ -1398,7 +1420,9 @@ export function renderShopPanel() {
     const quote = reforgeQuote(item, { gold, scrolls });
     const affixText =
       (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、") || "无词缀";
-    return `<div class="shop-reforge-row"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
+    const owned = equipmentItemStats(item);
+    // 重铸行同时给出「本件贡献」，让玩家知道这条词缀值多少，再决定是否花卷重掷。
+    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
   }).join("");
   setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
 }

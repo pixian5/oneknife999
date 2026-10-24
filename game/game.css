@@ -223,5 +223,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 .shop-good-info small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .shop-good .link-button, .shop-reforge-row .link-button { flex: 0 0 auto; font-size: 10px; }
 .shop-good .link-button:disabled, .shop-reforge-row .link-button:disabled { opacity: .4; cursor: not-allowed; }
+/* 0.4.0：重铸成功后高亮对应装备行 2 秒，让「旧→新」的变化有落点。 */
+.shop-reforge-row.pulse { animation: reforge-flash .9s ease-out 2; }
+@keyframes reforge-flash { 0%, 100% { border-color: var(--line); box-shadow: none; } 50% { border-color: #a88ce3; box-shadow: 0 0 0 1px rgba(168, 140, 227, .5), inset 0 0 12px rgba(168, 140, 227, .18); } }
 .shop-reforge-heading { margin-top: 12px; }
 .shop-empty { margin: 6px 0 0; color: var(--muted-2); font-size: 10px; }

@@ -9,11 +9,12 @@ import {
   effectiveItemPower,
   equipmentHpBonus,
   equipmentDefenseBonus,
+  equipmentTotals,
   ENHANCE_RULES,
   SKILL_UPGRADE,
   PK_RULES
 } from "../../game/src/config.js";
-import { setState, playerDefense } from "../../game/src/runtime.js";
+import { setState, playerDefense, previewEquipStats } from "../../game/src/runtime.js";
 import { rollAffixes } from "../../game/src/drops.js";
 
 // 队列式假随机：按给定顺序返回，用尽后回退 0。
@@ -134,6 +135,50 @@ test("enhanceQuote：金币成本按 1.5^目标等级增长，+8 起需要材料
   assert.equal(enhanceQuote({ slot: "weapon", power: 50, enhance: 12, blessing: 100 }, 100000, [{ slot: "material" }]).rate, 1);
   // 上限
   assert.equal(enhanceQuote({ slot: "weapon", power: 50, enhance: 15 }, 100000, [{ slot: "material" }]).canEnhance, false);
+});
+
+test("equipmentTotals：按 12 部位汇总有效战力 / 生命 / 防御（0.4.0 面板与预览共用）", () => {
+  const gear = {
+    weapon: { slot: "weapon", power: 40, enhance: 1, affixes: [{ key: "attack", value: 6 }] },
+    armor: {
+      slot: "armor",
+      power: 20,
+      affixes: [
+        { key: "hp", value: 60 },
+        { key: "defense", value: 15 }
+      ]
+    }
+  };
+  const totals = equipmentTotals(gear);
+  assert.equal(totals.power, effectiveItemPower(gear.weapon) + effectiveItemPower(gear.armor), "战力图鉴为有效战力之和");
+  assert.equal(totals.hp, EQUIPMENT_SLOTS.armor.hp + 60, "生命 = 部位固定值 + 生命词缀");
+  assert.equal(totals.defense, 15, "防御只取防御词缀");
+  assert.deepEqual(equipmentTotals({}), { power: 0, hp: 0, defense: 0 });
+  assert.deepEqual(equipmentTotals(null), { power: 0, hp: 0, defense: 0 });
+});
+
+test("previewEquipStats：换装预览与面板公式同源（0.4.0）", () => {
+  const armor = { slot: "armor", power: 20, affixes: [{ key: "defense", value: 15 }] };
+  setState({ classId: "warrior", player: { level: 1, equipment: { armor } } });
+  const weapon = {
+    slot: "weapon",
+    power: 40,
+    affixes: [
+      { key: "hp", value: 60 },
+      { key: "attack", value: 10 }
+    ]
+  };
+  const preview = previewEquipStats(weapon);
+  const hero = CLASSES.warrior;
+  assert.equal(preview.before.attack, Math.round(hero.attack + 4 + effectiveItemPower(armor) * 0.9));
+  assert.equal(preview.after.attack, Math.round(hero.attack + 4 + (effectiveItemPower(armor) + effectiveItemPower(weapon)) * 0.9));
+  assert.equal(preview.before.hp, hero.hp + 18 + EQUIPMENT_SLOTS.armor.hp);
+  assert.equal(preview.after.hp, hero.hp + 18 + EQUIPMENT_SLOTS.armor.hp + EQUIPMENT_SLOTS.weapon.hp + 60);
+  assert.equal(preview.before.defense, hero.defense + 15, "换武器不影响已有防御词缀");
+  assert.equal(preview.after.defense, hero.defense + 15);
+  // 材料 / 消耗品没有部位，不产生预览。
+  assert.equal(previewEquipStats({ slot: "material", name: "黑铁矿石" }), null);
+  assert.equal(previewEquipStats(null), null);
 });
 
 test("规则常量与 docs/02/03/05 对齐", () => {
