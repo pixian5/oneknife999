@@ -1341,15 +1341,19 @@ export function renderEquipment() {
     EQUIPMENT_SLOT_KEYS.map((slotKey) => {
       const item = state.player.equipment?.[slotKey];
       const label = EQUIPMENT_SLOTS[slotKey].label;
+      // 装备图标：左右手镯/左右戒指共用一张图
+      const iconKey =
+        slotKey === "braceletL" || slotKey === "braceletR" ? "bracelet" : slotKey === "ringL" || slotKey === "ringR" ? "ring" : slotKey;
+      const icon = `<img class="slot-icon" src="assets/equip-${iconKey}.png" alt="">`;
       if (!item)
-        return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位"><span class="slot-glyph">+</span><span class="slot-name">${label}</span></button>`;
+        return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位">${icon}<span class="slot-name">${label}</span></button>`;
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
       const maxed = (item.enhance || 0) >= 15;
       // 0.4.0：已穿戴装备直接标出本件贡献，方便判断哪件在「拖后腿」。
       const own = equipmentItemStats(item);
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n有效战力 ${powerValue}；本件贡献：攻击 +${own.attack} · 生命 +${own.hp} · 防御 +${own.defense}\n点击强化（+8 起需材料，失败不降级）`;
-      return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
+      return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}">${icon}<span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
     }).join("")
   );
 }
@@ -1373,7 +1377,7 @@ export function renderInventory() {
       if (item.slot === "material") {
         // 材料格：只显示数量（×N）与品质点，不显示战力（材料 power 0 无意义）。
         const count = item.count || 1;
-        return `<div class="inventory-slot" data-item-index="${index}" title="${item.name}：${item.desc}；持有 ×${count}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span><span class="slot-power">×${count}</span></div>`;
+        return `<div class="inventory-slot" data-item-index="${index}" title="${item.name}：${item.desc}；持有 ×${count}"><span class="quality-line" style="color:${item.color}"></span><img class="slot-icon" src="assets/equip-material.png" alt=""><span class="slot-power">×${count}</span></div>`;
       }
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
@@ -1385,7 +1389,16 @@ export function renderInventory() {
         ? `装备后：攻击 ${delta(preview.before.attack, preview.after.attack)} · 生命 ${delta(preview.before.hp, preview.after.hp)} · 防御 ${delta(preview.before.defense, preview.after.defense)}`
         : "";
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${previewText ? `\n${previewText}` : ""}`;
-      return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
+      // 背包格图标按物品类型映射（消耗品/货币/材料用各自图，装备用部位图，左右手镯/戒指共用）
+      const invIcon =
+        item.slot === "consumable" || item.slot === "currency" || item.slot === "material"
+          ? item.slot
+          : item.slot === "braceletL" || item.slot === "braceletR"
+            ? "bracelet"
+            : item.slot === "ringL" || item.slot === "ringR"
+              ? "ring"
+              : item.slot || "weapon";
+      return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><img class="slot-icon" src="assets/equip-${invIcon}.png" alt="">${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
     }).join("")
   );
 }
@@ -1430,6 +1443,15 @@ export function renderShopPanel() {
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
   if (!boss) return;
+  // 首领立绘按 Boss 名映射（assets/boss-{名字}.jpg）；无对应美术时保留默认裂碑领主图
+  const portrait = $("bossPortrait");
+  if (portrait) {
+    portrait.src = `assets/boss-${boss.name}.jpg`;
+    portrait.onerror = () => {
+      portrait.src = "assets/boss-liebei.jpg";
+      portrait.onerror = null;
+    };
+  }
   if (
     !panelChanged(
       $("bossAlertText"),
@@ -1536,6 +1558,11 @@ export function renderTravelConfirm(pending = null) {
     return;
   }
   overlay.classList.remove("hidden");
+  // 章节氛围图作弹层背景（chapter-0N.jpg），增强跨章征途的视觉记忆
+  const chapterNo = target.chapter ? String(target.chapter).padStart(2, "0") : "";
+  if (chapterNo) {
+    overlay.style.setProperty("--travel-bg", `url(assets/chapter-${chapterNo}.jpg)`);
+  }
   setText(
     $("travelConfirmText"),
     `即将进入 ${target.name}（推荐 Lv.${target.levelMin}-${target.levelMax}），你当前 Lv.${state.player.level}。危险等级：${target.dangerLabel}`
