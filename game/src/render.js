@@ -734,22 +734,38 @@ export function drawEntity(entity) {
     ctx.stroke();
   }
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
-  // 0.4.4 战斗贴图：怪物用 monster-{名}.png、首领用 boss-{名}.jpg；
-  // 贴图未加载完成时回退原几何图形，保证任何时刻都有可辨识的实体。
+  // 0.4.5 全身立绘精灵：monster-full-{名}.png / boss-full-{名}.png（透明抠图），
+  // 程序化动作动画——呼吸浮动 / 前摇蓄力压低 / 出手前扑 / 受击抖动。
   const sprite = entity.npc
     ? null
     : entity.boss
-      ? loadSprite(`boss-${entity.name}`, `assets/boss-${entity.name}.jpg`)
-      : loadSprite(`monster-${entity.name}`, `assets/monster-${entity.name}.png`);
+      ? loadSprite(`boss-full-${entity.name}`, `assets/boss-full-${entity.name}.png`)
+      : loadSprite(`monster-full-${entity.name}`, `assets/monster-full-${entity.name}.png`);
+  const sprH = entity.npc ? entity.radius * 1.6 : spriteHeight(entity);
+  const t = Date.now() / 1000;
+  const ph = (Number(entity.id) || 0) * 0.37; // 相位错开，避免同屏怪物步调一致
   if (spriteReady(sprite)) {
-    const size = entity.radius * 2 * scale;
-    ctx.save();
-    if (entity.boss) {
-      ctx.beginPath();
-      ctx.arc(entity.x, entity.y, size / 2, 0, Math.PI * 2);
-      ctx.clip();
+    const w = (sprH * sprite.width) / sprite.height;
+    const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55); // 脚底锚点
+    let dx = 0;
+    let dy = 0;
+    let rot = 0;
+    if (entity.hitFlash > 0) dx = Math.sin(t * 46 + ph) * 2.5; // 受击抖动
+    if (entity.windup > 0 && entity.windupTotal > 0) {
+      const r = entity.windup / entity.windupTotal; // 前摇蓄力：压低 + 微颤
+      dy += (1 - r) * 4;
+      dx += Math.sin(t * 30 + ph) * 1.5;
     }
-    ctx.drawImage(sprite, entity.x - size / 2, entity.y - size / 2, size, size);
+    if (entity.attackCooldown > 0 && entity.attackCooldown < 0.4) {
+      const r = entity.attackCooldown / 0.4; // 出手瞬间前扑 + 前倾
+      dx += (1 - r) * 6;
+      rot += (1 - r) * 0.1;
+    }
+    dy += Math.sin(t * (entity.boss ? 2 : 3.2) + ph) * (entity.boss ? 2 : 1.6); // 呼吸浮动
+    ctx.save();
+    ctx.translate(entity.x + dx, footY + dy);
+    ctx.rotate(rot);
+    ctx.drawImage(sprite, -w / 2, -sprH, w, sprH);
     ctx.restore();
   } else if (entity.npc) {
     // 流浪武者：菱形轮廓 + 白名，与怪物在画面上直接区分。
@@ -796,26 +812,28 @@ export function drawEntity(entity) {
     ctx.fill();
   }
   if (entity.boss) {
+    const ringR = sprH / 2; // 0.4.5 状态圈随全身贴图尺寸
     ctx.strokeStyle = "rgba(241, 109, 102, .65)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 8, 0, Math.PI * 2);
+    ctx.arc(entity.x, entity.y, ringR + 8, 0, Math.PI * 2);
     ctx.stroke();
     if (entity.phase >= 2) {
       ctx.strokeStyle = "rgba(255, 180, 90, .8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(entity.x, entity.y, entity.radius * scale + 14, 0, Math.PI * 2);
+      ctx.arc(entity.x, entity.y, ringR + 14, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
   // 0.3.4 攻击前摇：红色蓄力环随前摇收拢，收拢到底即出手；玩家可据此走位躲开（落空）。
   if (entity.windup > 0 && entity.windupTotal > 0) {
     const ratio = clamp(entity.windup / entity.windupTotal, 0, 1);
+    const ringR = sprH / 2;
     ctx.strokeStyle = `rgba(241, 109, 102, ${0.4 + (1 - ratio) * 0.5})`;
     ctx.lineWidth = 2 + (1 - ratio) * 2;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 10 + ratio * 26, 0, Math.PI * 2);
+    ctx.arc(entity.x, entity.y, ringR + 10 + ratio * 26, 0, Math.PI * 2);
     ctx.stroke();
   }
   // 召唤物（骨卫）：青色虚线环标识友军，避免误认为可攻击怪物。
@@ -834,17 +852,25 @@ export function drawEntity(entity) {
     ctx.strokeStyle = "rgba(241, 109, 102, .85)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 7, angle - 0.45, angle + 0.45);
+    ctx.arc(entity.x, entity.y, sprH / 2 + 7, angle - 0.45, angle + 0.45);
     ctx.stroke();
   }
   ctx.restore();
   drawNameplate(entity);
 }
 
+// 0.4.5 全身立绘高度：怪物随体型放大，首领显著更大（名牌/状态圈共用）。
+export function spriteHeight(entity) {
+  if (entity.npc) return entity.radius * 1.6;
+  if (entity.boss) return clamp(entity.radius * 2.8, 110, 210);
+  return clamp(entity.radius * 4.2, 54, 110);
+}
+
 export function drawNameplate(entity) {
   const width = entity.boss ? 160 : 118;
   const left = entity.x - width / 2;
-  const top = entity.y - entity.radius - (entity.boss ? 48 : 39);
+  // 0.4.5 全身立绘后名牌按贴图高度上移，避免盖住身体
+  const top = entity.y - spriteHeight(entity) / 2 - (entity.boss ? 44 : 36);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
   roundedRect(ctx, left, top, width, 31, 3);
   ctx.fill();
@@ -930,6 +956,10 @@ export function drawSkillRangePreview() {
   ctx.restore();
 }
 
+// 0.4.5 玩家移动检测（供行走浮动动画使用）：比较前后帧坐标。
+let lastPlayerX = 0;
+let lastPlayerY = 0;
+
 export function drawPlayer() {
   const hero = activeHero();
   const maxHp = playerMaxHp();
@@ -948,14 +978,48 @@ export function drawPlayer() {
   ctx.fillRect(left + 6, top + 15, 76, 5);
   ctx.fillStyle = "#f16d66";
   ctx.fillRect(left + 6, top + 15, 76 * clamp(state.player.hp / maxHp, 0, 1), 5);
-  // 0.4.4 玩家战斗贴图：三职业立绘裁出的头像图（圆形遮罩），未加载完成回退原几何圆
-  const playerSprite = loadSprite(`player-${state.player.classId}`, `assets/player-${state.player.classId}.png`);
+  // 0.4.5 玩家全身立绘精灵：player-full-{class}.png（透明抠图），程序化动作动画——
+  // 攻击前倾（attackTimer 期间）/ 移动浮动 / 待机呼吸。
+  const playerSprite = loadSprite(`player-full-${state.classId}`, `assets/player-full-${state.classId}.png`);
+  const pT = Date.now() / 1000;
+  const pH = 112;
+  const moving = Math.abs(state.player.x - lastPlayerX) + Math.abs(state.player.y - lastPlayerY) > 0.4;
+  lastPlayerX = state.player.x;
+  lastPlayerY = state.player.y;
   if (spriteReady(playerSprite)) {
+    const pW = (pH * playerSprite.width) / playerSprite.height;
+    const footY = state.player.y + 24;
+    let rot = 0;
+    let dx = 0;
+    let dy = 0;
+    if (state.player.attackTimer > 0 && hero.cooldown > 0) {
+      const r = clamp(state.player.attackTimer / hero.cooldown, 0, 1); // 前倾+前冲
+      rot = r * 0.16;
+      dx = r * 5;
+      // 0.4.5 攻击挥击刀光：金色弧线随前倾闪现，增加传奇页游挥砍感
+      const target = state.entities.find((e) => e.id === state.player.targetId && e.alive);
+      const ang = target ? Math.atan2(target.y - state.player.y, target.x - state.player.x) : 0;
+      ctx.save();
+      ctx.translate(state.player.x + dx, state.player.y - 6);
+      ctx.rotate(ang);
+      ctx.globalAlpha = r;
+      ctx.strokeStyle = "#f5d78a";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 42, -0.85, 0.85);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 235, 180, .5)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, -0.6, 0.6);
+      ctx.stroke();
+      ctx.restore();
+    }
+    dy += Math.sin(pT * (moving ? 11 : 3.4)) * (moving ? 3 : 1.6); // 移动浮动 vs 待机呼吸
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(state.player.x, state.player.y, 24, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(playerSprite, state.player.x - 24, state.player.y - 24, 48, 48);
+    ctx.translate(state.player.x + dx, footY + dy);
+    ctx.rotate(rot);
+    ctx.drawImage(playerSprite, -pW / 2, -pH, pW, pH);
     ctx.restore();
   } else {
     ctx.fillStyle = hero.color;
@@ -967,22 +1031,17 @@ export function drawPlayer() {
     ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.strokeStyle = "rgba(255,255,255,.7)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2);
-  ctx.stroke();
   if (state.player.poison > 0) {
     ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`;
     ctx.beginPath();
-    ctx.arc(state.player.x, state.player.y, 28, 0, Math.PI * 2);
+    ctx.arc(state.player.x, state.player.y + 24, 30, 0, Math.PI * 2);
     ctx.fill();
   }
   if (state.player.charge >= 100) {
     ctx.strokeStyle = "#e7b36b";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(state.player.x, state.player.y, 30, 0, Math.PI * 2);
+    ctx.arc(state.player.x, state.player.y + 24, 34, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.restore();
