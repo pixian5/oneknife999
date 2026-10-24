@@ -1314,7 +1314,7 @@ export function setupClasses() {
   $("classOptions").innerHTML = Object.entries(CLASSES)
     .map(
       ([id, hero]) =>
-        `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`
+        `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><img class="class-portrait" src="assets/hero-${id}.jpg" alt="${hero.name}立绘"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`
     )
     .join("");
   $("classOptions")
