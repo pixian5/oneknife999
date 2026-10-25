@@ -48,6 +48,8 @@ import {
   showToast,
   log,
   textAt,
+  floatYAboveNameplate,
+  floatYAbovePlayer,
   spark,
   renderAll,
   objectiveView,
@@ -310,7 +312,7 @@ export function resolveDamage(target, multiplier, skillName, kind) {
     fx.shakePower = 5;
   }
   spark(target.x, target.y, hero.color, kind === "范围" ? 14 : 7);
-  textAt(`${damage}`, target.x, target.y - target.radius - 12, kind === "爆发" ? "#e7b36b" : "#eff4ef", kind === "爆发" ? 18 : 13);
+  textAt(`${damage}`, target.x, floatYAboveNameplate(target, 6), kind === "爆发" ? "#e7b36b" : "#eff4ef", kind === "爆发" ? 18 : 13);
   if (skillName) log(`${skillName} 命中 <b>${target.name}</b>，造成 ${damage} 点伤害。`);
   if (target.hp <= 0) defeat(target);
   return damage;
@@ -485,7 +487,7 @@ export function oneMoment() {
   state.player.oneMomentUsed = true;
   const actual = resolveDamage(target, state.classId === "warrior" ? 3.2 : state.classId === "mage" ? 2.7 : 2.35, "一刀时刻", "爆发");
   if (firstDisplay) {
-    textAt("999", target.x, target.y - target.radius - 42, "#e7b36b", 25);
+    textAt("999", target.x, floatYAboveNameplate(target, 34), "#e7b36b", 25);
     log("<b>一刀时刻</b>首次触发：剧情飘字显示 999，实际结算仍为服务器伤害。", "loot");
   } else log(`一刀时刻完成真实结算：${actual} 点伤害。`, "loot");
   showToast("一刀时刻：下一次核心爆发已命中");
@@ -522,7 +524,7 @@ function gainExperience(amount) {
   fx.shake = 0.2;
   fx.shakePower = 4;
   spark(state.player.x, state.player.y, "#e7b36b", 26);
-  textAt("LEVEL UP", state.player.x, state.player.y - 58, "#e7b36b", 20);
+  textAt("LEVEL UP", state.player.x, floatYAbovePlayer(26), "#e7b36b", 20);
   log(
     `<b>等级提升</b>：击杀经验达到 Lv.${state.player.level}，技能点 +${SKILL_UPGRADE.pointsPerLevel * result.levelsGained}（按 ${keyLabel("skillUpgrade")} 打开技能）。本关最高可到 Lv.${currentLevelCap()}。`,
     "loot"
@@ -563,7 +565,7 @@ export function defeat(target) {
   const combo = registerComboKill({ count: fx.combo, timer: fx.comboTimer });
   fx.combo = combo.count;
   fx.comboTimer = combo.timer;
-  if (combo.count >= 2) textAt(`${combo.count} 连击`, state.player.x, state.player.y - 64, "#e7b36b", 13 + Math.min(7, combo.count));
+  if (combo.count >= 2) textAt(`${combo.count} 连击`, state.player.x, floatYAbovePlayer(32), "#e7b36b", 13 + Math.min(7, combo.count));
   if (combo.milestone) {
     state.player.gold += combo.bonusGold;
     log(`<b>${combo.count} 连击</b>：额外获得 ${combo.bonusGold} 金币（每 ${COMBO_RULES.bonusEvery} 连击奖励一次）。`, "loot");
@@ -807,7 +809,7 @@ export function playerDamage(dt) {
         state.player.hp = Math.max(0, state.player.hp - amount);
         // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧。
         attacker.attackFlash = 0.18;
-        textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 13);
+        textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 13);
         spark(state.player.x, state.player.y, "#f16d66", 4);
         if (activeMap().boss.poisonStacks && attacker.boss) {
           state.player.poison = clamp(state.player.poison + 1, 0, 5);
@@ -816,7 +818,7 @@ export function playerDamage(dt) {
       } else if (!atSanctuary) {
         // 落空：只保留视觉提示，不造成伤害。
         attacker.attackFlash = 0.12;
-        textAt("落空", attacker.x, attacker.y - attacker.radius - 10, "#8d9ca0", 11);
+        textAt("落空", attacker.x, floatYAboveNameplate(attacker, 6), "#8d9ca0", 11);
       }
       return;
     }
@@ -843,7 +845,7 @@ export function playerDamage(dt) {
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
         state.player.hp = Math.max(0, state.player.hp - amount);
-        textAt(`-${amount}`, state.player.x, state.player.y - 30, "#f16d66", 14);
+        textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
       }
     }
@@ -859,12 +861,12 @@ export function playerDamage(dt) {
       state.player.poisonTimer = 1.2;
       const amount = state.player.poison * 4;
       state.player.hp = Math.max(0, state.player.hp - amount);
-      textAt(`-${amount}`, state.player.x, state.player.y - 30, "#a88ce3", 12);
+      textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 12);
     }
   } else if (atSanctuary && state.player.poison > 0) {
     state.player.poison = Math.max(0, state.player.poison - Math.max(1, Math.ceil(dt * (atWell ? 2 : 1))));
     state.player.poisonTimer = 1.2;
-    textAt(atWell ? "净化" : atRestPoint ? "篝火" : "安全区", state.player.x, state.player.y - 40, atWell ? "#5a7090" : "#62d5c6", 14);
+    textAt(atWell ? "净化" : atRestPoint ? "篝火" : "安全区", state.player.x, floatYAbovePlayer(14), atWell ? "#5a7090" : "#62d5c6", 14);
   }
   if (atSanctuary && state.player.hp < playerMaxHp()) {
     state.player.hp = clamp(state.player.hp + Math.max(1, Math.round(playerMaxHp() * 0.1 * dt)), 0, playerMaxHp());
@@ -1210,7 +1212,7 @@ export function updateHealZones(dt) {
     zone.tick = result.tick;
     if (result.heal > 0) {
       state.player.hp = clamp(state.player.hp + result.heal, 0, playerMaxHp());
-      textAt(`+${result.heal}`, state.player.x, state.player.y - 30, "#a88ce3", 15);
+      textAt(`+${result.heal}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 15);
       spark(state.player.x, state.player.y, "#a88ce3", 5);
     }
     return result.active;
@@ -1336,7 +1338,7 @@ export function usePotion() {
   const restore = Math.round(maxHp * 0.32);
   state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
   sfx.potion();
-  textAt(`+${restore}`, state.player.x, state.player.y - 32, "#78b6ec", 15);
+  textAt(`+${restore}`, state.player.x, floatYAbovePlayer(6), "#78b6ec", 15);
   log(`使用生命药水，恢复 ${restore} 点生命。`);
   persistGame();
 }
@@ -1481,7 +1483,7 @@ export function reforgeEquipped(slotKey) {
   state.reforgePulse = { slotKey, until: performance.now() + 2000 };
   const describe = (affix) => (affix ? `${affix.label} +${affix.value}${affix.percent ? "%" : ""}` : "无词缀");
   sfx.enhanceSuccess();
-  textAt(`重铸 ${describe(result.newAffix)}`, state.player.x, state.player.y - 34, "#a88ce3", 14);
+  textAt(`重铸 ${describe(result.newAffix)}`, state.player.x, floatYAbovePlayer(8), "#a88ce3", 14);
   const transition =
     result.index >= 0 ? `${describe(result.oldAffix)} → ${describe(result.newAffix)}` : `新附 ${describe(result.newAffix)}`;
   log(

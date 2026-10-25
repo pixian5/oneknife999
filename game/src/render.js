@@ -234,6 +234,12 @@ export function drawWorld() {
   drawLevelUpFx();
   state.particles.forEach(drawParticle);
   state.texts.forEach(drawText);
+  // 0.4.1 铭牌最后画：粒子、飘字、技能特效都在世界内绘制，若铭牌先画会被它们盖住
+  // 名字与血条（尤其伤害飘字原本正好落在铭牌三行上）。统一收到最上层，读血更稳。
+  // 同一层内按 y 升序（远→近）绘制，重叠时让更靠近镜头的角色铭牌压在上面。
+  const nameplates = state.entities.filter((entity) => entity.alive).map((entity) => ({ y: entity.y, draw: () => drawNameplate(entity) }));
+  nameplates.push({ y: state.player.y, draw: drawPlayerNameplate });
+  nameplates.sort((a, b) => a.y - b.y).forEach((entry) => entry.draw());
   drawMonsterTooltip(view, width, height);
   if (moveTarget) {
     ctx.strokeStyle = "rgba(98, 213, 198, .7)";
@@ -803,15 +809,45 @@ export function drawEntity(entity) {
     ctx.stroke();
   }
   ctx.restore();
-  drawNameplate(entity);
+}
+
+// 铭牌几何常量：名字 / 血量 / 血条三行共用一套纵向偏移，被 drawNameplate 与
+// 飘字避让（textAt 的 nameplateTop）共同引用，避免两处各写一份数字后走偏。
+const NAMEPLATE_HEIGHT = 31;
+// 铭牌底边与实体轮廓之间保留的间隙。原先小怪只有 8px、首领 14px，
+// 首领的红色饰环（radius*1.22+14）与中毒光环会伸进血条，读不清血量。
+const NAMEPLATE_GAP = { normal: 20, boss: 26 };
+
+export function nameplateTop(entity) {
+  const gap = entity.boss ? NAMEPLATE_GAP.boss : NAMEPLATE_GAP.normal;
+  return entity.y - entity.radius * (entity.boss ? 1.22 : 1) - gap - NAMEPLATE_HEIGHT;
+}
+
+// 飘字基线：伤害数字、落空等世界内文字一律画在铭牌**上方**，
+// 否则 fillText 会在铭牌之后绘制，直接把名字与血条盖掉。
+export function floatYAboveNameplate(entity, offset = 4) {
+  return nameplateTop(entity) - offset;
+}
+
+// 玩家铭牌：玩家不是 state.entities 成员（单独绘制），但同样需要「往上抬 + 飘字避让」。
+// 玩家本体半径 19，加上中毒光环 28、破势环 30，铭牌按 30 作为有效轮廓计算。
+const PLAYER_BODY_RADIUS = 30;
+const PLAYER_NAMEPLATE_HEIGHT = 24;
+
+export function playerNameplateTop() {
+  return state.player.y - PLAYER_BODY_RADIUS - NAMEPLATE_GAP.normal - PLAYER_NAMEPLATE_HEIGHT;
+}
+
+export function floatYAbovePlayer(offset = 6) {
+  return playerNameplateTop() - offset;
 }
 
 export function drawNameplate(entity) {
   const width = entity.boss ? 160 : 118;
   const left = entity.x - width / 2;
-  const top = entity.y - entity.radius - (entity.boss ? 48 : 39);
+  const top = nameplateTop(entity);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
-  roundedRect(ctx, left, top, width, 31, 3);
+  roundedRect(ctx, left, top, width, NAMEPLATE_HEIGHT, 3);
   ctx.fill();
   ctx.fillStyle = entity.npc ? "#eef4ef" : entity.boss ? "#f3b1a8" : "#c7d2cb";
   ctx.font = `${entity.boss || entity.npc ? 11 : 9}px sans-serif`;
@@ -897,22 +933,8 @@ export function drawSkillRangePreview() {
 
 export function drawPlayer() {
   const hero = activeHero();
-  const maxHp = playerMaxHp();
-  const left = state.player.x - 44;
-  const top = state.player.y - 56;
   ctx.save();
   ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
-  ctx.fillStyle = "rgba(8, 15, 18, .82)";
-  roundedRect(ctx, left, top, 88, 24, 3);
-  ctx.fill();
-  ctx.fillStyle = "#eef3f4";
-  ctx.font = "10px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`Lv.${state.player.level} 灰烬旅人`, state.player.x, top + 10);
-  ctx.fillStyle = "#0c1518";
-  ctx.fillRect(left + 6, top + 15, 76, 5);
-  ctx.fillStyle = "#f16d66";
-  ctx.fillRect(left + 6, top + 15, 76 * clamp(state.player.hp / maxHp, 0, 1), 5);
   ctx.fillStyle = hero.color;
   ctx.beginPath();
   ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
@@ -940,6 +962,30 @@ export function drawPlayer() {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+// 玩家铭牌与怪物铭牌一样收到场景最上层绘制（drawWorld 调用），
+// 避免伤害飘字、连击光环等后画内容盖住生命条。
+export function drawPlayerNameplate() {
+  const maxHp = playerMaxHp();
+  const width = 88;
+  const left = state.player.x - width / 2;
+  const top = playerNameplateTop();
+  ctx.save();
+  ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
+  ctx.fillStyle = "rgba(8, 15, 18, .82)";
+  roundedRect(ctx, left, top, width, PLAYER_NAMEPLATE_HEIGHT, 3);
+  ctx.fill();
+  ctx.fillStyle = "#eef3f4";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`Lv.${state.player.level} 灰烬旅人`, state.player.x, top + 10);
+  ctx.fillStyle = "#0c1518";
+  ctx.fillRect(left + 6, top + 15, 76, 5);
+  ctx.fillStyle = "#f16d66";
+  ctx.fillRect(left + 6, top + 15, 76 * clamp(state.player.hp / maxHp, 0, 1), 5);
+  ctx.restore();
+  ctx.textAlign = "start";
 }
 export function drawParticle(particle) {
   ctx.save();
