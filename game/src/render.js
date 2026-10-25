@@ -884,8 +884,9 @@ export function spriteHeight(entity) {
 export function drawNameplate(entity) {
   const width = entity.boss ? 160 : 118;
   const left = entity.x - width / 2;
-  // 0.4.5 全身立绘后名牌按贴图高度上移，避免盖住身体
-  const top = entity.y - spriteHeight(entity) / 2 - (entity.boss ? 44 : 36);
+  // 0.4.7 名牌锚定在贴图头顶上方（脚底 - 贴图高 - 间距），不再压进身体
+  const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55);
+  const top = footY - spriteHeight(entity) - (entity.boss ? 44 : 36);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
   roundedRect(ctx, left, top, width, 31, 3);
   ctx.fill();
@@ -979,7 +980,8 @@ export function drawPlayer() {
   const hero = activeHero();
   const maxHp = playerMaxHp();
   const left = state.player.x - 44;
-  const top = state.player.y - 56;
+  // 0.4.7 血条锚定贴图头顶上方（脚底 y+24 - 贴图高 112 - 间距 8），不再压住头部
+  const top = state.player.y + 24 - 112 - 8;
   ctx.save();
   ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
   ctx.fillStyle = "rgba(8, 15, 18, .82)";
