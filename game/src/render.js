@@ -133,13 +133,24 @@ export function roundedRect(target, x, y, width, height, radius) {
 
 // 静态地图层离屏缓存：地形、道路、战区装饰、水道、网格与地标只在切换地图时绘制一次，
 // 每帧只做一次 drawImage，避免每帧重复描边整张地图（只保留当前地图的缓存）。
+// 0.4.6 章节氛围图作为地图底层背景：异步加载，就绪后重建缓存层（bgReady 参与缓存键）。
 let groundLayer = null;
 
-function paintGroundLayer(target, map) {
+function paintGroundLayer(target, map, bgImg) {
   const ctx = target;
   const p = map.palette;
-  ctx.fillStyle = p.ground;
-  ctx.fillRect(0, 0, map.width, map.height);
+  if (bgImg) {
+    // 章节氛围图 cover 铺满地图（等比裁切居中），底部压暗保证道路/网格/实体可读
+    const s = Math.max(map.width / bgImg.width, map.height / bgImg.height);
+    const w = bgImg.width * s;
+    const h = bgImg.height * s;
+    ctx.drawImage(bgImg, (map.width - w) / 2, (map.height - h) / 2, w, h);
+    ctx.fillStyle = "rgba(10, 15, 13, 0.66)";
+    ctx.fillRect(0, 0, map.width, map.height);
+  } else {
+    ctx.fillStyle = p.ground;
+    ctx.fillRect(0, 0, map.width, map.height);
+  }
   // 道路
   ctx.strokeStyle = p.road;
   ctx.lineWidth = 70;
@@ -202,16 +213,20 @@ function paintGroundLayer(target, map) {
 }
 
 function getGroundLayer(map) {
-  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr。
-  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr) return groundLayer.canvas;
+  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr 与章节背景就绪态。
+  const bgImg = loadSprite(`chapter-bg-${map.chapter}`, `assets/chapter-${String(map.chapter).padStart(2, "0")}.jpg`);
+  const bgReady = spriteReady(bgImg);
+  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgReady === bgReady) {
+    return groundLayer.canvas;
+  }
   const layer = document.createElement("canvas");
   const scale = Math.max(1, dpr);
   layer.width = map.width * scale;
   layer.height = map.height * scale;
   const layerCtx = layer.getContext("2d");
   layerCtx.scale(scale, scale);
-  paintGroundLayer(layerCtx, map);
-  groundLayer = { mapId: map.id, dpr: scale, canvas: layer };
+  paintGroundLayer(layerCtx, map, bgReady ? bgImg : null);
+  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgReady };
   return layer;
 }
 

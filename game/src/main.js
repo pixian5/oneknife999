@@ -1128,6 +1128,10 @@ export function updateBoss(boss, dt) {
     log(`<b>${boss.name}</b> 进入阶段 ${newPhase}：${phaseName}。`, "warn");
     showToast(`${boss.name} 阶段 ${newPhase}：${phaseName}`);
     spark(boss.x, boss.y, "#e7b36b", 24);
+    // 0.4.6 换阶段震屏 + 红色炸点，增强 Boss 战气势
+    fx.shake = 0.32;
+    fx.shakePower = 6;
+    spark(boss.x, boss.y, "#f16d66", 36);
   }
   // 召唤腐工（坑道尸皇阶段1）
   if (def.summonMob !== undefined && boss.phase === 1) {
