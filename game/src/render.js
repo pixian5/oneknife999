@@ -303,15 +303,22 @@ export function drawGuideArrow() {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  ctx.fillStyle = guide.color;
-  ctx.globalAlpha = 0.88;
-  ctx.beginPath();
-  ctx.moveTo(9, 0);
-  ctx.lineTo(-5, -6);
-  ctx.lineTo(-2, 0);
-  ctx.lineTo(-5, 6);
-  ctx.closePath();
-  ctx.fill();
+  // 0.4.8 指引箭头用美术贴图（fx-arrow 金色火焰箭头，替代程序化三角形）
+  const arr = loadSprite("fx-arrow", "assets/fx-arrow.png");
+  if (spriteReady(arr)) {
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(arr, -20, -20, 40, 40);
+  } else {
+    ctx.fillStyle = guide.color;
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-5, -6);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.restore();
   ctx.save();
   ctx.globalAlpha = 0.72;
@@ -941,9 +948,15 @@ export function drawMonsterTooltip(view, viewWidth, viewHeight) {
 export function drawDrop(drop) {
   ctx.save();
   ctx.translate(drop.x, drop.y);
+  // 0.4.8 掉落光柱：金色光柱贴图叠加在掉落物上方（未就绪时静默跳过）
+  const beam = loadSprite("fx-beam", "assets/fx-beam.png");
+  if (spriteReady(beam)) {
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(beam, -30, -98, 60, 98);
+  }
+  ctx.globalAlpha = 0.9;
   ctx.rotate(Math.PI / 4);
   ctx.fillStyle = drop.color;
-  ctx.globalAlpha = 0.9;
   ctx.fillRect(-6, -6, 12, 12);
   ctx.globalAlpha = 0.28;
   ctx.fillRect(-11, -11, 22, 22);
@@ -1173,9 +1186,8 @@ export function renderPlayer() {
   ].join("|");
   if (!panelChanged($("powerText"), signature)) return;
   const avatar = $("avatar");
-  setText(avatar, hero.glyph);
-  setStyle(avatar, "color", hero.color);
-  setStyle(avatar, "borderColor", hero.color);
+  // 0.4.8 头像改用职业头像贴图（0.4.4 已生成 player-{class}.png，此前一直显示文字字形）
+  avatar.innerHTML = `<img class="avatar-img" src="assets/player-${state.classId}.png" alt="">`;
   setText($("className"), hero.name);
   setText($("playerName"), `${hero.name} · 灰烬旅人`);
   setText($("powerText"), formatNumber(power));
@@ -1193,8 +1205,9 @@ export function renderPlayer() {
   setText($("expText"), `${state.player.exp} / ${state.player.nextExp}`);
   setStyle($("expBar"), "width", `${clamp((state.player.exp / state.player.nextExp) * 100, 0, 100)}%`);
   setText($("potionKey"), keyLabel("potion"));
-  setText($("goldText"), formatNumber(state.player.gold));
-  setText($("markText"), `${state.player.marks} / 800`);
+  // 0.4.8 金币/首领印记前加货币美术图标
+  setHtml($("goldText"), `<img class="currency-ico" src="assets/currency-gold.png" alt=""> ${formatNumber(state.player.gold)}`);
+  setHtml($("markText"), `<img class="currency-ico" src="assets/currency-mark.png" alt=""> ${state.player.marks} / 800`);
   setText($("potionCount"), state.player.potion);
   // 战斗统计与罪恶值：PK 状态一眼可见（红名用红色胶囊）。
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
@@ -1547,7 +1560,9 @@ export function renderShopPanel() {
     $("shopGoods"),
     SHOP_GOODS.map((good) => {
       const affordable = gold >= good.price;
-      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><span class="shop-good-glyph" style="color:${good.color}">${good.glyph}</span><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
+      // 0.4.8 商品用美术图标（material 商品对应黑铁矿石图）
+      const icon = good.id === "material" ? "ore" : good.id;
+      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/goods-${icon}.png" alt=""><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
     }).join("")
   );
   const rows = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
@@ -1558,7 +1573,7 @@ export function renderShopPanel() {
       (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、") || "无词缀";
     const owned = equipmentItemStats(item);
     // 重铸行同时给出「本件贡献」，让玩家知道这条词缀值多少，再决定是否花卷重掷。
-    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
+    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><img class="shop-good-ico" src="assets/equip-${slotKey}.png" alt=""><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
   }).join("");
   setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
 }
