@@ -233,13 +233,23 @@ export function drawWorld() {
   drawGuideArrow();
   drawLevelUpFx();
   state.particles.forEach(drawParticle);
-  state.texts.forEach(drawText);
+  for (const text of state.texts) drawText(text, view, width, height);
   // 0.4.1 铭牌最后画：粒子、飘字、技能特效都在世界内绘制，若铭牌先画会被它们盖住
   // 名字与血条（尤其伤害飘字原本正好落在铭牌三行上）。统一收到最上层，读血更稳。
   // 同一层内按 y 升序（远→近）绘制，重叠时让更靠近镜头的角色铭牌压在上面。
-  const nameplates = state.entities.filter((entity) => entity.alive).map((entity) => ({ y: entity.y, draw: () => drawNameplate(entity) }));
-  nameplates.push({ y: state.player.y, draw: drawPlayerNameplate });
-  nameplates.sort((a, b) => a.y - b.y).forEach((entry) => entry.draw());
+  // 0.4.2 只收集视野内的铭牌（大地图里绝大多数实体不在屏内），并用 {y, entity} 轻量条目
+  // 排序，不再每帧为每个实体创建闭包，省掉一次 filter + map + 闭包分配。
+  const plates = [];
+  for (const entity of state.entities) {
+    if (!entity.alive || !nameplateVisible(entity, view, width, height)) continue;
+    plates.push({ y: entity.y, entity });
+  }
+  if (playerNameplateVisible(view, width, height)) plates.push({ y: state.player.y, entity: null });
+  plates.sort((a, b) => a.y - b.y);
+  for (const plate of plates) {
+    if (plate.entity) drawNameplate(plate.entity);
+    else drawPlayerNameplate();
+  }
   drawMonsterTooltip(view, width, height);
   if (moveTarget) {
     ctx.strokeStyle = "rgba(98, 213, 198, .7)";
@@ -817,6 +827,8 @@ const NAMEPLATE_HEIGHT = 31;
 // 铭牌底边与实体轮廓之间保留的间隙。原先小怪只有 8px、首领 14px，
 // 首领的红色饰环（radius*1.22+14）与中毒光环会伸进血条，读不清血量。
 const NAMEPLATE_GAP = { normal: 20, boss: 26 };
+// 铭牌宽度：drawNameplate 与视野裁剪共用，避免两处数字走偏。
+const NAMEPLATE_WIDTH = { normal: 118, boss: 160 };
 
 export function nameplateTop(entity) {
   const gap = entity.boss ? NAMEPLATE_GAP.boss : NAMEPLATE_GAP.normal;
@@ -833,6 +845,7 @@ export function floatYAboveNameplate(entity, offset = 4) {
 // 玩家本体半径 19，加上中毒光环 28、破势环 30，铭牌按 30 作为有效轮廓计算。
 const PLAYER_BODY_RADIUS = 30;
 const PLAYER_NAMEPLATE_HEIGHT = 24;
+const PLAYER_NAMEPLATE_WIDTH = 88;
 
 export function playerNameplateTop() {
   return state.player.y - PLAYER_BODY_RADIUS - NAMEPLATE_GAP.normal - PLAYER_NAMEPLATE_HEIGHT;
@@ -842,8 +855,32 @@ export function floatYAbovePlayer(offset = 6) {
   return playerNameplateTop() - offset;
 }
 
+// 视野裁剪（0.4.2）：只绘制与视口相交的铭牌。百图大地图里绝大多数实体在屏外，
+// 之前每帧仍要为全部实体建闭包、排序、再绘制（画布裁剪掉但调用开销还在）。
+// 判定用铭牌矩形与视口矩形相交，部分可见的（贴边）仍然绘制，不影响观感。
+function plateVisible(x, halfWidth, top, height, view, viewWidth, viewHeight) {
+  return x + halfWidth >= view.x && x - halfWidth <= view.x + viewWidth && top + height >= view.y && top <= view.y + viewHeight;
+}
+
+function nameplateVisible(entity, view, viewWidth, viewHeight) {
+  const halfWidth = (entity.boss ? NAMEPLATE_WIDTH.boss : NAMEPLATE_WIDTH.normal) / 2;
+  return plateVisible(entity.x, halfWidth, nameplateTop(entity), NAMEPLATE_HEIGHT, view, viewWidth, viewHeight);
+}
+
+function playerNameplateVisible(view, viewWidth, viewHeight) {
+  return plateVisible(
+    state.player.x,
+    PLAYER_NAMEPLATE_WIDTH / 2,
+    playerNameplateTop(),
+    PLAYER_NAMEPLATE_HEIGHT,
+    view,
+    viewWidth,
+    viewHeight
+  );
+}
+
 export function drawNameplate(entity) {
-  const width = entity.boss ? 160 : 118;
+  const width = entity.boss ? NAMEPLATE_WIDTH.boss : NAMEPLATE_WIDTH.normal;
   const left = entity.x - width / 2;
   const top = nameplateTop(entity);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
@@ -968,7 +1005,7 @@ export function drawPlayer() {
 // 避免伤害飘字、连击光环等后画内容盖住生命条。
 export function drawPlayerNameplate() {
   const maxHp = playerMaxHp();
-  const width = 88;
+  const width = PLAYER_NAMEPLATE_WIDTH;
   const left = state.player.x - width / 2;
   const top = playerNameplateTop();
   ctx.save();
@@ -994,13 +1031,19 @@ export function drawParticle(particle) {
   ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
   ctx.restore();
 }
-export function drawText(text) {
+// 飘字裁剪（0.4.2）：vy -26 让伤害数字在 1 秒内上浮 26px，靠地图边缘的怪物飘字
+// 会飞出画布顶部被裁掉。这里把绘制点夹进视口内缩 size 的范围（只改显示位置，
+// 不影响生命与上浮动效）；不传 view 时退化为原行为，保持导出函数可单独调用。
+export function drawText(text, view, viewWidth, viewHeight) {
   ctx.save();
   ctx.globalAlpha = clamp(text.life * 2, 0, 1);
   ctx.fillStyle = text.color;
   ctx.font = `700 ${text.size}px sans-serif`;
   ctx.textAlign = "center";
-  ctx.fillText(text.message, text.x, text.y);
+  const inset = text.size;
+  const x = view ? clamp(text.x, view.x + inset, view.x + viewWidth - inset) : text.x;
+  const y = view ? clamp(text.y, view.y + inset, view.y + viewHeight - inset) : text.y;
+  ctx.fillText(text.message, x, y);
   ctx.restore();
 }
 
