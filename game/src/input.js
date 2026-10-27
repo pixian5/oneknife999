@@ -18,6 +18,7 @@ import {
   enhanceItem,
   buyGoods,
   reforgeEquipped,
+  toggleReforgeLock,
   closeShop,
   upgradeSkill,
   saveGame,
@@ -297,5 +298,11 @@ export function setupInput() {
     }
     const reforgeButton = event.target.closest("[data-reforge]");
     if (reforgeButton) reforgeEquipped(reforgeButton.dataset.reforge);
+    // 0.4.2：词缀锁定芯片（data-reforge-lock="slot:affixIndex"）
+    const lockChip = event.target.closest("[data-reforge-lock]");
+    if (lockChip) {
+      const [slotKey, affixIndex] = lockChip.dataset.reforgeLock.split(":");
+      toggleReforgeLock(slotKey, Number(affixIndex));
+    }
   });
 }

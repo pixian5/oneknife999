@@ -75,6 +75,16 @@ function summarize(frames) {
     fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
     fs.writeFileSync(path.join(ARTIFACT_DIR, "perf-probe.json"), JSON.stringify(report, null, 2));
     process.stdout.write(`PERF PROBE ${JSON.stringify(report)}\n`);
+    // 0.4.2 perf 门禁（P2-12）：p99 帧 ≤ 4ms 且零 20ms+ 长帧，超阈值按失败退出（可进 CI）。
+    const GATE = {
+      p99FrameMsMax: Number(process.env.ONEKNIFE_PERF_P99_MAX || 4),
+      over20msMax: Number(process.env.ONEKNIFE_PERF_OVER20_MAX || 0)
+    };
+    if (report.p99FrameMs > GATE.p99FrameMsMax || report.over20ms > GATE.over20msMax)
+      throw new Error(
+        `perf 门禁未达标：p99 ${report.p99FrameMs}ms > ${GATE.p99FrameMsMax}ms 或 20ms+ 长帧 ${report.over20ms} > ${GATE.over20msMax}`
+      );
+    process.stdout.write(`PERF GATE PASS p99<=${GATE.p99FrameMsMax}ms over20<=${GATE.over20msMax}\n`);
     if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
     await context.close();
   } finally {

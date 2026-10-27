@@ -12,6 +12,7 @@ import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
 import { SHOP_GOODS, reforgeQuote } from "./shop.js";
+import { computeDamage } from "./combat.js";
 import {
   state,
   moveTarget,
@@ -233,13 +234,47 @@ export function drawWorld() {
   drawGuideArrow();
   drawLevelUpFx();
   state.particles.forEach(drawParticle);
-  state.texts.forEach(drawText);
+  state.texts.forEach((text) => drawText(text, view, width));
   // 0.4.1 铭牌最后画：粒子、飘字、技能特效都在世界内绘制，若铭牌先画会被它们盖住
   // 名字与血条（尤其伤害飘字原本正好落在铭牌三行上）。统一收到最上层，读血更稳。
   // 同一层内按 y 升序（远→近）绘制，重叠时让更靠近镜头的角色铭牌压在上面。
-  const nameplates = state.entities.filter((entity) => entity.alive).map((entity) => ({ y: entity.y, draw: () => drawNameplate(entity) }));
-  nameplates.push({ y: state.player.y, draw: drawPlayerNameplate });
-  nameplates.sort((a, b) => a.y - b.y).forEach((entry) => entry.draw());
+  // 0.4.2 阶梯避让：怪群贴脸时铭牌互相遮挡（0.4.1 复测最差 57.7%）。
+  // 同屏铭牌按纵深排序后逐个放置，与已放置铭牌水平重叠时整牌向上错开一级（高度+3px 台阶，最多 3 级），
+  // 保证读血不被邻牌盖住；代价是邻牌进出重叠区时位置有轻微跳动。
+  const nameplates = state.entities
+    .filter((entity) => entity.alive)
+    .map((entity) => ({
+      baseY: entity.y,
+      top: nameplateTop(entity),
+      height: NAMEPLATE_HEIGHT,
+      width: entity.boss ? 160 : 118,
+      centerX: entity.x,
+      draw: (top) => drawNameplate(entity, top)
+    }));
+  nameplates.push({
+    baseY: state.player.y,
+    top: playerNameplateTop(),
+    height: PLAYER_NAMEPLATE_HEIGHT,
+    width: 88,
+    centerX: state.player.x,
+    draw: (top) => drawPlayerNameplate(top)
+  });
+  nameplates.sort((a, b) => a.baseY - b.baseY);
+  const placedPlates = [];
+  for (const entry of nameplates) {
+    let top = entry.top;
+    for (let step = 0; step < 3; step += 1) {
+      const overlaps = placedPlates.some(
+        (plate) =>
+          Math.abs(entry.centerX - plate.centerX) < (entry.width + plate.width) / 2 - 6 &&
+          Math.abs(top - plate.top) < Math.max(entry.height, plate.height) - 2
+      );
+      if (!overlaps) break;
+      top -= entry.height + 3;
+    }
+    placedPlates.push({ centerX: entry.centerX, width: entry.width, top });
+    entry.draw(top);
+  }
   drawMonsterTooltip(view, width, height);
   if (moveTarget) {
     ctx.strokeStyle = "rgba(98, 213, 198, .7)";
@@ -842,10 +877,10 @@ export function floatYAbovePlayer(offset = 6) {
   return playerNameplateTop() - offset;
 }
 
-export function drawNameplate(entity) {
+export function drawNameplate(entity, topOverride) {
   const width = entity.boss ? 160 : 118;
   const left = entity.x - width / 2;
-  const top = nameplateTop(entity);
+  const top = topOverride ?? nameplateTop(entity);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
   roundedRect(ctx, left, top, width, NAMEPLATE_HEIGHT, 3);
   ctx.fill();
@@ -864,6 +899,13 @@ export function drawNameplate(entity) {
   ctx.fillRect(left + 7, top + 25, width - 14, 4);
   ctx.fillStyle = entity.boss ? "#f16d66" : "#8fc7a2";
   ctx.fillRect(left + 7, top + 25, (width - 14) * clamp(entity.hp / entity.maxHp, 0, 1), 4);
+  // 0.4.2 破甲可视化：目标仍处于破甲窗口时，铭牌下方给出图标与剩余秒数。
+  if ((Number(entity.armorBreakTimer) || 0) > 0) {
+    ctx.fillStyle = "#e7b36b";
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`⚔ 破甲 -15% · ${Math.ceil(entity.armorBreakTimer)}s`, entity.x, top + NAMEPLATE_HEIGHT + 10);
+  }
   ctx.textAlign = "start";
 }
 
@@ -994,13 +1036,16 @@ export function drawParticle(particle) {
   ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
   ctx.restore();
 }
-export function drawText(text) {
+export function drawText(text, view = null, viewWidth = 0) {
   ctx.save();
   ctx.globalAlpha = clamp(text.life * 2, 0, 1);
   ctx.fillStyle = text.color;
   ctx.font = `700 ${text.size}px sans-serif`;
   ctx.textAlign = "center";
-  ctx.fillText(text.message, text.x, text.y);
+  // 0.4.2 飘字视口裁剪：上浮（vy -26）与贴边出生的飘字会被画布裁掉，绘制位置内缩到可视区。
+  const x = view ? clamp(text.x, view.x + 24, view.x + viewWidth - 24) : text.x;
+  const y = view ? Math.max(text.y, view.y + 16) : text.y;
+  ctx.fillText(text.message, x, y);
   ctx.restore();
 }
 
@@ -1123,6 +1168,30 @@ export function renderPlayer() {
   // 战斗统计与罪恶值：PK 状态一眼可见（红名用红色胶囊）。
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
   setText($("statsLine"), `击杀 ${formatNumber(state.player.totalKills || 0)} · 死亡 ${state.player.deaths || 0} · 通关 ${cleared}/100`);
+  // 0.4.2 伤害估算（P1-7）：复用 computeDamage 对「本区中位防御怪」的普攻期望（方差取 1.0），
+  // 让强化 / 重铸 / 换装的攻击收益直接可读；破甲期一并提供对照。
+  const defenses = activeMap()
+    .monsterTypes.map((type) => type.defense)
+    .sort((a, b) => a - b);
+  const medianDefense = defenses[Math.floor(defenses.length / 2)] ?? 0;
+  const estimate = computeDamage({
+    target: { defense: medianDefense, maxHp: 1, boss: false },
+    hero,
+    player: state.player,
+    multiplier: 1,
+    kind: "普通",
+    random: () => 0.5
+  });
+  const brokenTarget = { defense: Math.round(medianDefense * 0.85), maxHp: 1, boss: false, armorBreakTimer: 1 };
+  const brokenEstimate = computeDamage({
+    target: brokenTarget,
+    hero,
+    player: state.player,
+    multiplier: 1,
+    kind: "普通",
+    random: () => 0.5
+  });
+  setText($("damageEstimate"), `普攻期望(本区怪) ≈ ${formatNumber(estimate.damage)} · 破甲期 ≈ ${formatNumber(brokenEstimate.damage)}`);
   const sin = state.player.sin || 0;
   const sinEl = $("sinPill");
   if (sin > 0) {
@@ -1452,7 +1521,9 @@ export function renderShopPanel() {
     const item = state.player.equipment?.[slotKey];
     return item ? `${item.id}:${item.enhance || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}` : "-";
   }).join("|");
-  if (!panelChanged($("shopGoods"), `v2|${gold}|${scrolls}|${pulse}|${equipmentSignature}`)) return;
+  // 0.4.2：词缀锁定状态也进签名，锁定 / 解锁后面板价格与芯片立即刷新。
+  const lockSignature = JSON.stringify(state.reforgeLocks || {});
+  if (!panelChanged($("shopGoods"), `v3|${gold}|${scrolls}|${pulse}|${lockSignature}|${equipmentSignature}`)) return;
   setHtml(
     $("shopGoods"),
     SHOP_GOODS.map((good) => {
@@ -1463,12 +1534,21 @@ export function renderShopPanel() {
   const rows = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
     const item = state.player.equipment?.[slotKey];
     if (!item) return "";
-    const quote = reforgeQuote(item, { gold, scrolls });
-    const affixText =
-      (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、") || "无词缀";
+    const lockIndex = state.reforgeLocks?.[slotKey];
+    const lockActive = Number.isInteger(lockIndex) && lockIndex >= 0 && lockIndex < (item.affixes?.length || 0);
+    const quote = reforgeQuote(item, { gold, scrolls, lockIndex: lockActive ? lockIndex : null });
+    // 0.4.2 词缀锁定（P1-4）：≥2 条词缀时可点击芯片锁定 1 条，锁定后重铸不重掷它、报价 ×1.8。
+    const affixChips = (item.affixes || []).map((affix, affixIndex) => {
+      const locked = lockActive && lockIndex === affixIndex;
+      const chip = `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`;
+      const lockable = (item.affixes?.length || 0) >= 2;
+      return lockable
+        ? `<span class="affix-chip${locked ? " locked" : ""}" data-reforge-lock="${slotKey}:${affixIndex}" title="${locked ? "已锁定：重铸不会重掷（报价 ×1.8），点击解锁" : "点击锁定：重铸保留此词缀，报价 ×1.8"}">${locked ? "🔒 " : ""}${chip}</span>`
+        : `<span class="affix-chip static">${chip}</span>`;
+    });
     const owned = equipmentItemStats(item);
     // 重铸行同时给出「本件贡献」，让玩家知道这条词缀值多少，再决定是否花卷重掷。
-    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixText}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷`}">重铸 ${quote.cost} 金</button></div>`;
+    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixChips.join(" ") || "无词缀"}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷${lockActive ? "（已锁定 ×1.8）" : ""}`}">重铸 ${quote.cost} 金${lockActive ? " 🔒" : ""}</button></div>`;
   }).join("");
   setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
 }

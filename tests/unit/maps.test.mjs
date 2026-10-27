@@ -133,3 +133,75 @@ test("生成怪命名不重复拼接章节前缀", () => {
       assert.ok(!type.name.slice(short.length).startsWith(short), `${map.id} 怪物名前缀重复：${type.name}`);
   }
 });
+
+// ============ 0.4.2 地图几何属性测试：把 e2e catalog 的空间约束下沉到单测 ============
+// 这些约束此前只在百图 e2e 里检查（每关一次、约 30 分钟一轮）；单测在 import 时
+// 全量生成 100 图，任何生成器改动破坏空间契约都会在 npm run verify 阶段立刻暴露。
+
+test("空间约束：战术节点互不重叠、避开首领战区与刷怪点", () => {
+  for (const map of ALL_MAPS) {
+    const points = map.tacticalPoints || [];
+    const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    for (let i = 0; i < points.length; i += 1) {
+      for (let j = i + 1; j < points.length; j += 1)
+        assert.ok(
+          distance(points[i], points[j]) >= points[i].radius + points[j].radius + 18,
+          `${map.id} 节点重叠：${points[i].kind}/${points[j].kind}`
+        );
+      const boss = map.boss;
+      assert.ok(distance(points[i], boss) >= points[i].radius + boss.radius + 100, `${map.id} 节点过近首领：${points[i].kind}`);
+      for (const [x, y] of map.monsterSpawns)
+        assert.ok(distance(points[i], { x, y }) >= points[i].radius + 82, `${map.id} 节点过近刷怪点：${points[i].kind}`);
+      const rect = map.specialRect;
+      if (rect) {
+        const outside =
+          points[i].x < rect.x - 78 ||
+          points[i].x > rect.x + rect.w + 78 ||
+          points[i].y < rect.y - 78 ||
+          points[i].y > rect.y + rect.h + 78;
+        assert.ok(outside, `${map.id} 节点落入首领战区：${points[i].kind}`);
+      }
+    }
+  }
+});
+
+test("空间约束：普通怪刷新点不侵入首领战区（生成图）", () => {
+  for (const map of ALL_MAPS.slice(4)) {
+    const rect = map.specialRect;
+    if (!rect) continue;
+    for (const [x, y] of map.monsterSpawns) {
+      const inside = x >= rect.x - 30 && x <= rect.x + rect.w + 30 && y >= rect.y - 30 && y <= rect.y + rect.h + 30;
+      assert.ok(!inside, `${map.id} 刷怪点侵入战区：${Math.round(x)},${Math.round(y)}`);
+    }
+  }
+});
+
+test("构图签名：100 张地图实际构图互不重复", () => {
+  const signatures = ALL_MAPS.map((map) => mapLayoutSignature(map));
+  assert.equal(new Set(signatures).size, 100);
+});
+
+test("路线契约：主路 ≥ 8 营位，支路图 ≥ 4 支路守卫，支路锚定补给箱", () => {
+  for (const map of ALL_MAPS) {
+    const routes = map.monsterSpawns.reduce((counts, spawn) => {
+      counts[spawn[3] || "main"] = (counts[spawn[3] || "main"] || 0) + 1;
+      return counts;
+    }, {});
+    assert.ok((routes.main || 0) >= 8, `${map.id} 主路营位不足：${JSON.stringify(routes)}`);
+    const road = map.siteStyle?.road;
+    if (road === "fork" || road === "radial") {
+      assert.ok((routes.branch || 0) >= 4, `${map.id} 支路守卫不足：${JSON.stringify(routes)}`);
+      const branchCache = map.tacticalPoints.find((point) => point.kind === "resource" && point.route === "branch");
+      assert.ok(branchCache, `${map.id} 支路图缺支路补给箱`);
+    }
+  }
+});
+
+test("生成器鲁棒性：101–110 关（未来关号）也能生成合法布局", () => {
+  for (let stage = 101; stage <= 110; stage += 1) {
+    const chapter = CHAPTERS[Math.floor((stage - 1) / 10) % 10];
+    const layout = generatedLayout(stage, chapter);
+    assert.ok(layout.monsterSpawns.length >= 12, `stage ${stage} 营位异常`);
+    assert.ok(layout.tacticalPoints.length === 3, `stage ${stage} 节点异常`);
+  }
+});

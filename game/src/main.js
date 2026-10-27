@@ -1470,12 +1470,21 @@ export function buyGoods(goodId) {
 export function reforgeEquipped(slotKey) {
   if (!state) return;
   const item = state.player.equipment?.[slotKey];
-  const quote = reforgeQuote(item, { gold: state.player.gold, scrolls: state.player.reforgeScroll || 0 });
+  const lockIndex = state.reforgeLocks?.[slotKey];
+  const lockActive =
+    Number.isInteger(lockIndex) && lockIndex >= 0 && lockIndex < (item?.affixes?.length || 0) && (item?.affixes?.length || 0) >= 2;
+  const quote = reforgeQuote(item, {
+    gold: state.player.gold,
+    scrolls: state.player.reforgeScroll || 0,
+    lockIndex: lockActive ? lockIndex : null
+  });
   if (!quote.canReforge) {
     showToast(quote.reason);
     return;
   }
-  const result = reforgeAffix(item, { level: state.player.level, random: Math.random });
+  const result = reforgeAffix(item, { level: state.player.level, random: Math.random, lockIndex: lockActive ? lockIndex : null });
+  // 重铸完成后清除该部位锁定（新词缀落定，锁失去意义）。
+  if (state.reforgeLocks) delete state.reforgeLocks[slotKey];
   state.player.gold -= quote.cost;
   state.player.reforgeScroll = Math.max(0, (state.player.reforgeScroll || 0) - quote.scrollNeeded);
   state.player.equipment[slotKey] = result.item;
@@ -1492,6 +1501,24 @@ export function reforgeEquipped(slotKey) {
   );
   showToast(`${item.name} 重铸完成：${transition}`);
   persistGame();
+  renderAll();
+}
+
+// 0.4.2 词缀锁定切换（P1-4）：≥2 条词缀的装备可锁 1 条；再次点击同一条解锁。
+export function toggleReforgeLock(slotKey, affixIndex) {
+  if (!state) return;
+  const item = state.player.equipment?.[slotKey];
+  if (!item || (item.affixes?.length || 0) < 2) {
+    showToast("至少 2 条词缀才能锁定重铸");
+    return;
+  }
+  if (affixIndex < 0 || affixIndex >= (item.affixes?.length || 0)) return;
+  state.reforgeLocks ||= {};
+  if (state.reforgeLocks[slotKey] === affixIndex) delete state.reforgeLocks[slotKey];
+  else state.reforgeLocks[slotKey] = affixIndex;
+  const affix = item.affixes[affixIndex];
+  const locked = state.reforgeLocks[slotKey] === affixIndex;
+  showToast(locked ? `已锁定「${affix.label} +${affix.value}」：重铸保留它，报价 ×1.8` : `已解锁「${affix.label}」`);
   renderAll();
 }
 

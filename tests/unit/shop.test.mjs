@@ -117,3 +117,45 @@ test("reforgeAffix：候选池耗尽时回退到完整词缀池，仍只保留�
   assert.equal(result.item.affixes.length, AFFIX_POOL.length);
   assert.ok(result.newAffix.value >= 1);
 });
+
+test("reforgeQuote：锁定词缀（≥2 条）报价 ×1.8；单条词缀锁定无效", () => {
+  const item = {
+    id: "eq-lock",
+    name: "测试锁刃",
+    slot: "weapon",
+    power: 40,
+    enhance: 0,
+    affixes: [
+      { group: "生存", key: "hp", label: "生命", value: 30 },
+      { group: "主属性", key: "attack", label: "攻击", value: 8 }
+    ]
+  };
+  const base = reforgeQuote(item, { gold: 99999, scrolls: 9 });
+  assert.equal(base.canReforge, true);
+  assert.equal(base.lockActive, false);
+  const locked = reforgeQuote(item, { gold: 99999, scrolls: 9, lockIndex: 0 });
+  assert.equal(locked.lockActive, true);
+  assert.equal(locked.cost, Math.round(base.cost * 1.8), "锁定报价 = 基础 ×1.8 取整");
+  // 越界下标与单条词缀：锁定不生效，报价与基础一致
+  assert.equal(reforgeQuote(item, { gold: 99999, scrolls: 9, lockIndex: 5 }).lockActive, false);
+  const single = { ...item, affixes: item.affixes.slice(0, 1) };
+  assert.equal(reforgeQuote(single, { gold: 99999, scrolls: 9, lockIndex: 0 }).lockActive, false);
+});
+
+test("reforgeAffix：锁定词缀不被重掷，非锁定槽位在剩余词缀里重掷", () => {
+  const lockedAffix = { group: "生存", key: "hp", label: "生命", value: 30 };
+  const otherAffix = { group: "主属性", key: "attack", label: "攻击", value: 8 };
+  const item = { id: "eq-lock", slot: "weapon", power: 40, affixes: [lockedAffix, otherAffix] };
+  // 假随机 0 → 候选下标取首位（锁定 0 时唯一候选是 1）；0 → 池首位；0.5 → 数值系数
+  const result = reforgeAffix(item, { level: 20, random: queueRandom([0, 0, 0.5]), lockIndex: 0 });
+  assert.equal(result.index, 1, "只重掷非锁定槽位");
+  assert.equal(result.item.affixes[0], lockedAffix, "锁定词缀对象原样保留");
+  assert.notEqual(result.item.affixes[1], otherAffix, "另一条被重掷（对象被替换，允许抽回同 key 新值）");
+  // 锁定 1 时唯一候选是 0
+  const flipped = reforgeAffix(item, { level: 20, random: queueRandom([0, 0, 0.5]), lockIndex: 1 });
+  assert.equal(flipped.index, 0);
+  assert.equal(flipped.item.affixes[1], otherAffix);
+  // 不传锁定：行为与旧版一致（下标从全部词缀里抽）
+  const unlocked = reforgeAffix(item, { level: 20, random: queueRandom([0, 0, 0.5]) });
+  assert.equal(unlocked.index, 0);
+});

@@ -42,3 +42,15 @@ jobs:
           python3 -m http.server 4174 --directory game &
           sleep 1
           ONEKNIFE_CHANNEL=chromium npm run test:ui:regression
+
+      - name: 铭牌可读性回归（飘字/特效环/铭牌互不遮挡）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 1
+          ONEKNIFE_CHANNEL=chromium npm run test:ui:nameplate
+
+      - name: 帧率门禁（p99 ≤ 4ms、零 20ms+ 长帧）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 1
+          ONEKNIFE_CHANNEL=chromium npm run perf

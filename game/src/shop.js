@@ -54,17 +54,20 @@ export function buyShopItem(goodId, { gold = 0 } = {}) {
   return { ok: true, good, price: good.price, reason: "" };
 }
 
-// 重铸报价：返回 { canReforge, reason, cost, affixCount, scrollNeeded }。
+// 重铸报价：返回 { canReforge, reason, cost, affixCount, scrollNeeded, lockActive }。
 // cost 为金币成本；卷轴单独计数（不足时给出明确原因，方便界面提示）。
-export function reforgeQuote(item, { gold = 0, scrolls = 0 } = {}) {
+// 0.4.2 锁定词缀（P1-4）：lockIndex 指向要保留的词缀（需 ≥2 条词缀才有意义），报价 ×1.8。
+export function reforgeQuote(item, { gold = 0, scrolls = 0, lockIndex = null } = {}) {
   const scrollNeeded = REFORGE_RULES.scrollPerReforge;
-  if (!item) return { canReforge: false, reason: "该部位没有穿戴装备", cost: 0, affixCount: 0, scrollNeeded };
+  if (!item) return { canReforge: false, reason: "该部位没有穿戴装备", cost: 0, affixCount: 0, scrollNeeded, lockActive: false };
   const affixCount = (item.affixes || []).length;
-  const cost = Math.round(REFORGE_RULES.baseGold + REFORGE_RULES.enhanceStep * (item.enhance || 0) + REFORGE_RULES.perAffix * affixCount);
+  const lockActive = Number.isInteger(lockIndex) && lockIndex >= 0 && lockIndex < affixCount && affixCount >= 2;
+  let cost = Math.round(REFORGE_RULES.baseGold + REFORGE_RULES.enhanceStep * (item.enhance || 0) + REFORGE_RULES.perAffix * affixCount);
+  if (lockActive) cost = Math.round(cost * 1.8);
   if (scrolls < scrollNeeded)
-    return { canReforge: false, reason: `缺少词缀重铸卷 ×${scrollNeeded}（杂货商有售）`, cost, affixCount, scrollNeeded };
-  if (gold < cost) return { canReforge: false, reason: `金币不足（需要 ${cost}）`, cost, affixCount, scrollNeeded };
-  return { canReforge: true, reason: "", cost, affixCount, scrollNeeded };
+    return { canReforge: false, reason: `缺少词缀重铸卷 ×${scrollNeeded}（杂货商有售）`, cost, affixCount, scrollNeeded, lockActive };
+  if (gold < cost) return { canReforge: false, reason: `金币不足（需要 ${cost}）`, cost, affixCount, scrollNeeded, lockActive };
+  return { canReforge: true, reason: "", cost, affixCount, scrollNeeded, lockActive };
 }
 
 // 重掷一条词缀（纯函数，不修改传入装备）：
@@ -72,10 +75,15 @@ export function reforgeQuote(item, { gold = 0, scrolls = 0 } = {}) {
 // - 没有词缀：新附一条，避免「白板装备无法使用重铸」的死路。
 // 新词缀优先避开装备上已有的属性 key，防止同属性重复堆叠。
 // 返回 { item, index, oldAffix, newAffix }，index 为 -1 表示新附。
-export function reforgeAffix(item, { level = 1, random = Math.random } = {}) {
+export function reforgeAffix(item, { level = 1, random = Math.random, lockIndex = null } = {}) {
   if (!item) return { item, index: -1, oldAffix: null, newAffix: null };
   const affixes = [...(item.affixes || [])];
-  const index = affixes.length ? Math.floor(random() * affixes.length) : -1;
+  // 锁定词缀不参与重掷：可重掷下标只从非锁定槽位里抽（单条词缀锁定时退化为新附一条）。
+  const lockActive = Number.isInteger(lockIndex) && lockIndex >= 0 && lockIndex < affixes.length && affixes.length >= 2;
+  const rollableIndexes = lockActive
+    ? affixes.map((_, position) => position).filter((position) => position !== lockIndex)
+    : affixes.map((_, position) => position);
+  const index = rollableIndexes.length ? rollableIndexes[Math.floor(random() * rollableIndexes.length)] : -1;
   const oldAffix = index >= 0 ? affixes[index] : null;
   const keep = index >= 0 ? affixes.filter((_, position) => position !== index) : affixes;
   const candidates = AFFIX_POOL.filter((entry) => !keep.some((affix) => affix.key === entry.key));

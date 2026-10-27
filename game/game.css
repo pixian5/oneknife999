@@ -228,3 +228,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 @keyframes reforge-flash { 0%, 100% { border-color: var(--line); box-shadow: none; } 50% { border-color: #a88ce3; box-shadow: 0 0 0 1px rgba(168, 140, 227, .5), inset 0 0 12px rgba(168, 140, 227, .18); } }
 .shop-reforge-heading { margin-top: 12px; }
 .shop-empty { margin: 6px 0 0; color: var(--muted-2); font-size: 10px; }
+
+/* ============ 0.4.2 新增：词缀锁定芯片 / 伤害估算行 ============ */
+.affix-chip { display: inline-block; margin: 1px 2px; padding: 1px 6px; border: 1px solid var(--line); color: var(--teal); font-size: 9px; cursor: pointer; user-select: none; }
+.affix-chip:hover { border-color: var(--amber); }
+.affix-chip.locked { border-color: var(--amber); color: var(--amber); background: rgba(231, 179, 107, .1); }
+.affix-chip.static { cursor: default; color: var(--muted); }
+.damage-estimate { color: var(--amber); opacity: .9; }
