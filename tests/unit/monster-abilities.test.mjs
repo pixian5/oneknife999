@@ -78,7 +78,8 @@ test("attackShapeConfig：多段 / 蓄力 / 远程 / 冲锋 / 横扫的差异可
   assert.equal(normal.multiHit, 1);
   assert.ok(heavy.damageMult > normal.damageMult, "蓄力重击伤害更高");
   assert.ok(heavy.knockback > 0, "蓄力重击可击退");
-  assert.ok(ranged.rangeMult > normal.rangeMult * 2, "远程投掷距离显著更远");
+  // 0.6.0 调平：远程从 2.4 倍降到 1.9 倍（战士仍能还手），仍显著大于基础射程。
+  assert.ok(ranged.rangeMult > normal.rangeMult * 1.5, "远程投掷距离显著更远");
   assert.ok(sweep.rangeMult > normal.rangeMult, "横扫范围更大");
   assert.equal(attackShapeConfig("pull").pulls, true, "拖拽形态标记");
 });

@@ -4,6 +4,13 @@ import { seededRandom, distanceToPath, pathLength, pointOnPath, routePoint } fro
 // 《一刀999》地图数据：4 张手工地图 + 96 张确定性生成地图，
 // 以及关卡顺序、通关规则、剧情节点与战术节点契约。
 
+// 0.6.0 刷怪档位：0-5 为常规档，6-8 为精英档（仅章内后半段出现）。
+// slot 为章内序号 0-9：前 5 关只用常规档，后 5 关混入精英档。
+function spawnTier(index, stageNumber, slot) {
+  if (slot >= 5) return (index + stageNumber) % 9;
+  return (index + stageNumber) % 6;
+}
+
 // 0.6.0 P2 套装键：10 章映射到 6 套（与 endgame.js 的 SET_BONUSES 对齐）。
 const SET_KEYS = ["边境", "苍月", "龙脉", "冰封", "烬火", "帝陵", "烬火", "帝陵", "烬火", "帝陵"];
 
@@ -907,9 +914,11 @@ export function generatedLayout(stageNumber, chapter) {
     return [
       Math.round(Math.max(430, Math.min(2100, jittered.x))),
       Math.round(Math.max(130, Math.min(1370, jittered.y))),
-      // 0.6.0：每章怪物从 4 种扩到 9 种（新增 5 种带四动作帧素材的野怪），
-      // 刷新点轮转覆盖全部类型，同章不同关的怪组合也不同。
-      (index + stageNumber) % 9,
+      // 0.6.0：每章怪物从 4 种扩到 9 种（新增 5 种带四动作帧素材的野怪）。
+      // 前 6 档（索引 0-5）为常规刷怪；索引 6-8 为「精英档」（更硬），只在章内后半段关卡出现，
+      // 让高关号有额外的强度层次，同时避免低关号被高血量怪压死
+      // （实测低关就取满 9 档会让第 15 关死亡中位数从 1 升到 5）。
+      spawnTier(index, stageNumber, (stageNumber - 1) % 10),
       route,
       adjustedProgress
     ];
@@ -1096,12 +1105,13 @@ export function generatedMap(stageNumber) {
       // 章节前缀与怪物名重复时不再二次拼接（避免「龙脉龙脉毒虫」式 stutter）。
       name: name.startsWith(chapter.short) ? name : `${chapter.short}${name}`,
       color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
-      // 9 档数值：hp / 防御 / 金币按 typeIndex 线性递增，步长比 4 档时代缩小，保持整体战力不变。
-      hp: Math.round((480 + typeIndex * 20.8) * (1 + (stageNumber - 4) * 0.0097)),
+      // 9 档数值：覆盖与原 4 档相同的区间（480 → 620），步长 = 原步长 × 3/8。
+      // 若按 20.8 步长会把最高档抬到 646（比原第 4 档强 20%），实测第 15 关死亡中位数因此从 1 升到 4。
+      hp: Math.round((480 + typeIndex * 17.5) * (1 + (stageNumber - 4) * 0.0097)),
       attack,
-      defense: anchored(16 + typeIndex * 0.58, 0.35),
+      defense: anchored(16 + typeIndex * 0.4875, 0.35),
       exp: 0,
-      gold: anchored(36 + typeIndex * 1.33, 1.4),
+      gold: anchored(36 + typeIndex * 1.125, 1.4),
       radius: 16 + Math.floor(typeIndex * 0.44),
       intro: `${chapter.name}中负责巡逻的${name}，会根据玩家距离选择攻击方式。`,
       skills: [`${name}攻击：基础伤害 ${attack}`, `${name}本能：受到伤害后继续追击`]

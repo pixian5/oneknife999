@@ -3,6 +3,7 @@ import {
   COMMON_DROPS,
   TEST_MODE,
   FAST_FORWARD,
+  ABILITIES_ENABLED,
   STORAGE_KEY,
   EQUIPMENT_SLOT_KEYS,
   enhanceQuote,
@@ -99,7 +100,10 @@ import {
   upgradeQuality,
   recordBestiary,
   unlockedDifficulties,
-  DIFFICULTY_TIERS
+  DIFFICULTY_TIERS,
+  abyssMultipliers,
+  isAbyssBossFloor,
+  abyssProgress
 } from "./endgame.js";
 import {
   resolveAbilities,
@@ -130,10 +134,12 @@ const MAX_WINDUP_ATTACKERS = 1;
 export function createEntities(map) {
   const result = [];
   // 0.6.0 P2：难度模式对怪物生命 / 攻击的缩放（常规难度倍率恒为 1，行为完全不变）。
+  // 无尽深层（abyssFloor > 0）在难度倍率之上再叠一层层数成长。
   const difficulty = resolveDifficulty(state?.difficulty, MAP_ORDER.filter((id) => state?.mapProgress?.[id]?.completed).length);
+  const abyss = state?.abyssFloor > 0 ? abyssMultipliers(state.abyssFloor) : { hp: 1, attack: 1, exp: 1 };
   map.monsterSpawns.forEach((spawn, index) => {
     const baseType = map.monsterTypes[spawn[2]];
-    const scaled = scaleForDifficulty({ hp: baseType.hp, attack: baseType.attack }, difficulty);
+    const scaled = scaleForDifficulty({ hp: baseType.hp * abyss.hp, attack: baseType.attack * abyss.attack }, difficulty);
     const type = { ...baseType, hp: scaled.hp, attack: scaled.attack };
     const level = clamp(map.levelMin + spawn[2] * 2 + (index % 3), map.levelMin, map.levelMax);
     result.push({
@@ -155,7 +161,8 @@ export function createEntities(map) {
       aggro: false,
       friendly: false,
       // 0.6.0 P0 怪物行为：把 config 里 56 种怪的行为描述落成可执行配置（见 monster-abilities.js）。
-      abilities: resolveAbilities(type.name),
+      // ABILITIES_ENABLED=false 时（仅 e2e 的 noabilities 参数）回落普通行为，供难度 A/B 对照。
+      abilities: ABILITIES_ENABLED ? resolveAbilities(type.name) : { attack: "normal", passives: [], onDeath: null },
       usedLethalSave: false,
       shieldValue: 0,
       shieldTimer: 0,
@@ -168,7 +175,7 @@ export function createEntities(map) {
     });
   });
   const b = map.boss;
-  const bossScaled = scaleForDifficulty({ hp: b.hp, attack: b.attack }, difficulty);
+  const bossScaled = scaleForDifficulty({ hp: b.hp * abyss.hp, attack: b.attack * abyss.attack }, difficulty);
   result.push({
     id: b.id,
     name: b.name,
@@ -740,6 +747,8 @@ export function checkMapCompletion() {
   } else {
     log("<b>百图征途完成</b>：100 张地图与 100 名区域首领全部通关。", "loot");
     showToast("恭喜通关：一刀999 百图征途完成");
+    // 0.6.0 P2 无尽深层解锁提示（真正的进入由 enterAbyss 负责，按 T 或点击出口）。
+    log("无尽深层已解锁：在最终关按 <b>T</b>（或进入东侧出口）可深入下一层，层数越高怪物越强、掉落越好。", "loot");
   }
   return true;
 }
@@ -1712,6 +1721,34 @@ export function salvageItem(itemId) {
   persistGame();
   renderPlayer();
   renderInventory();
+}
+
+// 0.6.0 P2 无尽深层：百图通关后按 T / 走出最终关出口进入。
+// 复用地形随机挑一张已有地图（保证布局多样），层数决定怪物与掉落的成长倍率。
+export function enterAbyss() {
+  if (!state) return;
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  const progress = abyssProgress({ clearedMaps: cleared, bestFloor: state.abyssBest || 0 });
+  if (!progress.unlocked) {
+    showToast(`无尽深层需通关百图后解锁（当前 ${cleared}/100）`);
+    return;
+  }
+  const floor = (state.abyssFloor || 0) + 1;
+  state.abyssFloor = floor;
+  state.abyssBest = Math.max(state.abyssBest || 0, floor);
+  // 地形随机：按层数取确定性的地图（同层可复现，不同层布局不同）。
+  const mapId = MAP_ORDER[(floor * 37) % MAP_ORDER.length];
+  const map = MAPS[mapId];
+  const spawn = { x: map.townRect.x + map.townRect.w / 2, y: map.townRect.y + map.townRect.h / 2 };
+  loadMap(mapId, spawn.x, spawn.y, true);
+  const bossFloor = isAbyssBossFloor(floor);
+  log(
+    `<b>无尽深层第 ${floor} 层</b>：${map.name}。${bossFloor ? "本层为首领层，击败首领后继续深入。" : "清剿怪物后按 T 深入下一层。"}`,
+    "warn"
+  );
+  showToast(`深层第 ${floor} 层${bossFloor ? " · 首领层" : ""}`);
+  persistGame();
+  renderAll();
 }
 
 // 0.6.0 P2 难度切换：百图通关后解锁烬火 / 灰烬，循环切换已解锁档位。

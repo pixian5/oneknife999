@@ -12,16 +12,16 @@
 export const ATTACK_SHAPES = {
   normal: { label: "基础近战", multiHit: 1, rangeMult: 1, damageMult: 1 },
   // 多段连击：撕咬 / 连射 / 破军连斩 / 逐浪三斩 / 星骸斩。每段独立结算，总伤按 multiHit 均分。
-  multi: { label: "多段连击", multiHit: 2, rangeMult: 1, damageMult: 1 },
-  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 1 },
+  multi: { label: "多段连击", multiHit: 2, rangeMult: 1, damageMult: 0.92 },
+  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 0.85 },
   // 蓄力重击：前摇更长、伤害更高、可击退（矿镐重击 / 重锤 / 神陨锤 / 铜棺砸击）。
-  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.5, knockback: 40, windupMult: 1.6 },
+  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.35, knockback: 30, windupMult: 1.6 },
   // 远程投掷：在更远距离出手（掷刃 / 投掷火石 / 冰弩 / 猎杀箭 / 雷羽 / 引魂灯 / 断界弹 / 魂火 / 怨火）。
-  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 2.4, damageMult: 0.9 },
+  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 1.9, damageMult: 0.85 },
   // 直线冲锋：向前突进并击退（晶角冲锋 / 魔血冲锋 / 礁壳冲撞 / 残甲冲撞 / 撕裂突进 / 跃袭 / 俯冲）。
-  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.6, damageMult: 1.3, knockback: 46, dash: 90 },
+  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.45, damageMult: 1.2, knockback: 36, dash: 80 },
   // 范围横扫 / 震击（石戟横扫 / 帝陵戟 / 黄泉戟 / 金甲重踏 / 冰壳震荡）：命中范围更大。
-  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.9, damageMult: 1.15 },
+  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.7, damageMult: 1.1 },
   // 锁链拖拽：命中把玩家拉近（炼狱行刑者）。
   pull: { label: "锁链拖拽", multiHit: 1, rangeMult: 2.2, damageMult: 0.8 }
 };
@@ -205,16 +205,16 @@ export const MONSTER_ABILITIES = {
 
 // 被动参数（默认值集中在这里，个别怪可在 MONSTER_ABILITIES 里用 passives 覆盖参数对象）。
 export const PASSIVE_PARAMS = {
-  poison: { stacks: 1, chance: 0.5 },
-  slow: { duration: 2, factor: 0.55, chance: 0.6 },
+  poison: { stacks: 1, chance: 0.35 },
+  slow: { duration: 1.6, factor: 0.68, chance: 0.4 },
   stun: { duration: 0.5, chance: 0.25 },
   shieldCycle: { cooldown: 8, amount: 0.3 },
-  firstHitReduce: { ratio: 0.5 },
+  firstHitReduce: { ratio: 0.35 },
   lowHpReduce: { threshold: 0.35, ratio: 0.3 },
-  meleeReflect: { ratio: 0.25 },
+  meleeReflect: { ratio: 0.18 },
   lethalSave: { hpRatio: 0.12 },
-  enrageLowHp: { threshold: 0.4, damageBonus: 0.3, speedBonus: 0.25 },
-  packHunt: { perAlly: 0.12, max: 0.5, range: 260 },
+  enrageLowHp: { threshold: 0.35, damageBonus: 0.2, speedBonus: 0.2 },
+  packHunt: { perAlly: 0.08, max: 0.35, range: 260 },
   rageStack: { attackSpeedPerStack: 0.08, max: 5 },
   lowHpDamageUp: { maxBonus: 1.0 },
   deathPoison: { radius: 90, damage: 8, duration: 4 },

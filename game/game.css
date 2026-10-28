@@ -245,3 +245,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 .guide-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 48px); padding: 9px 14px; border: 1px solid rgba(98, 213, 198, .45); background: rgba(12, 20, 23, .92); backdrop-filter: blur(8px); pointer-events: none; font-size: 12px; }
 .guide-banner .guide-step { flex: 0 0 auto; padding: 2px 8px; border: 1px solid rgba(98, 213, 198, .5); color: var(--teal); font-size: 11px; font-weight: 700; }
 .guide-banner span:last-child { color: var(--ink); }
+
+/* ============ 0.6.0 新增：怪物图鉴面板 ============ */
+.bestiary-chapter { margin-top: 14px; }
+.bestiary-chapter > strong { display: block; margin-bottom: 7px; color: var(--amber); font-size: 12px; }
+.bestiary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+.bestiary-entry { padding: 5px 8px; border: 1px solid var(--line); font-size: 10px; color: var(--ink); }
+.bestiary-entry.unknown { color: var(--muted-2); border-style: dashed; opacity: .55; }
+.bestiary-entry .count { float: right; color: var(--teal); font-size: 9px; }
+.endgame-line { color: var(--muted); font-size: 10px; }

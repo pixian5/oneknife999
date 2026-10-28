@@ -9,7 +9,7 @@ import {
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
-import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier } from "./endgame.js";
+import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier, abyssProgress } from "./endgame.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
@@ -1695,6 +1695,16 @@ export function renderEquipment() {
     }).join("")
   );
 }
+// 0.6.0 P2：某件装备的套装进度提示（无 setKey 返回空串）。
+function setHintFor(item) {
+  if (!item?.setKey) return "";
+  const counts = setCounts(state.player.equipment || {});
+  // 背包装备尚未穿戴，按「穿上后」的件数计算。
+  const pieces = (counts[item.setKey] || 0) + 1;
+  const next = nextSetTier(pieces);
+  return `套装「${item.setKey}」· 穿上后 ${pieces} 件${next ? `（再 ${next.missing} 件触发 ${next.tier} 件套）` : "（满套）"}`;
+}
+
 export function renderInventory() {
   const inventory = state.inventory || [];
   // 签名含 id 与 count：材料堆叠数量变化（count）也触发背包重渲染。
@@ -1726,7 +1736,9 @@ export function renderInventory() {
       const previewText = preview
         ? `装备后：攻击 ${delta(preview.before.attack, preview.after.attack)} · 生命 ${delta(preview.before.hp, preview.after.hp)} · 防御 ${delta(preview.before.defense, preview.after.defense)}`
         : "";
-      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${previewText ? `\n${previewText}` : ""}`;
+      // 0.6.0 P2 套装提示：带 setKey 的装备显示「套装 X · 已穿 N 件 · 再 M 件触发 T 件套」。
+      const setHint = setHintFor(item);
+      const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${setHint ? `\n${setHint}` : ""}${previewText ? `\n${previewText}` : ""}`;
       // 背包格图标按物品类型映射（消耗品/货币/材料用各自图，装备用部位图，左右手镯/戒指共用）
       const invIcon =
         item.slot === "consumable" || item.slot === "currency" || item.slot === "material"
@@ -1959,6 +1971,7 @@ export function renderAll() {
   renderLog();
   renderBoss();
   renderGuide();
+  renderBestiary();
   setText($("coords"), `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`);
   // 操作提示与弹窗说明跟随自定义键位，避免玩家改键后看到旧按键。
   setText(
@@ -1987,4 +2000,50 @@ export function renderKeybindPanel() {
     }).join("")
   );
   setText($("settingsHint"), capturing ? "等待新的按键（Esc 取消）" : "点击右侧按键后再按新键");
+}
+
+// 0.6.0 P2 怪物图鉴面板：按章节分组列出全部怪物，未击败的置灰。
+// 只在弹窗打开时重建（同 renderSkillModal 的惰性策略），静止帧零成本。
+export function renderBestiary() {
+  const modal = $("bestiaryModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  const bestiary = state.bestiary || {};
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  const allNames = [];
+  const byChapter = new Map();
+  for (const id of MAP_ORDER) {
+    const map = MAPS[id];
+    if (!byChapter.has(map.chapter)) byChapter.set(map.chapter, { name: map.story.chapterTitle, names: [] });
+    for (const type of map.monsterTypes) {
+      if (byChapter.get(map.chapter).names.includes(type.name)) continue;
+      byChapter.get(map.chapter).names.push(type.name);
+      allNames.push(type.name);
+    }
+  }
+  const stats = bestiaryStats(bestiary, allNames);
+  setText($("bestiaryStats"), `${stats.seen} / ${stats.total}（${Math.round(stats.ratio * 100)}%）`);
+  const signature = `${stats.seen}|${stats.total}|${Object.values(bestiary).reduce((a, b) => a + b, 0)}`;
+  if (!panelChanged($("bestiaryList"), signature)) return;
+  setHtml(
+    $("bestiaryList"),
+    [...byChapter.entries()]
+      .map(([chapter, group]) => {
+        const entries = group.names
+          .map((name) => {
+            const count = bestiary[name] || 0;
+            return count > 0
+              ? `<div class="bestiary-entry">${name}<span class="count">×${count}</span></div>`
+              : `<div class="bestiary-entry unknown">???（未收集）</div>`;
+          })
+          .join("");
+        return `<div class="bestiary-chapter"><strong>${group.name}</strong><div class="bestiary-grid">${entries}</div></div>`;
+      })
+      .join("")
+  );
+}
+
+// 0.6.0 P2 深层入口：百图通关 + 已在最终关时，出口提示改为「进入无尽深层」。
+export function abyssEntryAvailable() {
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  return abyssProgress({ clearedMaps: cleared, bestFloor: state.abyssBest || 0 }).unlocked;
 }

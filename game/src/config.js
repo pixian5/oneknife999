@@ -10,6 +10,9 @@ const URL_FLAGS = new URLSearchParams(hasWindow ? window.location.search : "");
 const LOCAL_TEST_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 export const TEST_MODE = hasWindow && LOCAL_TEST_HOSTS.has(window.location.hostname) && URL_FLAGS.has("e2e");
 export const FAST_FORWARD = TEST_MODE && URL_FLAGS.has("fast");
+// 0.6.0 P0 行为系统开关（仅测试用）：`?e2e=1&noabilities=1` 关闭全部怪物行为，
+// 用于 A/B 对照量化「行为系统对难度的真实影响」。生产环境（非 e2e）恒为 false。
+export const ABILITIES_ENABLED = !(TEST_MODE && URL_FLAGS.has("noabilities"));
 
 export const CLASSES = {
   warrior: {

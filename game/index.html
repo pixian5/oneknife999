@@ -20,6 +20,7 @@
         <div class="top-actions">
           <button class="icon-button" id="skillBtn" title="技能升级（快捷键 K）"><img class="btn-ico" src="assets/btn-skill.png" alt="">技能<span class="point-badge hidden" id="skillPointBadge">0</span></button>
           <button class="icon-button" id="difficultyBtn" title="切换难度（百图通关后解锁烬火 / 灰烬）"><img class="btn-ico" src="assets/btn-skill.png" alt="">难度</button>
+          <button class="icon-button" id="bestiaryBtn" title="怪物图鉴（收集度）"><img class="btn-ico" src="assets/btn-skill.png" alt="">图鉴</button>
           <button class="icon-button" id="settingsBtn" title="键位设置"><img class="btn-ico" src="assets/btn-settings.png" alt="">设置</button>
           <button class="icon-button" id="muteBtn" title="开关音效"><img class="btn-ico" src="assets/btn-sound.png" alt="">音效</button>
           <button class="icon-button" id="exportBtn" title="导出存档为 JSON 文件"><img class="btn-ico" src="assets/btn-export.png" alt="">导出</button>
@@ -177,6 +178,16 @@
         <p class="skill-modal-tip" id="skillModalTip">升级获得技能点；每级提高该技能倍率 +6%（原型简化，上限 10 级）。按 K 或点击右上角「技能」关闭。</p>
         <div class="skill-modal-list" id="skillModalList"></div>
         <button class="icon-button" data-close-modal>关闭</button>
+      </div>
+    </div>
+
+    <!-- 0.6.0 P2 怪物图鉴：106 种收集度，按章节分组，未收集项置灰 -->
+    <div class="class-modal skill-modal hidden" id="bestiaryModal" role="dialog" aria-modal="true" aria-label="怪物图鉴">
+      <div class="skill-modal-box">
+        <div class="section-heading"><span><i class="section-icon">◈</i> 怪物图鉴</span><b id="bestiaryStats">0 / 0</b></div>
+        <p class="skill-modal-tip">击败过的怪物会记入图鉴。共 10 章 106 种，灰色为未收集。</p>
+        <div class="bestiary-list" id="bestiaryList"></div>
+        <button class="icon-button" data-close-bestiary>关闭</button>
       </div>
     </div>
 

@@ -22,6 +22,7 @@ import {
   closeShop,
   upgradeSkill,
   cycleDifficulty,
+  enterAbyss,
   saveGame,
   resetGame,
   exportSave,
@@ -125,6 +126,7 @@ export function setupInput() {
       cancelTravel();
       $("settingsModal").classList.add("hidden");
       $("skillModal").classList.add("hidden");
+      $("bestiaryModal").classList.add("hidden");
       renderAll();
     }
 
@@ -142,7 +144,10 @@ export function setupInput() {
     if (action === "travel") {
       const exit = primaryExit();
       if (exit) tryTravel(exit);
-      else showToast(mapProgress().completed ? "100 张地图已全部通关" : objectiveView().text);
+      else if (mapProgress().completed) {
+        // 0.6.0 P2：百图全部通关后，T 改为进入无尽深层下一层。
+        enterAbyss();
+      } else showToast(objectiveView().text);
     }
     if (/^skill[1-4]$/.test(action)) castSkill(Number(action.slice(5)) - 1);
   });
@@ -230,6 +235,17 @@ export function setupInput() {
   // 键位设置弹窗：点击动作进入捕获态，下一次按键即绑定（Esc 取消，校验失败保持捕获）。
   // 0.6.0 P2：难度切换按钮（百图通关后可用）。
   $("difficultyBtn").addEventListener("click", cycleDifficulty);
+  // 0.6.0 P2：怪物图鉴面板。
+  $("bestiaryBtn").addEventListener("click", () => {
+    $("bestiaryModal").classList.toggle("hidden");
+    renderAll();
+  });
+  $("bestiaryModal").addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-bestiary]")) {
+      $("bestiaryModal").classList.add("hidden");
+      renderAll();
+    }
+  });
   $("settingsBtn").addEventListener("click", () => {
     keybindCapture.action = null;
     $("skillModal").classList.add("hidden");
