@@ -64,7 +64,11 @@ export function persistGame() {
       player: state.player,
       inventory: state.inventory || [],
       equipment: state.player.equipment,
-      mapProgress: state.mapProgress
+      mapProgress: state.mapProgress,
+      // 0.6.0 P2：终局系统状态（难度档、怪物图鉴、深层最高层）。
+      difficulty: state.difficulty || "normal",
+      bestiary: state.bestiary || {},
+      abyssBest: state.abyssBest || 0
     })
   );
   return true;

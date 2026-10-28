@@ -21,6 +21,7 @@ import {
   toggleReforgeLock,
   closeShop,
   upgradeSkill,
+  cycleDifficulty,
   saveGame,
   resetGame,
   exportSave,
@@ -227,6 +228,8 @@ export function setupInput() {
     renderAll();
   });
   // 键位设置弹窗：点击动作进入捕获态，下一次按键即绑定（Esc 取消，校验失败保持捕获）。
+  // 0.6.0 P2：难度切换按钮（百图通关后可用）。
+  $("difficultyBtn").addEventListener("click", cycleDifficulty);
   $("settingsBtn").addEventListener("click", () => {
     keybindCapture.action = null;
     $("skillModal").classList.add("hidden");

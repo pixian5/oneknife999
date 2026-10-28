@@ -8,6 +8,8 @@ import {
   QUEST_REWARD
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
+import { ATTACK_SHAPES } from "./monster-abilities.js";
+import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier } from "./endgame.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
@@ -784,6 +786,16 @@ export function drawPierceBeam() {
   ctx.restore();
 }
 
+// 0.6.0 P1：怪物当前动作帧选择（纯函数，可单测）。
+// 优先级：受击 > 出手/前摇 > 移动 > 待机；未配置动作帧的怪由调用方回退静态立绘。
+export function monsterAction(entity) {
+  if ((entity.hitFlash || 0) > 0) return "hit";
+  if ((entity.windup || 0) > 0) return "attack";
+  if ((entity.attackCooldown || 0) > 0 && entity.attackCooldown < 0.4) return "attack";
+  if (entity.moving) return "walk";
+  return "idle";
+}
+
 export function drawEntity(entity) {
   ctx.save();
   const selected = entity.id === state.player.targetId;
@@ -799,11 +811,20 @@ export function drawEntity(entity) {
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
   // 0.4.5 全身立绘精灵：monster-full-{名}.png / boss-full-{名}.png（透明抠图），
   // 程序化动作动画——呼吸浮动 / 前摇蓄力压低 / 出手前扑 / 受击抖动。
+  // 0.6.0 P1 四动作帧：优先按状态取 monster-full-{名}-{action}.png（idle/walk/attack/hit），
+  // 素材缺失时逐级回退——动作帧 → 单帧静态立绘 → 程序化几何图形，任何一环缺失都不影响可玩性。
+  const action = monsterAction(entity);
+  const actionSprite =
+    entity.npc || entity.boss
+      ? null
+      : loadSprite(`monster-full-${entity.name}-${action}`, `assets/monster-full-${entity.name}-${action}.png`);
   const sprite = entity.npc
     ? null
     : entity.boss
       ? loadSprite(`boss-full-${entity.name}`, `assets/boss-full-${entity.name}.png`)
-      : loadSprite(`monster-full-${entity.name}`, `assets/monster-full-${entity.name}.png`);
+      : spriteReady(actionSprite)
+        ? actionSprite
+        : loadSprite(`monster-full-${entity.name}`, `assets/monster-full-${entity.name}.png`);
   const sprH = entity.npc ? entity.radius * 1.6 : spriteHeight(entity);
   const t = Date.now() / 1000;
   const ph = (Number(entity.id) || 0) * 0.37; // 相位错开，避免同屏怪物步调一致
@@ -999,7 +1020,10 @@ export function drawMonsterTooltip(view, viewWidth, viewHeight) {
   if (!entity) return;
   const profile = monsterProfile(entity, activeMap());
   const width = 244;
-  const height = entity.boss ? 112 : 104;
+  // 0.6.0 P0：非普通形态多一行「形态：xxx」，面板相应加高，避免与技能列表重叠。
+  const hasShape = entity.abilities?.attack && entity.abilities.attack !== "normal" && ATTACK_SHAPES[entity.abilities.attack];
+  const height = (entity.boss ? 112 : 104) + (hasShape ? 14 : 0);
+  const skillTop = (y) => (hasShape ? y + 14 : y);
   const x = clamp(entity.x + entity.radius + 18, view.x + 12, view.x + viewWidth - width - 12);
   const y = clamp(entity.y - entity.radius - 18, view.y + 12, view.y + viewHeight - height - 12);
   ctx.save();
@@ -1017,10 +1041,14 @@ export function drawMonsterTooltip(view, viewWidth, viewHeight) {
   ctx.fillText(`生命 ${Math.ceil(entity.hp)}/${entity.maxHp} · 攻击 ${entity.attack} · 防御 ${entity.defense}`, x + 11, y + 33);
   ctx.fillStyle = "#9fadaf";
   ctx.fillText(profile.intro, x + 11, y + 49, width - 22);
+  // 0.6.0 P0：显示该怪的攻击形态（多段 / 蓄力重击 / 远程投掷 / 冲锋 / 横扫 / 拖拽），
+  // 玩家在开打前就能预判节奏与站位要求——这正是「56 种怪行为不同」的可读入口。
+  ctx.fillStyle = "#e7b36b";
+  ctx.fillText(hasShape ? `形态：${ATTACK_SHAPES[entity.abilities.attack].label}` : "", x + 11, y + 63);
   ctx.fillStyle = "#62d5c6";
-  ctx.fillText("技能", x + 11, y + 67);
+  ctx.fillText("技能", x + 11, skillTop(y + 67));
   ctx.fillStyle = "#c7d2cb";
-  profile.skills.forEach((skill, index) => ctx.fillText(`· ${skill}`, x + 11, y + 83 + index * 14));
+  profile.skills.forEach((skill, index) => ctx.fillText(`· ${skill}`, x + 11, skillTop(y + 83) + index * 14));
   ctx.restore();
 }
 
@@ -1079,6 +1107,17 @@ export function drawSkillRangePreview() {
   ctx.restore();
 }
 
+// 0.6.0 P1：玩家当前动作帧（纯函数，可单测）。优先级：死亡 > 受击 > 施法 > 普攻 > 移动 > 待机。
+export function playerSpriteAction(player = state.player) {
+  // hp 缺失（或未初始化）不视为死亡：只有明确 hp <= 0 才用 death 帧，避免新档首帧误判。
+  if (typeof player.hp === "number" && player.hp <= 0) return "death";
+  if ((player.hitFlash || 0) > 0) return "hit";
+  if ((player.castTimer || 0) > 0) return "cast";
+  if ((player.attackTimer || 0) > 0) return "attack";
+  if (player.moving) return "walk";
+  return "idle";
+}
+
 // 0.4.5 玩家移动检测（供行走浮动动画使用）：比较前后帧坐标。
 let lastPlayerX = 0;
 let lastPlayerY = 0;
@@ -1091,7 +1130,16 @@ export function drawPlayer() {
   // 最上层统一绘制（0.4.1 可读性重构），铭牌锚定贴图头顶（playerNameplateTop）。
   ctx.save();
   ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
-  const playerSprite = loadSprite(`player-full-${state.classId}`, `assets/player-full-${state.classId}.png`);
+  // 0.6.0 P1 玩家六动作帧：player-full-{class}-{action}.png（idle/walk/attack/cast/hit/death），
+  // 缺失动作回退到无后缀静态立绘。cast 只在技能前摇的短窗口出现，death 在复活无敌期间。
+  const playerAction = playerSpriteAction();
+  const actionSprite = loadSprite(
+    `player-full-${state.classId}-${playerAction}`,
+    `assets/player-full-${state.classId}-${playerAction}.png`
+  );
+  const playerSprite = spriteReady(actionSprite)
+    ? actionSprite
+    : loadSprite(`player-full-${state.classId}`, `assets/player-full-${state.classId}.png`);
   const pT = Date.now() / 1000;
   const pH = PLAYER_SPRITE_HEIGHT;
   const moving = Math.abs(state.player.x - lastPlayerX) + Math.abs(state.player.y - lastPlayerY) > 0.4;
@@ -1358,6 +1406,28 @@ export function renderPlayer() {
   const questProgress = state.quest.completed ? 100 : (state.quest.kills / state.quest.need) * 70 + (state.quest.bossDefeated ? 30 : 0);
   setStyle($("questBar"), "width", `${questProgress}%`);
   setText($("questText"), `${state.quest.kills} / ${state.quest.need} 普通怪 · Boss ${state.quest.bossDefeated ? "已击败" : "未击败"}`);
+  renderEndgameLine(clearedMaps);
+}
+
+// 0.6.0 P2 终局信息条：难度档 + 怪物图鉴完成度 + 当前套装进度。
+export function renderEndgameLine(clearedMaps = 0) {
+  const el = $("endgameLine");
+  if (!el) return;
+  const difficulty = resolveDifficulty(state.difficulty, clearedMaps);
+  const names = new Set();
+  for (const map of Object.values(MAPS)) for (const type of map.monsterTypes) names.add(type.name);
+  const stats = bestiaryStats(state.bestiary || {}, [...names]);
+  const counts = setCounts(state.player.equipment || {});
+  const setEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  let setTextValue = "套装无";
+  if (setEntries.length) {
+    const [topKey, pieces] = setEntries[0];
+    const next = nextSetTier(pieces);
+    setTextValue = `${topKey} ${pieces} 件${next ? `（再 ${next.missing} 件 → ${next.tier} 件套）` : "（满套）"}`;
+  }
+  const signature = `${difficulty.id}|${stats.seen}|${stats.total}|${setTextValue}`;
+  if (!panelChanged(el, signature)) return;
+  setText(el, `难度 ${difficulty.label} · 图鉴 ${stats.seen}/${stats.total} · ${setTextValue}`);
 }
 
 export function objectiveView() {

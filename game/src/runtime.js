@@ -1,6 +1,7 @@
 import { CLASSES, EQUIPMENT_SLOT_KEYS, equipmentHpBonus, equipmentDefenseBonus, equipmentTotals, effectiveItemPower } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { clamp, distance } from "./util.js";
+import { setBonusTotals } from "./endgame.js";
 
 // 《一刀999》运行时状态容器：集中存放跨模块共享的可变引用。
 // state / moveTarget 必须通过 setState / setMoveTarget 更新。
@@ -168,11 +169,17 @@ export function equipmentDefense() {
 // 此前承伤只取职业基础防御，导致重铸出的「防御」词缀完全不生效；
 // 统一走这里，避免后续再有调用点漏算装备。
 export function playerDefense() {
-  return activeHero().defense + equipmentDefense();
+  return activeHero().defense + equipmentDefense() + setBonuses().defense;
+}
+
+// 0.6.0 P2 套装加成：按已穿戴装备的 setKey 统计件数，取 2/4/6 件的最高档累加。
+// 与 equipmentTotals 同源，未穿套装时全部为 0（行为不变）。
+export function setBonuses() {
+  return setBonusTotals(state.player.equipment || {});
 }
 
 export function playerMaxHp() {
-  return activeHero().hp + state.player.level * 18 + equipmentHp();
+  return activeHero().hp + state.player.level * 18 + equipmentHp() + setBonuses().hp;
 }
 
 // 复活保留首领已损失生命（0.4.2）：死亡复活会走 loadMap → createEntities 重建实体表，

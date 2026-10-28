@@ -22,9 +22,10 @@ export const MONSTER_ATTACK_RULES = {
 // target 需提供 defense/maxHp/boss；player 需提供 level/charge/equipment；hero 为职业配置。
 // 返回 { damage, critical, chargeGain }：伤害、是否触发满破势爆发、本次应积累的破势值。
 // 装备战力按有效值计入（基础 power + 强化加成 + 攻击词缀，见 config.js effectiveItemPower）。
-export function computeDamage({ target, hero, player, multiplier, kind, fastForward = false, random = Math.random }) {
+export function computeDamage({ target, hero, player, multiplier, kind, fastForward = false, random = Math.random, setAttack = 0 }) {
   const weaponPower = Object.values(player.equipment || {}).reduce((sum, item) => sum + effectiveItemPower(item), 0);
-  const base = hero.attack + player.level * 4 + weaponPower * 0.9;
+  // setAttack：0.6.0 P2 套装攻击加成（由调用方从 endgame.setBonusTotals 传入，保持本模块无状态依赖）。
+  const base = hero.attack + player.level * 4 + weaponPower * 0.9 + (Number(setAttack) || 0);
   const variance = random() * 0.2 + 0.9;
   // 破甲斩命中后目标防御 -15%（0.3.4）；只影响仍在破甲窗口内的目标。
   const armorBroken = (Number(target.armorBreakTimer) || 0) > 0;

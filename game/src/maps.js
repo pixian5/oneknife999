@@ -4,6 +4,9 @@ import { seededRandom, distanceToPath, pathLength, pointOnPath, routePoint } fro
 // 《一刀999》地图数据：4 张手工地图 + 96 张确定性生成地图，
 // 以及关卡顺序、通关规则、剧情节点与战术节点契约。
 
+// 0.6.0 P2 套装键：10 章映射到 6 套（与 endgame.js 的 SET_BONUSES 对齐）。
+const SET_KEYS = ["边境", "苍月", "龙脉", "冰封", "烬火", "帝陵", "烬火", "帝陵", "烬火", "帝陵"];
+
 // 12 部位生成掉落的命名辅助（槽位定义见 config.js 的 EQUIPMENT_SLOTS）。
 const slotLabel = (slotKey) => EQUIPMENT_SLOTS[slotKey]?.label || slotKey;
 const slotGlyph = (slotKey) => EQUIPMENT_SLOTS[slotKey]?.glyph || "装";
@@ -511,7 +514,7 @@ export const CHAPTERS = [
     ground: "#21362a",
     special: "#324b3c",
     accent: "#c28b57",
-    monsters: ["腐烬战奴", "赤牙猎兽", "残甲尸兵", "荒道斥候"],
+    monsters: ["腐烬战奴", "赤牙猎兽", "残甲尸兵", "荒道斥候", "荒原战狼", "断刃老兵", "铁屑蜥蜴", "铁锈傀儡", "焦土鸦王"],
     boss: "灰烬霸主"
   },
   {
@@ -522,7 +525,7 @@ export const CHAPTERS = [
     ground: "#17313a",
     special: "#244d59",
     accent: "#6fa8b6",
-    monsters: ["潮骨水鬼", "蓝鳞海妖", "礁甲兽", "逐浪刀客"],
+    monsters: ["潮骨水鬼", "蓝鳞海妖", "礁甲兽", "逐浪刀客", "苍月鲨卫", "礁岩魔龟", "沉渊海灵", "深海巨章", "冰鳞鱼人"],
     boss: "沧海妖皇"
   },
   {
@@ -533,7 +536,7 @@ export const CHAPTERS = [
     ground: "#29261f",
     special: "#4b3f2a",
     accent: "#c6a15b",
-    monsters: ["石俑卫", "龙脉毒虫", "铜甲尸", "寻宝恶徒"],
+    monsters: ["石俑卫", "龙脉毒虫", "铜甲尸", "寻宝恶徒", "矿道巨虫", "矿毒邪蛛", "石甲巨像", "沙魂亡灵", "地宫炎蝠"],
     boss: "地宫龙君"
   },
   {
@@ -544,7 +547,7 @@ export const CHAPTERS = [
     ground: "#23333a",
     special: "#36525d",
     accent: "#91bdc9",
-    monsters: ["霜牙狼", "冻尸兵", "冰壳魔", "雪原猎手"],
+    monsters: ["霜牙狼", "冻尸兵", "冰壳魔", "雪原猎手", "寒霜狼卫", "极地魔狼", "暴雪鹰王", "冰川巨兽", "霜苔毒蛙"],
     boss: "玄冰魔王"
   },
   {
@@ -555,7 +558,7 @@ export const CHAPTERS = [
     ground: "#35201c",
     special: "#5b2d22",
     accent: "#d56d45",
-    monsters: ["熔岩奴", "火翼魔", "焦骨卫", "炼狱行刑者"],
+    monsters: ["熔岩奴", "火翼魔", "焦骨卫", "炼狱行刑者", "火焰战狼", "烬甲巨虫", "热浪妖", "烬焰巫侍", "熔岩蚁后"],
     boss: "焚天魔尊"
   },
   {
@@ -566,7 +569,7 @@ export const CHAPTERS = [
     ground: "#252033",
     special: "#40305a",
     accent: "#9b76c4",
-    monsters: ["摄魂鬼", "冥甲尸", "渡魂妖", "黄泉守卫"],
+    monsters: ["摄魂鬼", "冥甲尸", "渡魂妖", "黄泉守卫", "幽冥骑士", "白骨射手", "鬼火妖灵", "噬魂将军", "幽冥鬼鸮"],
     boss: "幽冥鬼帝"
   },
   {
@@ -577,7 +580,7 @@ export const CHAPTERS = [
     ground: "#202d35",
     special: "#334d5a",
     accent: "#69aabd",
-    monsters: ["遗迹傀儡", "雷羽妖", "巡天卫", "断界法师"],
+    monsters: ["遗迹傀儡", "雷羽妖", "巡天卫", "断界法师", "残破巨像", "祭坛邪灵", "雾隐蛟", "迷雾妖鸟", "林间鬼鸮"],
     boss: "天穹圣主"
   },
   {
@@ -588,7 +591,7 @@ export const CHAPTERS = [
     ground: "#262536",
     special: "#433f62",
     accent: "#8f88d1",
-    monsters: ["陨晶兽", "虚空影", "星骸兵", "禁区猎杀者"],
+    monsters: ["陨晶兽", "虚空影", "星骸兵", "禁区猎杀者", "灰烬影狼", "灰烬魔影", "黑曜石灵", "灼心魔蝠", "焦焰飞龙"],
     boss: "星陨邪神"
   },
   {
@@ -599,7 +602,7 @@ export const CHAPTERS = [
     ground: "#312522",
     special: "#594037",
     accent: "#ce8a64",
-    monsters: ["堕神卫", "魔血骑", "战场怨魂", "破军修罗"],
+    monsters: ["堕神卫", "魔血骑", "战场怨魂", "破军修罗", "熔核巨人", "火狱邪龙", "熔岩蛇王", "虚影刺客", "灰烬魔像"],
     boss: "神魔战皇"
   },
   {
@@ -610,7 +613,7 @@ export const CHAPTERS = [
     ground: "#29241c",
     special: "#4c412c",
     accent: "#d1aa55",
-    monsters: ["帝陵禁卫", "金甲尸王", "镇国妖师", "不灭战魂"],
+    monsters: ["帝陵禁卫", "金甲尸王", "镇国妖师", "不灭战魂", "玉髓守卫", "藤蔓缚妖", "苔冠树精", "金纹毒蟒", "沙丘巨蟒"],
     boss: "玄烬帝尊"
   }
 ];
@@ -904,7 +907,9 @@ export function generatedLayout(stageNumber, chapter) {
     return [
       Math.round(Math.max(430, Math.min(2100, jittered.x))),
       Math.round(Math.max(130, Math.min(1370, jittered.y))),
-      (index + stageNumber) % 4,
+      // 0.6.0：每章怪物从 4 种扩到 9 种（新增 5 种带四动作帧素材的野怪），
+      // 刷新点轮转覆盖全部类型，同章不同关的怪组合也不同。
+      (index + stageNumber) % 9,
       route,
       adjustedProgress
     ];
@@ -1085,17 +1090,19 @@ export function generatedMap(stageNumber) {
   // 消除手工图与生成图之间的难度/装备断崖；第 100 关峰值与旧曲线基本一致。
   const anchored = (base, slope) => Math.round(base + (stageNumber - 4) * slope);
   const monsterTypes = chapter.monsters.map((name, typeIndex) => {
-    const attack = anchored(70 + typeIndex * 7.3, 0.32);
+    // 9 档步长 2.785：第 8 档（最强）在第 100 关仍等于旧曲线峰值的 123。
+    const attack = anchored(70 + typeIndex * 2.785, 0.32);
     return {
       // 章节前缀与怪物名重复时不再二次拼接（避免「龙脉龙脉毒虫」式 stutter）。
       name: name.startsWith(chapter.short) ? name : `${chapter.short}${name}`,
-      color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72"][typeIndex],
-      hp: Math.round((480 + typeIndex * 46.7) * (1 + (stageNumber - 4) * 0.0097)),
+      color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
+      // 9 档数值：hp / 防御 / 金币按 typeIndex 线性递增，步长比 4 档时代缩小，保持整体战力不变。
+      hp: Math.round((480 + typeIndex * 20.8) * (1 + (stageNumber - 4) * 0.0097)),
       attack,
-      defense: anchored(16 + typeIndex * 1.3, 0.35),
+      defense: anchored(16 + typeIndex * 0.58, 0.35),
       exp: 0,
-      gold: anchored(36 + typeIndex * 3, 1.4),
-      radius: 16 + typeIndex,
+      gold: anchored(36 + typeIndex * 1.33, 1.4),
+      radius: 16 + Math.floor(typeIndex * 0.44),
       intro: `${chapter.name}中负责巡逻的${name}，会根据玩家距离选择攻击方式。`,
       skills: [`${name}攻击：基础伤害 ${attack}`, `${name}本能：受到伤害后继续追击`]
     };
@@ -1163,6 +1170,9 @@ export function generatedMap(stageNumber) {
     },
     drops: [
       {
+        // 0.6.0 P2 套装：每关掉落的装备带 setKey（按章节命名，与 endgame.SET_BONUSES 对齐），
+        // 集齐同章 2/4/6 件触发阶梯加成。
+        setKey: SET_KEYS[chapterIndex] || null,
         name: `${chapter.short}战刃·${stageNumber}`,
         slot: "weapon",
         quality: stageNumber > 70 ? "orange" : "purple",
@@ -1173,6 +1183,7 @@ export function generatedMap(stageNumber) {
         desc: `第 ${stageNumber} 关武器 · 攻击 ${anchored(56, 1.6)}`
       },
       {
+        setKey: SET_KEYS[chapterIndex] || null,
         name: `${chapter.short}魂链·${stageNumber}`,
         slot: "neck",
         quality: "purple",
@@ -1186,6 +1197,7 @@ export function generatedMap(stageNumber) {
       ...["helmet", "armor", "belt", "medal", "talisman", "ringL", "ringR", "braceletL", "braceletR"]
         .slice((stageNumber - 5) % 9, ((stageNumber - 5) % 9) + 2)
         .map((slotKey, index) => ({
+          setKey: SET_KEYS[chapterIndex] || null,
           name: `${chapter.short}${slotLabel(slotKey)}·${stageNumber}`,
           slot: slotKey,
           quality: index === 0 ? "purple" : "blue",
@@ -1196,6 +1208,7 @@ export function generatedMap(stageNumber) {
           desc: `第 ${stageNumber} 关${slotLabel(slotKey)} · 攻守成长`
         })),
       {
+        setKey: SET_KEYS[chapterIndex] || null,
         name: `${chapter.short}行靴·${stageNumber}`,
         slot: "boots",
         quality: "blue",
@@ -1432,6 +1445,7 @@ Object.values(MAPS).forEach((map) => {
     if (!base) return;
     const behavior = MONSTER_BEHAVIORS[base];
     type.intro = behavior.intro || MONSTER_FLAVOR[base] || type.intro;
-    type.skills = behavior.skills || behavior;
+    // 0.6.0：MONSTER_BEHAVIORS 已统一为对象 schema（见 config.js）。
+    type.skills = behavior.skills || [];
   });
 });

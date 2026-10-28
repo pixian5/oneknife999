@@ -19,6 +19,7 @@
         <div class="server-status"><span class="status-dot"></span> 烬阳-01 <span class="status-divider"></span> 延迟 42ms</div>
         <div class="top-actions">
           <button class="icon-button" id="skillBtn" title="技能升级（快捷键 K）"><img class="btn-ico" src="assets/btn-skill.png" alt="">技能<span class="point-badge hidden" id="skillPointBadge">0</span></button>
+          <button class="icon-button" id="difficultyBtn" title="切换难度（百图通关后解锁烬火 / 灰烬）"><img class="btn-ico" src="assets/btn-skill.png" alt="">难度</button>
           <button class="icon-button" id="settingsBtn" title="键位设置"><img class="btn-ico" src="assets/btn-settings.png" alt="">设置</button>
           <button class="icon-button" id="muteBtn" title="开关音效"><img class="btn-ico" src="assets/btn-sound.png" alt="">音效</button>
           <button class="icon-button" id="exportBtn" title="导出存档为 JSON 文件"><img class="btn-ico" src="assets/btn-export.png" alt="">导出</button>
@@ -79,6 +80,8 @@
             <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span><span class="sin-pill hidden" id="sinPill">罪恶 0</span></div>
             <div class="stat-row stats-line" id="statsLine">击杀 0 · 死亡 0 · 通关 0/100</div>
             <div class="stat-row stats-line damage-estimate" id="damageEstimate">普攻期望(本区怪) ≈ 0</div>
+            <!-- 0.6.0 P2 终局：难度 / 图鉴 / 套装横向信息条 -->
+            <div class="stat-row stats-line endgame-line" id="endgameLine">难度 常规 · 图鉴 0/0 · 套装无</div>
           </section>
 
           <section class="quest-card panel-block">

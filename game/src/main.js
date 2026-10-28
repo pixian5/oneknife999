@@ -37,6 +37,7 @@ import {
   nearRestPoint,
   nearTown,
   isRedName,
+  setBonuses,
   fx
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
@@ -92,6 +93,27 @@ import {
   pickRedNameDrop
 } from "./drops.js";
 import { buyShopItem, reforgeQuote, reforgeAffix } from "./shop.js";
+import {
+  resolveDifficulty,
+  scaleForDifficulty,
+  upgradeQuality,
+  recordBestiary,
+  unlockedDifficulties,
+  DIFFICULTY_TIERS
+} from "./endgame.js";
+import {
+  resolveAbilities,
+  attackShapeConfig,
+  rollPassive,
+  applyDefensePassives,
+  reflectDamage,
+  resolveLethalSave,
+  packHuntMultiplier,
+  lowHpDamageMultiplier,
+  enrageMultiplier,
+  resolveOnDeath,
+  PASSIVE_PARAMS
+} from "./monster-abilities.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -107,8 +129,12 @@ const MAX_WINDUP_ATTACKERS = 1;
 
 export function createEntities(map) {
   const result = [];
+  // 0.6.0 P2：难度模式对怪物生命 / 攻击的缩放（常规难度倍率恒为 1，行为完全不变）。
+  const difficulty = resolveDifficulty(state?.difficulty, MAP_ORDER.filter((id) => state?.mapProgress?.[id]?.completed).length);
   map.monsterSpawns.forEach((spawn, index) => {
-    const type = map.monsterTypes[spawn[2]];
+    const baseType = map.monsterTypes[spawn[2]];
+    const scaled = scaleForDifficulty({ hp: baseType.hp, attack: baseType.attack }, difficulty);
+    const type = { ...baseType, hp: scaled.hp, attack: scaled.attack };
     const level = clamp(map.levelMin + spawn[2] * 2 + (index % 3), map.levelMin, map.levelMax);
     result.push({
       id: `mob-${index}`,
@@ -128,6 +154,12 @@ export function createEntities(map) {
       patrolRadius: 55 + Math.random() * 50,
       aggro: false,
       friendly: false,
+      // 0.6.0 P0 怪物行为：把 config 里 56 种怪的行为描述落成可执行配置（见 monster-abilities.js）。
+      abilities: resolveAbilities(type.name),
+      usedLethalSave: false,
+      shieldValue: 0,
+      shieldTimer: 0,
+      rageStacks: 0,
       // 0.3.4 攻击前摇：初始冷却按一个完整周期随机错开，避免玩家一进圈就被整群怪同时抬手。
       attackCooldown: rand(1.2, 2.9),
       windup: 0,
@@ -136,14 +168,15 @@ export function createEntities(map) {
     });
   });
   const b = map.boss;
+  const bossScaled = scaleForDifficulty({ hp: b.hp, attack: b.attack }, difficulty);
   result.push({
     id: b.id,
     name: b.name,
     level: map.levelMax + 2,
     color: b.color,
-    hp: b.hp,
-    maxHp: b.hp,
-    attack: b.attack,
+    hp: bossScaled.hp,
+    maxHp: bossScaled.hp,
+    attack: bossScaled.attack,
     defense: b.defense,
     exp: b.exp,
     gold: b.gold,
@@ -306,21 +339,62 @@ export function selectTarget(entity) {
 }
 
 // 伤害结算：纯计算交给 combat.js，这里只负责写回实体状态与打击反馈。
+// 0.6.0 P0：结算前先过怪物行为被动（首击减伤 / 残血减伤 / 致命保留），近战命中带反伤的怪会反噬玩家。
 export function resolveDamage(target, multiplier, skillName, kind) {
   const hero = activeHero();
-  const { damage, critical, chargeGain } = computeDamage({
+  const {
+    damage: rawDamage,
+    critical,
+    chargeGain
+  } = computeDamage({
     target,
     hero,
     player: state.player,
     multiplier,
     kind,
-    fastForward: FAST_FORWARD
+    fastForward: FAST_FORWARD,
+    setAttack: setBonuses().attack
   });
   if (target.npc) target.hostile = true;
   sfx.hit();
-  target.hp = Math.max(0, target.hp - damage);
+  // 防御被动结算：firstHit 只在第一次受击生效，lowHpReduce 按目标当前生命比判定。
+  const hpBefore = target.hp;
+  const hpRatioBefore = hpBefore / Math.max(1, target.maxHp);
+  const defended = applyDefensePassives({
+    passives: target.abilities?.passives,
+    damage: rawDamage,
+    ctx: { hpRatio: hpRatioBefore, firstHit: !target.tookFirstHit, melee: kind === "普通" || kind === "破甲" }
+  });
+  let damage = defended.damage;
+  // 0.6.0 P0 吸收盾：先扣盾，溢出部分才扣血（寒甲 / 协议护盾 / 堕神甲）。
+  if ((target.shieldValue || 0) > 0) {
+    const absorbed = Math.min(target.shieldValue, damage);
+    target.shieldValue -= absorbed;
+    damage -= absorbed;
+    if (absorbed > 0) textAt(`盾 -${absorbed}`, target.x, floatYAboveNameplate(target, 26), "#78b6ec", 11);
+  }
+  if (defended.consumed.includes("firstHitReduce")) target.tookFirstHit = true;
+  else if (target.tookFirstHit === undefined) target.tookFirstHit = false;
+  // 致命保留：血量足以被打空时，带 lethalSave 且未用过的怪保留少量生命。
+  const lethal = resolveLethalSave({
+    passives: target.abilities?.passives,
+    hp: hpBefore,
+    damage,
+    usedLethalSave: target.usedLethalSave
+  });
+  if (lethal.saved) {
+    target.usedLethalSave = true;
+    textAt("残军意志", target.x, floatYAboveNameplate(target, 20), "#e7b36b", 12);
+  }
+  target.hp = Math.max(0, lethal.hp);
   target.hitFlash = 0.12;
   state.player.charge = clamp(state.player.charge + chargeGain, 0, 100);
+  // 近战反伤：命中带 meleeReflect 的怪时，玩家承受一部分反噬伤害。
+  const reflected = reflectDamage(target.abilities?.passives, damage);
+  if (reflected > 0) {
+    state.player.hp = Math.max(0, state.player.hp - reflected);
+    textAt(`-${reflected}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 11);
+  }
   // 0.3.3 打击感：满破势爆发（含一刀时刻）触发短促震屏，让高倍率结算有重量感。
   if (critical) {
     fx.shake = 0.22;
@@ -374,6 +448,11 @@ export function castSkill(index) {
   const hero = activeHero();
   const skill = hero.skills[index];
   if (!skill || state.player.cooldowns[index] > 0) return;
+  // 0.6.0 P0 技能封锁（镇国符）：被封锁期间不能施法。
+  if ((state.player.skillLock || 0) > 0) {
+    showToast(`技能被封锁（剩余 ${state.player.skillLock.toFixed(1)} 秒）`);
+    return;
+  }
   if (state.player.resource < skill.cost) {
     showToast(`${hero.resourceName}不足，击杀怪物或使用药水恢复`);
     return;
@@ -411,6 +490,8 @@ export function castSkill(index) {
   }
   state.player.resource -= skill.cost;
   state.player.cooldowns[index] = skill.cd;
+  // 0.6.0 P1：施法动作帧窗口（cast 动作在 render 里按 castTimer > 0 选取）。
+  state.player.castTimer = 0.35;
   // 召唤骨卫（0.3.4）：生成 12 秒实体，自动跟随并索敌，不再是一次性伤害。
   if (skill.kind === "召唤") {
     const guard = createBoneGuard({
@@ -550,6 +631,21 @@ function gainExperience(amount) {
 
 // 击杀结算：收益数值来自 combat.js，这里负责写回进度、日志与掉落触发。
 export function defeat(target) {
+  // 0.6.0 P0 亡语：残星复起（死亡后短暂复原一次，一次副本内只触发一次）。
+  const onDeath = resolveOnDeath(target.abilities?.onDeath, { entity: target });
+  if (onDeath.revive && !target.revivedOnce) {
+    target.revivedOnce = true;
+    target.hp = Math.max(1, Math.round(target.maxHp * onDeath.revive.hpRatio));
+    target.hitFlash = 0.2;
+    textAt("残星复起", target.x, floatYAboveNameplate(target, 20), "#a88ce3", 13);
+    log(`<b>${target.name}</b> 残星复起：从濒死中短暂复原。`, "warn");
+    return;
+  }
+  if (onDeath.hazard) {
+    state.hazards.push(onDeath.hazard);
+    state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
+    textAt("孢子爆裂", target.x, floatYAboveNameplate(target, 20), "#8fc7a2", 12);
+  }
   target.alive = false;
   target.respawn = target.boss ? 42 : target.npc ? 90 : rand(11, 20);
   target.hp = target.maxHp;
@@ -569,7 +665,11 @@ export function defeat(target) {
   const hero = activeHero();
   const reward = computeKillReward({ target, quest: state.quest, rule: MAP_CLEAR_RULES[state.currentMapId] });
   // 0.3.2：经验真实结算并可升级（本关上限 = 主线等级 +1），不再把经验截断在 99。
-  gainExperience(reward.expGain);
+  // 0.6.0 P2 图鉴：记录击杀过的怪物种类（覆盖 106 种，驱动收集感）。
+  state.bestiary = recordBestiary(state.bestiary || {}, target.name);
+  // 0.6.0 P2 难度模式：烬火 / 灰烬难度下击杀经验加成。
+  const difficulty = resolveDifficulty(state.difficulty, MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length);
+  gainExperience(Math.round(reward.expGain * (1 + difficulty.expBonus)));
   state.player.gold += target.gold;
   state.player.totalKills += 1;
   state.player.kills += 1;
@@ -648,6 +748,11 @@ export function checkMapCompletion() {
 export function spawnDrop(source, roll = 0) {
   const map = activeMap();
   const item = rollDropItem({ source, mapDrops: map.drops, commonDrops: COMMON_DROPS, roll });
+  // 0.6.0 P2 难度模式：烬火 / 灰烬难度掉落的品质整体提档（docs/03 高品质地面表现随之变化）。
+  if (item.quality) {
+    const difficulty = resolveDifficulty(state.difficulty, MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length);
+    item.quality = upgradeQuality(item.quality, difficulty.qualityBonus);
+  }
   state.drops.push(item);
   // 0.4.4：自动拾取上线后只有装备需要按 F，消耗品 / 货币 / 材料走近即自动入账，文案按类型区分。
   log(
@@ -838,6 +943,70 @@ export function syncCampaignGrowth(silent = false) {
   }
 }
 
+// 0.6.0 P0 命中玩家后的怪物被动结算：中毒 / 减速 / 打断 / 资源压制 / 药水封锁 / 技能封锁 / 攻速叠加。
+// 只改状态与日志，不重复扣血（伤害已在出手段按段结算）。
+export function applyOnHitPassives(attacker, damage) {
+  const passives = attacker.abilities?.passives || [];
+  if (!passives.length) return;
+  // 中毒叠加：每层 +1，上限 5 层（与首领毒层共用同一字段）。
+  const poison = rollPassive(passives, "poison");
+  if (poison.triggered) {
+    state.player.poison = clamp(state.player.poison + (poison.params?.stacks || 1), 0, 5);
+    textAt("中毒", state.player.x, floatYAbovePlayer(24), "#a88ce3", 12);
+  }
+  // 减速：写入玩家减速计时与系数，由 movePlayer 读取。
+  const slow = rollPassive(passives, "slow");
+  if (slow.triggered) {
+    state.player.slowTimer = Math.max(state.player.slowTimer || 0, slow.params?.duration || 2);
+    state.player.slowFactor = slow.params?.factor ?? 0.55;
+    textAt("减速", state.player.x, floatYAbovePlayer(30), "#78b6ec", 12);
+  }
+  // 打断：清空普攻计时器，让玩家多等一个冷却。
+  const stun = rollPassive(passives, "stun");
+  if (stun.triggered) {
+    state.player.attackTimer = Math.max(state.player.attackTimer, stun.params?.duration || 0.5);
+    textAt("打断", state.player.x, floatYAbovePlayer(36), "#f16d66", 12);
+  }
+  // 资源压制：按比例抽走当前职业资源。
+  const drain = rollPassive(passives, "resourceDrain");
+  if (drain.triggered) {
+    const lost = Math.round(state.player.resource * (drain.params?.ratio ?? 0.4));
+    state.player.resource = Math.max(0, state.player.resource - lost);
+    textAt(`-${lost} 资源`, state.player.x, floatYAbovePlayer(42), "#78b6ec", 11);
+  }
+  // 药水封锁 / 技能封锁：写入计时，由 usePotion / castSkill 检查。
+  const potionLock = rollPassive(passives, "potionLock");
+  if (potionLock.triggered) state.player.potionLock = Math.max(state.player.potionLock || 0, potionLock.params?.duration || 3);
+  const skillLock = rollPassive(passives, "skillLock");
+  if (skillLock.triggered) state.player.skillLock = Math.max(state.player.skillLock || 0, skillLock.params?.duration || 2);
+  // 攻速叠加：怪物每次命中自增一层，加快后续前摇。
+  if (passives.some((p) => p.id === "rageStack")) {
+    const cap = PASSIVE_PARAMS.rageStack.max;
+    attacker.rageStacks = Math.min(cap, (attacker.rageStacks || 0) + 1);
+  }
+}
+
+// 击退玩家（冲锋 / 击退形态）：沿怪物→玩家方向推开，落地后夹在地图内。
+export function pushPlayerAway(attacker, amount) {
+  const map = activeMap();
+  const dx = state.player.x - attacker.x;
+  const dy = state.player.y - attacker.y;
+  const len = Math.hypot(dx, dy) || 1;
+  state.player.x = clamp(state.player.x + (dx / len) * amount, 55, map.width - 55);
+  state.player.y = clamp(state.player.y + (dy / len) * amount, 55, map.height - 55);
+}
+
+// 拉近玩家（锁链拖拽形态）：把玩家拉向怪物，保留 40px 间距避免重叠。
+export function pullPlayerToward(attacker) {
+  const map = activeMap();
+  const dx = attacker.x - state.player.x;
+  const dy = attacker.y - state.player.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const travel = Math.max(0, len - 40);
+  state.player.x = clamp(state.player.x + (dx / len) * travel, 55, map.width - 55);
+  state.player.y = clamp(state.player.y + (dy / len) * travel, 55, map.height - 55);
+}
+
 export function playerDamage(dt) {
   const atWell = nearWaterWell();
   const atRestPoint = nearRestPoint();
@@ -859,23 +1028,49 @@ export function playerDamage(dt) {
     attacker.windup = step.windup;
     attacker.windupTotal = step.windupTotal;
     attacker.attackCooldown = step.cooldown;
-    const reach = attacker.radius + 70;
+    // 0.6.0 P0：攻击距离随行为形态放大（远程投掷 2.4 倍、范围横扫 1.9 倍、冲锋 1.6 倍，其余 1 倍）。
+    // 形态配置同时提供多段段数、伤害倍率与击退，出手时复用同一个 shape。
+    const shape = attackShapeConfig(attacker.abilities?.attack || "normal", {
+      hpRatio: attacker.hp / Math.max(1, attacker.maxHp),
+      rageStacks: attacker.rageStacks || 0
+    });
+    const reach = (attacker.radius + 70) * shape.rangeMult;
     const inRange = !atSanctuary && distance(state.player, attacker) <= reach;
     // 只有已进入战斗的敌人才会抬手（首领视为始终接战）：避免路过时被一圈未反应过来的巡逻怪同时围攻。
     const engaged = Boolean(attacker.boss || attacker.aggro);
     if (step.strike) {
       // 出手即锁定全局闸门：不论命中还是落空，下一次怪物抬手都要重新等待。
       state.player.attackGate = rules.gate;
+      const playerMax = playerMaxHp();
+      const playerHpRatio = state.player.hp / Math.max(1, playerMax);
       if (inRange && state.player.invulnerable <= 0) {
         // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
         // 防御取「职业基础 + 装备防御词缀」（0.3.7 起装备防御真正参与结算）。
-        const amount = computeIncomingDamage({ attack: attacker.attack, attackerLevel: attacker.level, defense: playerDefense() });
-        if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${amount}`);
-        state.player.hp = Math.max(0, state.player.hp - amount);
-        // 0.3.3 打击感：怪物命中玩家时在自身朝向玩家的方向闪一道红色挥击弧。
-        attacker.attackFlash = 0.18;
-        textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 13);
+        // 0.6.0：叠加怪物行为修正——同类增伤 / 自身残血增伤 / 玩家残血增伤 / 多段分摊。
+        const allyCount = state.entities.filter(
+          (e) => e.alive && !e.friendly && !e.boss && e.name === attacker.name && e.id !== attacker.id && distance(attacker, e) <= 260
+        ).length;
+        let attackPower = attacker.attack * shape.damageMult;
+        attackPower *= packHuntMultiplier(attacker.abilities?.passives, allyCount);
+        attackPower *= lowHpDamageMultiplier(attacker.abilities?.passives, attacker.hp / attacker.maxHp);
+        attackPower *= enrageMultiplier(attacker.abilities?.passives, playerHpRatio);
+        // 多段连击：按段数均分攻击力，逐段独立结算（可被护盾 / 无敌分段吃掉）。
+        const hits = Math.max(1, shape.multiHit);
+        let total = 0;
+        for (let hitIndex = 0; hitIndex < hits; hitIndex += 1) {
+          const per = computeIncomingDamage({ attack: attackPower / hits, attackerLevel: attacker.level, defense: playerDefense() });
+          total += per;
+          attacker.attackFlash = 0.18;
+          textAt(`-${per}`, state.player.x + rand(-10, 10), floatYAbovePlayer(6 + hitIndex * 12), "#f16d66", 13);
+        }
+        // 护盾 / 反伤等防御被动（怪物侧）在玩家攻击时结算，此处只处理控制类。
+        if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${total} hits=${hits}`);
+        state.player.hp = Math.max(0, state.player.hp - total);
         spark(state.player.x, state.player.y, "#f16d66", 4);
+        applyOnHitPassives(attacker, total);
+        // 冲锋 / 击退形态：把玩家推开，制造位移压力。
+        if (shape.knockback > 0) pushPlayerAway(attacker, shape.knockback);
+        if (shape.pulls) pullPlayerToward(attacker);
         if (activeMap().boss.poisonStacks && attacker.boss) {
           state.player.poison = clamp(state.player.poison + 1, 0, 5);
           if (state.player.poison >= 5) showToast("毒层已满，靠近水井净化");
@@ -994,8 +1189,11 @@ export function movePlayer(dt) {
   }
   const length = Math.hypot(dx, dy) || 1;
   if (dx || dy) {
-    state.player.x += (dx / length) * hero.speed * intensity * dt;
-    state.player.y += (dy / length) * hero.speed * intensity * dt;
+    // 0.6.0 P0 减速（蛛网 / 霜牙 / 冻刃 / 潮刃）：slowTimer 生效期间移速打折。
+    const moveFactor = state.player.slowTimer > 0 ? state.player.slowFactor || 1 : 1;
+    state.player.moving = true;
+    state.player.x += (dx / length) * hero.speed * intensity * moveFactor * dt;
+    state.player.y += (dy / length) * hero.speed * intensity * moveFactor * dt;
   }
   state.player.x = clamp(state.player.x, 55, map.width - 55);
   state.player.y = clamp(state.player.y, 55, map.height - 55);
@@ -1134,6 +1332,17 @@ export function updateSummon(guard, dt) {
 export function updateMonsterAI(entity, dt) {
   const player = state.player;
   entity.wander += dt;
+  // 0.6.0 P0 周期护盾（寒甲 / 协议护盾 / 堕神甲）：冷却回满时挂一层吸收盾，
+  // 盾值按 maxHp 比例；受击时先扣盾再扣血（见 resolveDamage）。
+  const shieldPassive = (entity.abilities?.passives || []).find((p) => p.id === "shieldCycle");
+  if (shieldPassive) {
+    entity.shieldCooldown = Math.max(0, (entity.shieldCooldown ?? shieldPassive.params.cooldown ?? 8) - dt);
+    if (entity.shieldCooldown <= 0 && !entity.shieldValue) {
+      entity.shieldValue = Math.round(entity.maxHp * (shieldPassive.params.amount ?? 0.3));
+      entity.shieldCooldown = shieldPassive.params.cooldown ?? 8;
+      textAt("护盾", entity.x, floatYAboveNameplate(entity, 20), "#78b6ec", 11);
+    }
+  }
   const sanctuary = nearTown() || nearRestPoint() || nearWaterWell();
   const distToPlayer = distance(entity, player);
   const anchorDistance = Math.hypot(entity.x - entity.spawnX, entity.y - entity.spawnY);
@@ -1161,6 +1370,8 @@ export function updateMonsterAI(entity, dt) {
   const dx = targetX - entity.x;
   const dy = targetY - entity.y;
   const length = Math.hypot(dx, dy);
+  // 0.6.0 P1：记住本帧是否在移动，供动作帧选择（walk / idle）。
+  entity.moving = length > 4;
   if (length > 4) {
     entity.x += (dx / length) * speed * dt;
     entity.y += (dy / length) * speed * dt;
@@ -1287,6 +1498,9 @@ export function updateHealZones(dt) {
 export function update(dt) {
   if (!state) return;
   const hero = activeHero();
+  // 0.6.0 P1：每帧先清移动标记，movePlayer / updateMonsterAI 若发生位移再置 true，
+  // 供动作帧（walk / idle）在随后的 renderAll 里正确选择。
+  state.player.moving = false;
   autoPickupPass();
   // 新手引导第 1 步：累计位移超过 130px 即视为掌握移动。
   if (state.player.guideStep === 1) {
@@ -1295,6 +1509,13 @@ export function update(dt) {
   }
   state.player.attackTimer = Math.max(0, state.player.attackTimer - dt);
   state.player.invulnerable = Math.max(0, state.player.invulnerable - dt);
+  // 0.6.0 P0：怪物行为施加的负面状态倒计时（减速 / 药水封锁 / 技能封锁）。
+  state.player.castTimer = Math.max(0, (state.player.castTimer || 0) - dt);
+  state.player.hitFlash = Math.max(0, (state.player.hitFlash || 0) - dt);
+  state.player.slowTimer = Math.max(0, (state.player.slowTimer || 0) - dt);
+  state.player.potionLock = Math.max(0, (state.player.potionLock || 0) - dt);
+  state.player.skillLock = Math.max(0, (state.player.skillLock || 0) - dt);
+  if (state.player.slowTimer <= 0) state.player.slowFactor = 1;
   // 全局出手闸门（0.3.4）：任意怪物出手后需等 gate 秒，任何怪才能再次抬手。
   // 这里必须逐帧递减，否则闸门一旦被写入就会永久锁死怪物的攻击。
   state.player.attackGate = Math.max(0, (state.player.attackGate || 0) - dt);
@@ -1362,6 +1583,10 @@ export function loadGame() {
     // 恢复时规范化背包：合并旧档 / 迁移存档中重复的同名材料（0.3.0 材料堆叠）。
     state.inventory = normalizeInventory(saved.inventory);
     state.mapProgress = saved.mapProgress || {};
+    // 0.6.0 P2：恢复终局状态（旧档缺省为常规难度 / 空图鉴 / 未进深层）。
+    state.difficulty = saved.difficulty || "normal";
+    state.bestiary = saved.bestiary || {};
+    state.abyssBest = saved.abyssBest || 0;
     if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
     syncCampaignGrowth(true);
     const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
@@ -1400,6 +1625,11 @@ export function setupClasses() {
 export function usePotion() {
   if (!state || state.player.potion <= 0) {
     showToast("生命药水已用完");
+    return;
+  }
+  // 0.6.0 P0 药水封锁（名册封锁）：被封锁期间不能喝药。
+  if ((state.player.potionLock || 0) > 0) {
+    showToast(`药水回复被封锁（剩余 ${state.player.potionLock.toFixed(1)} 秒）`);
     return;
   }
   const maxHp = playerMaxHp();
@@ -1482,6 +1712,26 @@ export function salvageItem(itemId) {
   persistGame();
   renderPlayer();
   renderInventory();
+}
+
+// 0.6.0 P2 难度切换：百图通关后解锁烬火 / 灰烬，循环切换已解锁档位。
+// 切换立即重建场景（怪物数值按新难度生成），玩家沿用当前等级与装备。
+export function cycleDifficulty() {
+  if (!state) return;
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  const unlocked = unlockedDifficulties(cleared);
+  if (unlocked.length <= 1) {
+    showToast(`难度需通关百图后解锁（当前 ${cleared}/100）`);
+    return;
+  }
+  const currentIndex = unlocked.findIndex((tier) => tier.id === (state.difficulty || "normal"));
+  const next = unlocked[(currentIndex + 1) % unlocked.length];
+  state.difficulty = next.id;
+  log(`<b>难度切换</b>：${next.label} —— ${next.desc}。`, "warn");
+  showToast(`难度已切换为「${next.label}」`);
+  loadMap(state.currentMapId, state.player.x, state.player.y, true);
+  persistGame();
+  renderAll();
 }
 
 // ============ 城镇杂货商与词缀重铸（0.3.5，docs/07 金币消耗出口） ============
@@ -1758,10 +2008,19 @@ if (TEST_MODE) {
                   alive: entity.alive,
                   boss: Boolean(entity.boss),
                   npc: Boolean(entity.npc),
-                  phase: entity.phase || 0
+                  phase: entity.phase || 0,
+                  // 0.6.0：暴露行为配置，e2e / 探针可断言「这只怪确实是冲锋形态、确实带首击减伤」。
+                  attackShape: entity.abilities?.attack || "normal",
+                  passives: (entity.abilities?.passives || []).map((passive) => passive.id),
+                  shield: entity.shieldValue || 0
                 })),
               hazardsSpawned: state.hazardsSpawned || 0,
               progress: state.mapProgress,
+              // 0.6.0 P2 终局：难度、图鉴条目数、套装件数、引导步骤。
+              difficulty: state.difficulty || "normal",
+              bestiaryCount: Object.keys(state.bestiary || {}).length,
+              guideStep: state.player.guideStep ?? 99,
+              setPieces: Object.values(state.player.equipment || {}).filter((item) => item?.setKey).length,
               logs: state.logs.slice(-6).map((entry) => entry.message)
             })
           )
