@@ -4,7 +4,7 @@
 
 - **可玩原型**：十章 100 张连续关卡、三职业、首领阶段战、掉落装备、自动保存；纯前端 Canvas 实现，代码位于 [game/](game/)。
 - **设计文档**：[docs/](docs/) 是设计事实源（产品、战斗、成长、地图、PK、行会、经济、服务器、QA、数值基线），治理规则见 [docs/README.md](docs/README.md)。
-- **当前版本**：0.6.8（见 [VERSION](VERSION)）
+- **当前版本**：0.6.9（见 [VERSION](VERSION)）
 
 ## 快速开始
 
@@ -39,6 +39,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.6.9 补齐**拾取后的 HUD 刷新断言**：拿到 runner 日志后看清楚了 0.6.8 之后的真实失败点——前两步已 PASS，`AssertionError: 拾取后面板未刷新`。原因是 Toast 在按键回调里同步更新，而背包 / 药水 / 日志面板按帧刷新；软件渲染下一帧可能长达数百毫秒，拾取后立刻读 DOM 会读到旧值。改为轮询 `readPanels()` 直到面板变化或超时（40×100ms），仍然只判断「面板确实变了」，不放宽判定条件。验证：`npm run format:check` PASS、`npm run test:ui:regression` 本地 PASS。
 
 0.6.8 让**界面渲染与输入回归与帧率解耦**：0.6.7 修完帧率门禁后，CI 仍在第 10 步「界面渲染与输入回归」失败（15 秒内退出，前 9 步全过，本地通过），而 web 侧拿不到 runner 日志。归因为**测试自身的时序脆弱**，不是功能回归：共享 runner 与云电脑是软件渲染，主循环 `dt` 被钳在 0.05 秒（[main.js](game/src/main.js) 第 1945 行），低帧率下固定 `sleep` 期间模拟时间推进远小于真实时间。四处改造：①改用 `waitForSelector` / `waitForFunction` 等状态就绪，替掉固定 `sleep`；②按键位移改成「按住并轮询直到位移达标或超时」（`holdUntil`），与帧率无关；③存档恢复等 `#inventoryCount === "2/12"` 且职业弹窗关闭后再断言；④首领击杀窗口 30 秒 → 60 秒（240×250ms 轮询）。断言条件本身没有放宽。验证：159 单测全绿、`npm run format:check` PASS、`npm run test:ui:regression` 本地 PASS。详见 [docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md](docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md)。
 

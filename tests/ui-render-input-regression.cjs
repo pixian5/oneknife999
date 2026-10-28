@@ -234,15 +234,24 @@ async function verifyBossRespawnCountdown(page) {
     if (!picked) await sleep(700);
   }
   assert.ok(picked, "按 F 未拾取到任何地面掉落");
-  const after = await page.evaluate(() => ({
-    inv: document.querySelector("#inventoryCount").textContent,
-    potion: document.querySelector("#potionCount").textContent,
-    gold: document.querySelector("#goldText").textContent,
-    marks: document.querySelector("#markText").textContent,
-    log: document.querySelector("#eventLog").textContent,
-    objective: document.querySelector("#mapObjectiveChecks").textContent
-  }));
-  assert.ok(after.inv !== before.inv || after.potion !== before.potion || after.log !== before.log, "拾取后面板未刷新");
+  // 0.6.8：Toast 在按键回调里同步更新，HUD 面板却按帧刷新；软件渲染下一帧可能长达数百毫秒，
+  // 拾取后立刻读 DOM 会读到旧值。这里轮询到面板出现变化或超时，与帧率解耦。
+  const readPanels = () =>
+    page.evaluate(() => ({
+      inv: document.querySelector("#inventoryCount").textContent,
+      potion: document.querySelector("#potionCount").textContent,
+      gold: document.querySelector("#goldText").textContent,
+      marks: document.querySelector("#markText").textContent,
+      log: document.querySelector("#eventLog").textContent,
+      objective: document.querySelector("#mapObjectiveChecks").textContent
+    }));
+  const panelChanged = () => after.inv !== before.inv || after.potion !== before.potion || after.log !== before.log;
+  let after = await readPanels();
+  for (let i = 0; i < 40 && !panelChanged(); i += 1) {
+    await sleep(100);
+    after = await readPanels();
+  }
+  assert.ok(panelChanged(), "拾取后面板未刷新");
   // 掉落内容随机，且一次 F 会拾取附近多件掉落（材料/药水/金币/印记碎片），
   // 因此只要求至少一类资产增加，不写死背包格数（避免随机掉落造成偶发失败）
   const countOf = (text) => Number(String(text).replace(/[^\d]/g, ""));
