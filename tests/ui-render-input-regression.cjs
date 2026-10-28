@@ -106,9 +106,9 @@ function makeSavedRun() {
 
 async function verifyLayoutStability(page) {
   await page.goto(`${ROOT}/?e2e=1`, { waitUntil: "load" });
-  await sleep(900);
+  await page.waitForSelector('[data-class="warrior"]', { timeout: 15000 });
   await page.locator('[data-class="warrior"]').click();
-  await sleep(600);
+  await page.waitForSelector("#skillBar [data-skill]", { timeout: 15000 });
 
   assert.equal(await page.locator("#skillBar [data-skill]").count(), 4, "技能栏应渲染 4 个技能");
 
@@ -132,24 +132,48 @@ async function verifyLayoutStability(page) {
   });
   assert.deepEqual(Object.values(stable), [true, true, true, true, true, true], `面板在静止帧内被重建：${JSON.stringify(stable)}`);
 
-  const y0 = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.y);
-  await pressKey(page, "W", true);
-  await sleep(650);
-  await pressKey(page, "W", false);
-  const y1 = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.y);
-  assert.ok(y0 - y1 > 40, `大写 W 未移动：y ${y0} -> ${y1}`);
+  // 0.6.8：共享 runner 帧率低，主循环 dt 被钳在 0.05s，固定 sleep(650) 可能只推进几帧，
+  // 位移达不到阈值。改为「按住按键轮询，直到位移达标或超时」，与帧率解耦。
+  const playerY = () => page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.y);
+  const holdUntil = async (key, reached, timeoutMs = 8000) => {
+    await pressKey(page, key, true);
+    const start = Date.now();
+    let ok = false;
+    while (Date.now() - start < timeoutMs) {
+      await sleep(100);
+      if (await reached()) {
+        ok = true;
+        break;
+      }
+    }
+    await pressKey(page, key, false);
+    return ok;
+  };
 
-  await pressKey(page, "ArrowDown", true);
-  await sleep(500);
-  await pressKey(page, "ArrowDown", false);
-  const y2 = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.y);
-  assert.ok(y2 - y1 > 20, `大写 ArrowDown 未移动：y ${y1} -> ${y2}`);
+  const y0 = await playerY();
+  const movedUp = await holdUntil("W", async () => y0 - (await playerY()) > 40);
+  const y1 = await playerY();
+  assert.ok(movedUp, `大写 W 未移动：y ${y0} -> ${y1}`);
+
+  const movedDown = await holdUntil("ArrowDown", async () => (await playerY()) - y1 > 20);
+  const y2 = await playerY();
+  assert.ok(movedDown, `大写 ArrowDown 未移动：y ${y1} -> ${y2}`);
 }
 
 async function verifyBossRespawnCountdown(page) {
   await page.evaluate(({ key, save }) => localStorage.setItem(key, JSON.stringify(save)), { key: STORAGE_KEY, save: makeSavedRun() });
   await page.goto(`${ROOT}/?e2e=1&fast=1`, { waitUntil: "load" });
-  await sleep(900);
+  // 0.6.8：同理由固定等待改为等状态就绪，避免慢机器上存档还没恢复完就断言。
+  await page.waitForFunction(
+    () => {
+      const e2e = window.__ONEKNIFE_E2E__;
+      if (!e2e) return false;
+      const modal = document.querySelector("#classModal");
+      const count = document.querySelector("#inventoryCount");
+      return Boolean(modal) && modal.classList.contains("hidden") && Boolean(count) && count.textContent === "2/12";
+    },
+    { timeout: 15000 }
+  );
 
   const restore = await page.evaluate(() => {
     const snapshot = window.__ONEKNIFE_E2E__.snapshot();
@@ -172,12 +196,13 @@ async function verifyBossRespawnCountdown(page) {
     window.__autoAttack = setInterval(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "x" })), 660);
   });
   let bossDead = false;
-  for (let i = 0; i < 120 && !bossDead; i += 1) {
+  // 0.6.8：慢机器上 dt 被钳制，冷却推进慢，30 秒可能打不死首领，放宽到 60 秒。
+  for (let i = 0; i < 240 && !bossDead; i += 1) {
     await sleep(250);
     bossDead = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().entities.some((entity) => entity.boss && !entity.alive));
   }
   await page.evaluate(() => clearInterval(window.__autoAttack));
-  assert.ok(bossDead, "首领未在 30 秒内被击杀");
+  assert.ok(bossDead, "首领未在 60 秒内被击杀");
 
   const readRespawn = () =>
     page.evaluate(() => {

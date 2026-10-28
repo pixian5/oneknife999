@@ -4,7 +4,7 @@
 
 - **可玩原型**：十章 100 张连续关卡、三职业、首领阶段战、掉落装备、自动保存；纯前端 Canvas 实现，代码位于 [game/](game/)。
 - **设计文档**：[docs/](docs/) 是设计事实源（产品、战斗、成长、地图、PK、行会、经济、服务器、QA、数值基线），治理规则见 [docs/README.md](docs/README.md)。
-- **当前版本**：0.6.7（见 [VERSION](VERSION)）
+- **当前版本**：0.6.8（见 [VERSION](VERSION)）
 
 ## 快速开始
 
@@ -39,6 +39,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.6.8 让**界面渲染与输入回归与帧率解耦**：0.6.7 修完帧率门禁后，CI 仍在第 10 步「界面渲染与输入回归」失败（15 秒内退出，前 9 步全过，本地通过），而 web 侧拿不到 runner 日志。归因为**测试自身的时序脆弱**，不是功能回归：共享 runner 与云电脑是软件渲染，主循环 `dt` 被钳在 0.05 秒（[main.js](game/src/main.js) 第 1945 行），低帧率下固定 `sleep` 期间模拟时间推进远小于真实时间。四处改造：①改用 `waitForSelector` / `waitForFunction` 等状态就绪，替掉固定 `sleep`；②按键位移改成「按住并轮询直到位移达标或超时」（`holdUntil`），与帧率无关；③存档恢复等 `#inventoryCount === "2/12"` 且职业弹窗关闭后再断言；④首领击杀窗口 30 秒 → 60 秒（240×250ms 轮询）。断言条件本身没有放宽。验证：159 单测全绿、`npm run format:check` PASS、`npm run test:ui:regression` 本地 PASS。详见 [docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md](docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md)。
 
 0.6.7 修复**CI 长期假红**：`CI 校验` 自 0.5.2 起连续 9 轮失败，逐项核对 job 步骤后发现 checkout / 依赖 / 语法 / 格式 / 159 单测 / Chromium 安装 / 三视口冒烟 / 渲染回归 / 铭牌回归全部通过，唯一失败的是第 12 步帧率门禁（p99 ≤ 4ms、零 20ms+ 长帧）——4ms 是 macOS 真机基线，共享 runner 与云电脑都是无 GPU 软件渲染（本地实测 p99 14.6ms、20ms+ 长帧 4 帧），永远达不到。改为容器基线（p99 ≤ 20ms、长帧 ≤ 10）并 `continue-on-error`：日志仍打印 `PERF PROBE` 看趋势，跑分环境不再阻塞功能回归 CI；真机仍用 `perf-probe` 默认 4ms 门禁。详见 [docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md](docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md)。
 
