@@ -266,6 +266,13 @@ export function rollPassive(passives, id, random = Math.random) {
   return { triggered: random() < chance, params: entry.params };
 }
 
+// 致盲（无名雾 / 雪隐）：玩家被致盲期间出手有 missChance 概率落空。
+// 0.7.1：此前 blind 只有定义没有消费点，致盲从未生效；这里补上纯函数判定，由 main.js 注入随机。
+export function rollBlindMiss({ blindTimer = 0, missChance = 0 } = {}, random = Math.random) {
+  if (blindTimer <= 0 || missChance <= 0) return false;
+  return random() < missChance;
+}
+
 // 承伤修正：把怪物的防御类被动叠加到一次受到的伤害上。
 // ctx: { hpRatio, firstHit, distance, allies }
 // 返回 { damage, consumed }；consumed 标记本次消耗掉的「一次性」被动（首击减伤 / 致命保留）。

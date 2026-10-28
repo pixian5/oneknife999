@@ -109,6 +109,7 @@ import {
   resolveAbilities,
   attackShapeConfig,
   rollPassive,
+  rollBlindMiss,
   applyDefensePassives,
   reflectDamage,
   resolveLethalSave,
@@ -349,6 +350,14 @@ export function selectTarget(entity) {
 // 0.6.0 P0：结算前先过怪物行为被动（首击减伤 / 残血减伤 / 致命保留），近战命中带反伤的怪会反噬玩家。
 export function resolveDamage(target, multiplier, skillName, kind) {
   const hero = activeHero();
+  if (target.npc) target.hostile = true;
+  // 0.7.1 致盲（无名雾 / 雪隐）：被致盲期间玩家出手按 missChance 落空，不结算伤害。
+  if (rollBlindMiss({ blindTimer: state.player.blindTimer, missChance: state.player.blindMissChance })) {
+    sfx.hit();
+    textAt("未命中", target.x, floatYAboveNameplate(target, 6), "#8b98a5", 12);
+    if (skillName) log(`${skillName} 落空：<b>${target.name}</b> 隐于雾中。`);
+    return 0;
+  }
   const {
     damage: rawDamage,
     critical,
@@ -988,6 +997,13 @@ export function applyOnHitPassives(attacker, damage) {
   if (potionLock.triggered) state.player.potionLock = Math.max(state.player.potionLock || 0, potionLock.params?.duration || 3);
   const skillLock = rollPassive(passives, "skillLock");
   if (skillLock.triggered) state.player.skillLock = Math.max(state.player.skillLock || 0, skillLock.params?.duration || 2);
+  // 致盲（无名雾 / 雪隐）：写入致盲计时与失手概率，出手术在 resolveDamage 里判定。
+  const blind = rollPassive(passives, "blind");
+  if (blind.triggered) {
+    state.player.blindTimer = Math.max(state.player.blindTimer || 0, blind.params?.duration || 2);
+    state.player.blindMissChance = blind.params?.missChance ?? 0.3;
+    textAt("致盲", state.player.x, floatYAbovePlayer(48), "#a88ce3", 12);
+  }
   // 攻速叠加：怪物每次命中自增一层，加快后续前摇。
   if (passives.some((p) => p.id === "rageStack")) {
     const cap = PASSIVE_PARAMS.rageStack.max;
@@ -1524,7 +1540,9 @@ export function update(dt) {
   state.player.slowTimer = Math.max(0, (state.player.slowTimer || 0) - dt);
   state.player.potionLock = Math.max(0, (state.player.potionLock || 0) - dt);
   state.player.skillLock = Math.max(0, (state.player.skillLock || 0) - dt);
+  state.player.blindTimer = Math.max(0, (state.player.blindTimer || 0) - dt);
   if (state.player.slowTimer <= 0) state.player.slowFactor = 1;
+  if (state.player.blindTimer <= 0) state.player.blindMissChance = 0;
   // 全局出手闸门（0.3.4）：任意怪物出手后需等 gate 秒，任何怪才能再次抬手。
   // 这里必须逐帧递减，否则闸门一旦被写入就会永久锁死怪物的攻击。
   state.player.attackGate = Math.max(0, (state.player.attackGate || 0) - dt);

@@ -9,6 +9,7 @@ import {
   resolveAbilities,
   attackShapeConfig,
   rollPassive,
+  rollBlindMiss,
   applyDefensePassives,
   reflectDamage,
   resolveLethalSave,
@@ -150,6 +151,39 @@ test("伤害倍率：同类增伤有上限、自身残血增伤、玩家残血�
   const enrage = [{ id: "enrageLowHp", params: { threshold: 0.4, damageBonus: 0.3 } }];
   assert.equal(enrageMultiplier(enrage, 0.8), 1, "玩家高血不触发");
   assert.equal(enrageMultiplier(enrage, 0.2), 1.3, "玩家低血增伤 30%");
+});
+
+test("rollBlindMiss：致盲期间按 missChance 落空，计时结束或概率为 0 必中", () => {
+  const active = { blindTimer: 1.5, missChance: 0.3 };
+  assert.equal(
+    rollBlindMiss(active, () => 0.2),
+    true,
+    "0.2 < 0.3 应按 missChance 落空"
+  );
+  assert.equal(
+    rollBlindMiss(active, () => 0.5),
+    false,
+    "0.5 > 0.3 应命中"
+  );
+  assert.equal(
+    rollBlindMiss({ blindTimer: 0, missChance: 0.3 }, () => 0.01),
+    false,
+    "未致盲必中"
+  );
+  assert.equal(
+    rollBlindMiss({ blindTimer: 1, missChance: 0 }, () => 0.01),
+    false,
+    "失手概率 0 必中"
+  );
+  assert.equal(
+    rollBlindMiss(undefined, () => 0.01),
+    false,
+    "缺省参数必中"
+  );
+  assert.equal(typeof rollBlindMiss(active), "boolean", "默认随机源可用");
+  // 致盲参数必须落在合理区间，避免默认值被改成 1.0 导致玩家完全打不中。
+  assert.ok(PASSIVE_PARAMS.blind.missChance > 0 && PASSIVE_PARAMS.blind.missChance < 0.5, "致盲失手概率应在 (0, 0.5)");
+  assert.ok(PASSIVE_PARAMS.blind.duration > 0, "致盲持续时间必须为正");
 });
 
 test("resolveOnDeath：亡语安全区生成毒区、复活返回比例、其它为无效果", () => {
