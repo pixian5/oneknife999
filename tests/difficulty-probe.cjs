@@ -36,6 +36,11 @@ const PROBE_RUNS = Math.max(1, Number(process.env.ONEKNIFE_PROBE_RUNS || 3));
 const SAVE_KEY = "oneknife999-prototype-save-v4";
 // 0.4.3 P1-8：防御词缀对照组。词缀值取 config.js AFFIX_POOL 防御条目的中位滚动
 // （base 1 + 0.16*(等级-1)，系数 1.0），每件基线装备各附 1 条——对应玩家「全身重铸出防御」的收益上限。
+//   ONEKNIFE_PROBE_SEED=1000          确定性随机种子（0.6.7）：设置后覆盖页面 Math.random 为
+//                                     种子驱动的 PRNG，第 n 次运行用 seed+n-1。同 seed 结果可复现，
+//                                     用于「基线 vs 消融臂」逐 seed 配对比较。不设置则恢复随机行为。
+const PROBE_SEED = process.env.ONEKNIFE_PROBE_SEED ? Number(process.env.ONEKNIFE_PROBE_SEED) : null;
+if (PROBE_SEED !== null && !Number.isInteger(PROBE_SEED)) throw new Error("ONEKNIFE_PROBE_SEED 必须是整数");
 const DEFENSE_AFFIX_ARM = process.env.ONEKNIFE_PROBE_DEFENSE_AFFIX === "1";
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
 const BASE_ATTACK = { warrior: 33, mage: 41, taoist: 30 };
@@ -312,8 +317,9 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
   const gearName = Object.values(gear)
     .map((item) => `${item.slot}:${item.name}(战力 ${Math.round(item.power)})`)
     .join("、");
+  const seedLabel = PROBE_SEED === null ? "" : ` seed=${PROBE_SEED + run - 1}`;
   process.stdout.write(
-    `PROBE START stage ${stage.stageNumber} (${mapId}) run=${run}/${runTotal} arm=${arm} Lv.${level} class=${CLASS_ID}${defenseBonus ? ` +防御词缀合计 ${defenseBonus}` : ""} gear=${gearName}\n`
+    `PROBE START stage ${stage.stageNumber} (${mapId}) run=${run}/${runTotal} arm=${arm} Lv.${level} class=${CLASS_ID}${seedLabel}${defenseBonus ? ` +防御词缀合计 ${defenseBonus}` : ""} gear=${gearName}\n`
   );
   await injectStageSave(page, stage.stageNumber, mapId, stage.needs, gear);
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -353,12 +359,30 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
 
 // 每关用全新的 context + page：连续在同一页面注入存档时，上一关的虚拟时钟 /
 // 自动推进 / 存档写回会干扰下一关（实测同页连跑第 15 关死亡数会从 2 次暴涨到 17 次）。
+// 0.6.7 新增确定性种子：探针原本受页面 Math.random 影响，同一份代码在第 15 关能测出 0/1/5 死，
+// 方差大到「无效改动」也会被读成数死的差异。开启种子后同 seed 的运行随机序列完全一致，
+// 于是「基线 vs 消融臂」可以逐 seed 配对比较，把 A/B 从比中位数升级为比配对差值。
+function installSeed(page, seed) {
+  return page.addInitScript((value) => {
+    let state = value >>> 0;
+    // mulberry32：32 位状态、单乘积累加，够用且不会污染其它全局。
+    Math.random = function seededRandom() {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, seed);
+}
+
 async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1, arm = "baseline") {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    if (PROBE_SEED !== null) await installSeed(page, PROBE_SEED + run - 1);
     await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
     const result = await probeStage(page, stage, run, runTotal, arm);
@@ -416,7 +440,7 @@ function median(values) {
     }
     const totalDeaths = results.filter((item) => item.arm === "baseline").reduce((sum, item) => sum + item.deaths, 0);
     process.stdout.write(
-      `DIFFICULTY PROBE PASS runs=${PROBE_RUNS} stages=${results
+      `DIFFICULTY PROBE PASS${PROBE_SEED === null ? "" : ` seeds=${PROBE_SEED}~${PROBE_SEED + PROBE_RUNS - 1}`} runs=${PROBE_RUNS} stages=${results
         .map(
           (item) =>
             `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}]`
