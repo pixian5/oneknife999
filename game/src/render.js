@@ -852,6 +852,8 @@ const NAMEPLATE_HEIGHT = 31;
 // 铭牌底边与实体轮廓之间保留的间隙。原先小怪只有 8px、首领 14px，
 // 首领的红色饰环（radius*1.22+14）与中毒光环会伸进血条，读不清血量。
 const NAMEPLATE_GAP = { normal: 20, boss: 26 };
+// 铭牌宽度：drawNameplate 与视野裁剪共用，避免两处数字走偏。
+const NAMEPLATE_WIDTH = { normal: 118, boss: 160 };
 
 export function nameplateTop(entity) {
   const gap = entity.boss ? NAMEPLATE_GAP.boss : NAMEPLATE_GAP.normal;
@@ -868,6 +870,7 @@ export function floatYAboveNameplate(entity, offset = 4) {
 // 玩家本体半径 19，加上中毒光环 28、破势环 30，铭牌按 30 作为有效轮廓计算。
 const PLAYER_BODY_RADIUS = 30;
 const PLAYER_NAMEPLATE_HEIGHT = 24;
+const PLAYER_NAMEPLATE_WIDTH = 88;
 
 export function playerNameplateTop() {
   return state.player.y - PLAYER_BODY_RADIUS - NAMEPLATE_GAP.normal - PLAYER_NAMEPLATE_HEIGHT;
@@ -1023,7 +1026,7 @@ export function drawPlayer() {
 // 避免伤害飘字、连击光环等后画内容盖住生命条。
 export function drawPlayerNameplate() {
   const maxHp = playerMaxHp();
-  const width = 88;
+  const width = PLAYER_NAMEPLATE_WIDTH;
   const left = state.player.x - width / 2;
   const top = playerNameplateTop();
   ctx.save();

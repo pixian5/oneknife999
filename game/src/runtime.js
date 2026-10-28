@@ -175,6 +175,18 @@ export function playerMaxHp() {
   return activeHero().hp + state.player.level * 18 + equipmentHp();
 }
 
+// 复活保留首领已损失生命（0.4.2）：死亡复活会走 loadMap → createEntities 重建实体表，
+// 首领默认满血，玩家一次失误就要把整条首领血条重打一遍。这里把旧表里「存活且已受伤」
+// 的首领生命回填到新表；普通怪仍重置为满血。阶段由 updateBoss 按新的生命比例重新判定。
+export function restoreDamagedBoss(entities, previousEntities) {
+  const damaged = (previousEntities || []).find((entity) => entity.boss && entity.alive && entity.hp < entity.maxHp);
+  if (!damaged) return false;
+  const boss = (entities || []).find((entity) => entity.boss);
+  if (!boss) return false;
+  boss.hp = Math.max(1, Math.min(boss.maxHp, damaged.hp));
+  return true;
+}
+
 // 单件装备对三围的贡献（0.4.0）：攻击按伤害公式的 0.9 系数折算，生命 / 防御与承伤同源。
 export function equipmentItemStats(item) {
   if (!item) return { attack: 0, hp: 0, defense: 0 };

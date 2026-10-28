@@ -21,6 +21,7 @@ npm run serve      # 打开 http://127.0.0.1:4174
 npm run verify                # 语法检查 + 代码格式检查 + 纯函数单元测试（无需浏览器）
 npm run test:ui               # 桌面 / 移动视口冒烟测试（含虚拟摇杆，需先 npm run serve）
 npm run test:ui:regression    # 界面渲染与输入回归（需先 npm run serve）
+npm run test:ui:nameplate     # 铭牌可读性回归：飘字 / 特效环不得压住血条（需先 npm run serve）
 npm run test:e2e              # 真实浏览器百图通关回归（需先 npm run serve）
 npm run perf                  # 帧率探测，结果写入 .test-artifacts/（需先 npm run serve）
 npm run balance               # 真实速度数值模拟（三职业百图，输出 tests/balance-out.csv）
@@ -86,7 +87,9 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 
 0.4.1 完成铭牌上移与飘字避让：玩家反馈「人物、野怪的血条 / 名字被遮挡」，给 `CanvasRenderingContext2D` 插桩并逐帧做矩形相交检测后，定位三个成因——①伤害飘字画在 `y-radius-12`，正好落在铭牌的血条行上（暴击 18px、一刀时刻 25px 覆盖更大）；②铭牌与实体轮廓间隙只有 8px（首领 14px），首领饰环、前摇环、中毒 / 破势环伸进血条；③结构性问题：铭牌原在 `drawEntity` 里随实体循环绘制，之后所有世界绘制（技能预览、玩家、粒子、飘字）都会盖住它。修复：铭牌几何抽成 `NAMEPLATE_HEIGHT` / `NAMEPLATE_GAP` / `nameplateTop()` 共享常量（间隙 8→20、14→26，且首领按 1.22 缩放半径让位），铭牌全部移出实体循环、在 `drawWorld` 的粒子与飘字之后按 y 升序统一绘制（近处铭牌压在上面），玩家铭牌拆为独立的 `drawPlayerNameplate()` 一并参与排序；伤害 / 落空 / `999` 与玩家受伤 / 治疗 / 升级 / 连击等所有世界内飘字改用 `floatYAboveNameplate` / `floatYAbovePlayer` 画在铭牌上方。验证：60 帧插桩复测中「飘字命中铭牌」82 → 0、「特效环命中铭牌」148 → 0，静止画面视野内 6 个铭牌全部零遮挡；107 个单测全绿、三视口冒烟 / 升级专项 / 渲染回归 PASS、perf 平均 6518.75 fps / p95 0.3ms / p99 0.6ms / 最差帧 4.7ms / 零长帧、百图 e2e 100/100（Lv.41、3 次死亡、终局金币 229511）。遗留：怪群贴脸时铭牌仍会互相遮挡（720 样本最差 57.7%，已按纵深排序缓解）。
 
-详细内容见 [docs/20261025-2239-当前开发进度-Claude-Sonnet-5.md](docs/20261025-2239-当前开发进度-Claude-Sonnet-5.md)。
+0.4.2 完成可读性回归与复活体验：0.4.1 的遮挡检测是一次性插桩脚本，问题复发没有回归网；铭牌也没有视野裁剪（每帧为全部实体建闭包 + 排序）；世界内飘字 `vy: -26` 会让边缘怪物的 `999` 大字飞出画布；死亡复活仍把首领重建为满血。本轮：①新增常驻用例 `tests/ui-nameplate.cjs`（`npm run test:ui:nameplate`，已并入 CI）——页面加载前插桩主画布的 `fillText` / `fillRect` / `arc` / `roundRect` 与绘制顺序，逐帧对「铭牌矩形 × 铭牌之后绘制的世界内容」做相交检测，并带自检（纯铭牌内容必须 0 命中，人造粒子 / 特效环 / 飘字必须被抓到），实测 619 帧 / 3038 个铭牌 / 视野内最多 8 个 / 遮挡 0；②铭牌只收集与视口相交的实体（`plateVisible` 共享判定，宽度抽成 `NAMEPLATE_WIDTH`），排序条目改用 `{ y, entity }`，去掉每帧的 filter + map + 闭包分配；③`drawText` 把绘制点夹进视口内缩范围，边缘飘字不再被裁掉；④新增纯函数 `runtime.restoreDamagedBoss()`，`loadMap` 增加 `keepBossHp` 参数、`die()` 传 `true`——**同图复活保留首领已损失生命**，普通怪仍满血重置，阶段由 `updateBoss` 按新的生命比例重新判定。验证：112 个单测全绿（新增 respawn 5 例）、三视口冒烟 / 升级专项 / 渲染回归 PASS、铭牌回归 PASS、perf 远程沙箱 p99 约 10ms 且零 20ms+ 长帧（容器内软件渲染，与 macOS 本机的 6000+ fps 不可直接对比）、百图 e2e 100/100（Lv.41、2 次死亡、终局金币 228669、100 个检查点 SAVED+RESTORED 全通过）。
+
+详细内容见 [docs/20261027-0111-当前开发进度-DeepSeek-V4.1-Flash.md](docs/20261027-0111-当前开发进度-DeepSeek-V4.1-Flash.md)；0.4.1 的排查与改动见 [docs/20261025-2239-当前开发进度-Claude-Sonnet-5.md](docs/20261025-2239-当前开发进度-Claude-Sonnet-5.md)。
 
 ## 【下一步待实现】
 

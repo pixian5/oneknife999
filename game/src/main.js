@@ -32,6 +32,7 @@ import {
   primaryExit,
   playerMaxHp,
   playerDefense,
+  restoreDamagedBoss,
   nearWaterWell,
   nearRestPoint,
   nearTown,
@@ -206,8 +207,12 @@ export function createEntities(map) {
   return result;
 }
 
-export function loadMap(mapId, spawnX, spawnY, silent) {
+export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   const map = MAPS[mapId];
+  // 0.4.2 复活保留首领已损失生命：死亡复活会走 loadMap → createEntities，首领被重建为满血，
+  // 玩家一次失误就要把整条首领血条重打一遍（难度探针的 0/1/5 死波动也源于此）。
+  // 只在「同图复活」时记录并回填；换图与首次进入仍按满血刷新。
+  const previousEntities = state.entities;
   const fromMap = state.currentMapId;
   state.currentMapId = mapId;
   state.player.x = spawnX;
@@ -222,6 +227,8 @@ export function loadMap(mapId, spawnX, spawnY, silent) {
   // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
   state.player.attackGate = 0;
   state.entities = createEntities(map);
+  // 0.4.2：同图复活时回填受伤首领的生命（普通怪仍满血重置），阶段由 updateBoss 重新判定。
+  if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
   state.drops = [];
   state.particles = [];
   state.texts = [];
@@ -956,7 +963,8 @@ export function die() {
   setMoveTarget(null);
   log(`<b>你在野外倒下</b>，已返回${activeMap().name}安全营地；当前关卡进度保留。`, "warn");
   showToast("已在当前地图安全区复活");
-  loadMap(mapId, safeSpawn.x, safeSpawn.y, true);
+  loadMap(mapId, safeSpawn.x, safeSpawn.y, true, true);
+  // loadMap 第 5 参 keepBossHp=true（合并自远程 0.4.2 分支）：同图复活保留首领已损失生命。
   // 场景重置完成后回填爆装掉落：装备不会被 autoPickupPass 自动拾取，玩家需跑尸按 F 捡回。
   if (redDrop) state.drops.push(redDrop.drop);
 }
