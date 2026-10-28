@@ -251,6 +251,9 @@ export function loadMap(mapId, spawnX, spawnY, silent) {
 
 export function chooseClass(classId) {
   setState(createState(classId));
+  // 0.4.3：仅新档开启三步引导。
+  state.player.guideStep = 1;
+  showToast("新手引导 1/3：用 WASD / 摇杆移动，走出营地一段距离");
   loadMap("ash_outskirts", 480, 780, true);
   $("classModal").classList.add("hidden");
   log(`你选择了 <b>${CLASSES[classId].name}</b>，矿道深处传来石碑碎裂声。`);
@@ -580,6 +583,7 @@ export function defeat(target) {
     state.quest.bossDefeated = true;
   } else {
     log(`${target.name} 被击败，获得 ${reward.expGain} 经验与 ${target.gold} 金币。`);
+    advanceGuide(3);
     // 罪恶值只在危险区杀怪时下降（docs/05），安全区挂机不下降。
     if ((activeMap().danger === "danger" || activeMap().danger === "desolate") && state.player.sin > 0)
       state.player.sin = Math.max(0, state.player.sin - PK_RULES.sinDecayPerDangerKill);
@@ -661,6 +665,48 @@ export function activateSitePoint(point) {
   return true;
 }
 
+// 0.4.3 自动拾取（P1-5）：走过掉落点即自动拾取非装备类物品（药水/回元露/金币/印记/材料）；
+// 装备仍需按 F 手动拾取，保留 12 格背包的管理决策。材料走 stackMaterial 与手动拾取同规则。
+export function autoPickupPass() {
+  if (!state || !state.drops.length) return;
+  const nearby = state.drops.filter((drop) => distance(state.player, drop) < 60 && drop.slot && !EQUIPMENT_SLOT_KEYS.includes(drop.slot));
+  if (!nearby.length) return;
+  const hero = activeHero();
+  for (const drop of nearby) {
+    state.drops = state.drops.filter((entry) => entry.id !== drop.id);
+    const pickup = computePickup(drop, { player: state.player, hero });
+    if (pickup.toInventory) {
+      if (drop.slot === "material") state.inventory = stackMaterial(state.inventory || [], drop);
+      else if ((state.inventory || []).length < 12) state.inventory.push(drop);
+    } else Object.assign(state.player, pickup.patch);
+  }
+  sfx.pickup();
+  log(`自动拾取 ${nearby.length} 件消耗品 / 材料 / 货币（装备仍需按 F）。`, "loot");
+  advanceGuide(99, "拾取");
+  persistGame();
+  renderPlayer();
+  renderInventory();
+}
+
+// 0.4.3 三步新手引导（P1-6）：移动 → 击败 1 只怪 → 拾取。
+// guideStep 存档持久化：1/2/3 进行中，99 完成；仅新档触发（chooseClass 初始化）。
+export function advanceGuide(nextStep) {
+  const step = state?.player?.guideStep;
+  // nextStep=99（完成）的前置是第 3 步；其余步骤按顺序推进。
+  const expected = nextStep === 99 ? 3 : nextStep - 1;
+  if (!step || step >= 99 || step !== expected) return;
+  state.player.guideStep = nextStep;
+  const texts = {
+    2: "第一步完成。第二步：靠近怪物按 X 普攻（或点击怪物锁定），击败 1 只。",
+    3: "战斗完成。第三步：靠近掉落光柱拾取（消耗品自动拾取，装备按 F）。",
+    99: "引导完成：清剿普通怪并击败区域首领，前进出口即开启。"
+  };
+  if (texts[nextStep]) showToast(texts[nextStep]);
+  log(`<b>新手引导${nextStep === 99 ? "完成" : `第 ${nextStep}/3 步`}</b>：${texts[nextStep]}`, "loot");
+  persistGame();
+  renderAll();
+}
+
 export function collectDrops() {
   const nearby = state.drops.filter((drop) => distance(state.player, drop) < 85);
   if (!nearby.length) {
@@ -725,7 +771,10 @@ export function collectDrops() {
     else log(`拾取 <b style="color:${drop.color}">${drop.name}</b>，首领印记 +3。`, "loot");
   });
   if (!collected) showToast("背包已满，装备仍保留在地面");
-  if (collected) persistGame();
+  if (collected) {
+    advanceGuide(99);
+    persistGame();
+  }
   renderPlayer();
   renderInventory();
 }
@@ -1222,6 +1271,12 @@ export function updateHealZones(dt) {
 export function update(dt) {
   if (!state) return;
   const hero = activeHero();
+  autoPickupPass();
+  // 新手引导第 1 步：累计位移超过 130px 即视为掌握移动。
+  if (state.player.guideStep === 1) {
+    state.guideStart ||= { x: state.player.x, y: state.player.y };
+    if (Math.hypot(state.player.x - state.guideStart.x, state.player.y - state.guideStart.y) > 130) advanceGuide(2);
+  }
   state.player.attackTimer = Math.max(0, state.player.attackTimer - dt);
   state.player.invulnerable = Math.max(0, state.player.invulnerable - dt);
   // 全局出手闸门（0.3.4）：任意怪物出手后需等 gate 秒，任何怪才能再次抬手。
@@ -1286,6 +1341,8 @@ export function loadGame() {
     state.player.skillLevels = saved.player.skillLevels || [0, 0, 0, 0];
     state.player.sin = saved.player.sin || 0;
     state.player.deaths = saved.player.deaths || 0;
+    // 旧档 / 未开始引导的档不弹引导（undefined 视为已完成）。
+    state.player.guideStep = saved.player.guideStep && saved.player.guideStep < 99 ? saved.player.guideStep : 99;
     // 恢复时规范化背包：合并旧档 / 迁移存档中重复的同名材料（0.3.0 材料堆叠）。
     state.inventory = normalizeInventory(saved.inventory);
     state.mapProgress = saved.mapProgress || {};

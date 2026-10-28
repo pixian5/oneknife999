@@ -11,6 +11,9 @@
 //   ONEKNIFE_PROBE_CLASS=warrior        职业（warrior / mage / taoist）
 //   ONEKNIFE_PROBE_MAX_DEATHS=6         单关死亡上限（默认 6，每一次运行都必须满足）
 //   ONEKNIFE_PROBE_MAX_SECONDS=900      单关模拟耗时上限，单位秒（默认 900）
+//   ONEKNIFE_PROBE_DEFENSE_AFFIX=1      防御词缀对照组（P1-8）：每关先跑基线装备，再跑
+//                                       「每件装备 +1 条防御词缀」的对照臂，输出死亡/耗时差值，
+//                                       量化防御词缀的真实收益（0.4.3）。
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
@@ -31,6 +34,9 @@ const MAX_SECONDS = Number(process.env.ONEKNIFE_PROBE_MAX_SECONDS || 900);
 // 只跑一次无法区分「数值回退」和「一次操作失误」，因此默认跑 3 次取中位数。
 const PROBE_RUNS = Math.max(1, Number(process.env.ONEKNIFE_PROBE_RUNS || 3));
 const SAVE_KEY = "oneknife999-prototype-save-v4";
+// 0.4.3 P1-8：防御词缀对照组。词缀值取 config.js AFFIX_POOL 防御条目的中位滚动
+// （base 1 + 0.16*(等级-1)，系数 1.0），每件基线装备各附 1 条——对应玩家「全身重铸出防御」的收益上限。
+const DEFENSE_AFFIX_ARM = process.env.ONEKNIFE_PROBE_DEFENSE_AFFIX === "1";
 const BASE_HP = { warrior: 350, mage: 235, taoist: 280 };
 const BASE_ATTACK = { warrior: 33, mage: 41, taoist: 30 };
 // 与 config.js 的职业普攻距离保持一致：决定「贴脸」还是「停在射程边缘」。
@@ -283,17 +289,31 @@ async function defeatEntity(page, entityId, mapId, safePoint) {
   throw new Error(`探针击杀 ${entityId} 超时（模拟 ${Math.round(elapsed / 1000)}s）：${JSON.stringify(await snapshot(page))}`);
 }
 
-async function probeStage(page, stage, run = 1, runTotal = 1) {
+// 对照臂装备：基线装备每件附 1 条防御词缀（值 = 防御条目按关卡等级的中位滚动）。
+function withDefenseAffixes(gear, level) {
+  const value = Math.max(1, Math.round(1 + 0.16 * (level - 1)));
+  return Object.fromEntries(
+    Object.entries(gear).map(([slotKey, item]) => [
+      slotKey,
+      { ...item, affixes: [...(item.affixes || []), { group: "生存", key: "defense", label: "防御", value }] }
+    ])
+  );
+}
+
+async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") {
   const mapId = stage.mapId;
   const { MAPS } = await mapsModulePromise;
   const map = MAPS[mapId];
   if (!map) throw new Error(`maps.js 中不存在关卡 ${mapId}`);
-  const gear = buildStageGear(map);
+  const level = mainlineLevel(stage.stageNumber - 1);
+  const baseGear = buildStageGear(map);
+  const gear = arm === "defense" ? withDefenseAffixes(baseGear, level) : baseGear;
+  const defenseBonus = arm === "defense" ? Object.values(gear).reduce((sum, item) => sum + (item.affixes?.[0]?.value || 0), 0) : 0;
   const gearName = Object.values(gear)
     .map((item) => `${item.slot}:${item.name}(战力 ${Math.round(item.power)})`)
     .join("、");
   process.stdout.write(
-    `PROBE START stage ${stage.stageNumber} (${mapId}) run=${run}/${runTotal} Lv.${mainlineLevel(stage.stageNumber - 1)} class=${CLASS_ID} gear=${gearName}\n`
+    `PROBE START stage ${stage.stageNumber} (${mapId}) run=${run}/${runTotal} arm=${arm} Lv.${level} class=${CLASS_ID}${defenseBonus ? ` +防御词缀合计 ${defenseBonus}` : ""} gear=${gearName}\n`
   );
   await injectStageSave(page, stage.stageNumber, mapId, stage.needs, gear);
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -323,17 +343,17 @@ async function probeStage(page, stage, run = 1, runTotal = 1) {
   const deaths = (snap.player.deaths || 0) - deathsBefore;
   const seconds = Math.round(elapsedMs / 1000);
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds}\n`
   );
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
   // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，
   // 只跑一次就按单次判定会把偶发失误误报成难度回退。耗时仍在单次判，因为它代表「能否推进」。
-  return { stageNumber: stage.stageNumber, mapId, deaths, seconds, deathsOverLimit: deaths > MAX_DEATHS };
+  return { stageNumber: stage.stageNumber, mapId, arm, deaths, seconds, deathsOverLimit: deaths > MAX_DEATHS };
 }
 
 // 每关用全新的 context + page：连续在同一页面注入存档时，上一关的虚拟时钟 /
 // 自动推进 / 存档写回会干扰下一关（实测同页连跑第 15 关死亡数会从 2 次暴涨到 17 次）。
-async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1) {
+async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1, arm = "baseline") {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const page = await context.newPage();
@@ -341,8 +361,8 @@ async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    const result = await probeStage(page, stage, run, runTotal);
-    if (errors.length) throw new Error(`第 ${stage.stageNumber} 关页面异常：` + errors.join(" | "));
+    const result = await probeStage(page, stage, run, runTotal, arm);
+    if (errors.length) throw new Error(`第 ${stage.stageNumber} 关(${arm})页面异常：` + errors.join(" | "));
     return result;
   } finally {
     await context.close();
@@ -371,32 +391,49 @@ function median(values) {
       if (!entry) throw new Error(`catalog 中不存在第 ${stageNumber} 关`);
       return { stageNumber, mapId: entry.id, need: entry.need, needs, safePoint: entry.safePoint };
     });
+    // 0.4.3 P1-8：防御词缀对照组开启时，每关先跑基线臂再跑防御臂（同 run 数取中位数），
+    // 输出两臂差值量化防御词缀收益；默认只跑基线臂（行为与旧版一致）。
+    const arms = DEFENSE_AFFIX_ARM ? ["baseline", "defense"] : ["baseline"];
     const results = [];
     for (const stage of stages) {
-      const runs = [];
-      for (let run = 1; run <= PROBE_RUNS; run += 1) runs.push(await runStageInFreshPage(browser, stage, run, PROBE_RUNS));
-      const deaths = median(runs.map((item) => item.deaths));
-      const seconds = median(runs.map((item) => item.seconds));
-      // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
-      for (const [index, run] of runs.entries()) {
-        if (run.deathsOverLimit) {
-          process.stdout.write(
-            `PROBE WARN stage ${stage.stageNumber} run ${index + 1}/${PROBE_RUNS} deaths=${run.deaths} 超过单次上限 ${MAX_DEATHS}（计入中位数判定）\n`
-          );
+      for (const arm of arms) {
+        const runs = [];
+        for (let run = 1; run <= PROBE_RUNS; run += 1) runs.push(await runStageInFreshPage(browser, stage, run, PROBE_RUNS, arm));
+        const deaths = median(runs.map((item) => item.deaths));
+        const seconds = median(runs.map((item) => item.seconds));
+        // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
+        for (const [index, run] of runs.entries()) {
+          if (run.deathsOverLimit) {
+            process.stdout.write(
+              `PROBE WARN stage ${stage.stageNumber} arm=${arm} run ${index + 1}/${PROBE_RUNS} deaths=${run.deaths} 超过单次上限 ${MAX_DEATHS}（计入中位数判定）\n`
+            );
+          }
         }
+        if (deaths > MAX_DEATHS)
+          throw new Error(`${stage.mapId}(${arm}) 非快进死亡中位数 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
+        results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, arm, deaths, seconds, runs });
       }
-      if (deaths > MAX_DEATHS) throw new Error(`${stage.mapId} 非快进死亡中位数 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
-      results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, deaths, seconds, runs });
     }
-    const totalDeaths = results.reduce((sum, item) => sum + item.deaths, 0);
+    const totalDeaths = results.filter((item) => item.arm === "baseline").reduce((sum, item) => sum + item.deaths, 0);
     process.stdout.write(
       `DIFFICULTY PROBE PASS runs=${PROBE_RUNS} stages=${results
         .map(
           (item) =>
-            `${item.stageNumber}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}]`
+            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}]`
         )
         .join(" ")} totalDeaths(median)=${totalDeaths}\n`
     );
+    // 对照组差值汇总：防御词缀收益 = 基线中位数 - 防御臂中位数（死亡数与耗时）。
+    if (DEFENSE_AFFIX_ARM) {
+      for (const stage of stages) {
+        const base = results.find((item) => item.stageNumber === stage.stageNumber && item.arm === "baseline");
+        const def = results.find((item) => item.stageNumber === stage.stageNumber && item.arm === "defense");
+        if (base && def)
+          process.stdout.write(
+            `DEFENSE AFFIX stage ${stage.stageNumber} 基线 ${base.deaths}死/${base.seconds}s → +防御词缀 ${def.deaths}死/${def.seconds}s（死亡 ${def.deaths - base.deaths >= 0 ? "+" : ""}${def.deaths - base.deaths}，耗时 ${def.seconds - base.seconds >= 0 ? "+" : ""}${def.seconds - base.seconds}s）\n`
+          );
+      }
+    }
   } finally {
     await browser.close();
   }

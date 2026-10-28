@@ -939,12 +939,25 @@ export function drawMonsterTooltip(view, viewWidth, viewHeight) {
   ctx.restore();
 }
 
+// 0.4.3 品质光柱（P1-5）：掉落按品质显示不同高度的光柱，紫 / 橙带缓慢脉动，
+// 玩家在远处即可判断是否值得绕路（docs/03「高品质装备有地面表现」的核心承诺）。
+const QUALITY_BEAM = { white: 24, blue: 32, purple: 44, orange: 58 };
+
 export function drawDrop(drop) {
+  const beamHeight = QUALITY_BEAM[drop.quality] || 24;
+  const premium = drop.quality === "purple" || drop.quality === "orange";
+  const pulse = premium ? 0.72 + Math.sin(Date.now() / (drop.quality === "orange" ? 260 : 380)) * 0.2 : 0.66;
   ctx.save();
   ctx.translate(drop.x, drop.y);
+  const gradient = ctx.createLinearGradient(0, -beamHeight, 0, 0);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(0.55, drop.color + "55");
+  gradient.addColorStop(1, drop.color + (premium ? "bb" : "88"));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(drop.quality === "orange" ? -7 : -5, -beamHeight, drop.quality === "orange" ? 14 : 10, beamHeight);
   ctx.rotate(Math.PI / 4);
   ctx.fillStyle = drop.color;
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = 0.9 * pulse + 0.1;
   ctx.fillRect(-6, -6, 12, 12);
   ctx.globalAlpha = 0.28;
   ctx.fillRect(-11, -11, 22, 22);
@@ -1667,6 +1680,26 @@ export function renderTravelConfirm(pending = null) {
   );
 }
 
+// 0.4.3 新手引导横幅：三步状态 + 文案；完成或旧档隐藏。
+const GUIDE_TEXTS = {
+  1: "第一步：WASD / 方向键 / 摇杆 移动，走出营地一段距离",
+  2: "第二步：靠近怪物按 X 普攻（或点击怪物锁定），击败 1 只",
+  3: "第三步：靠近掉落光柱拾取（消耗品自动拾取，装备按 F）"
+};
+
+export function renderGuide() {
+  const banner = $("guideBanner");
+  if (!banner) return;
+  const step = state?.player?.guideStep;
+  if (!step || step >= 99 || !GUIDE_TEXTS[step]) {
+    banner.classList.add("hidden");
+    return;
+  }
+  banner.classList.remove("hidden");
+  setText($("guideStep"), `${step}/3`);
+  setText($("guideText"), GUIDE_TEXTS[step]);
+}
+
 export function renderAll() {
   if (!state) return;
   drawWorld();
@@ -1684,6 +1717,7 @@ export function renderAll() {
   renderShopPanel();
   renderLog();
   renderBoss();
+  renderGuide();
   setText($("coords"), `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`);
   // 操作提示与弹窗说明跟随自定义键位，避免玩家改键后看到旧按键。
   setText(

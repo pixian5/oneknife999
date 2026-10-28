@@ -54,3 +54,4 @@ Thumbs.db
 .coverage
 htmlcov/
 *.egg-info/
+*.tmp.cjs
