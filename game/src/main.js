@@ -58,7 +58,7 @@ import {
   renderInventory,
   renderTravelConfirm
 } from "./render.js";
-import { persistGame, readSavedGame, clearStorage, CURRENT_SAVE_VERSION } from "./persist.js";
+import { persistGame, readSavedGame, clearStorage, sanitizeSavedGame, CURRENT_SAVE_VERSION } from "./persist.js";
 import {
   computeDamage,
   computeKillReward,
@@ -75,6 +75,7 @@ import {
   resolveChargePoint,
   resolveKnockback,
   createBoneGuard,
+  buildSummonedMob,
   pickSummonTarget,
   advanceHealZone
 } from "./skills.js";
@@ -85,7 +86,9 @@ import {
   computeSiteEffect,
   stackMaterial,
   salvageReward,
-  normalizeInventory
+  normalizeInventory,
+  isEquipmentDrop,
+  pickRedNameDrop
 } from "./drops.js";
 import { buyShopItem, reforgeQuote, reforgeAffix } from "./shop.js";
 import { sfx, unlockAudio } from "./audio.js";
@@ -253,13 +256,15 @@ export function chooseClass(classId) {
   setState(createState(classId));
   // 0.4.3：仅新档开启三步引导。
   state.player.guideStep = 1;
-  showToast("新手引导 1/3：用 WASD / 摇杆移动，走出营地一段距离");
   loadMap("ash_outskirts", 480, 780, true);
   $("classModal").classList.add("hidden");
   log(`你选择了 <b>${CLASSES[classId].name}</b>，矿道深处传来石碑碎裂声。`);
   log("百图征途开启：每关都要完成<b>普通怪清剿</b>并击破<b>区域首领</b>。", "loot");
   log("前 10 关每图提升一级，后期逐步变为每 2、3、4 图提升一级。", "loot");
-  showToast("出城后会自动记录目标，点击怪物即可锁定");
+  log("出城后会自动记录目标，点击怪物即可锁定");
+  // 0.4.4 修复：引导 toast 原先弹在中间、被 4 行之后的「自动记录目标」toast 覆盖（单例 toast 后写覆盖前写），
+  // 从未真正显示。目标提示降级为日志，让最重要的第一步引导最后弹出。
+  showToast("新手引导 1/3：用 WASD / 摇杆移动，走出营地一段距离");
   renderAll();
 }
 
@@ -637,7 +642,11 @@ export function spawnDrop(source, roll = 0) {
   const map = activeMap();
   const item = rollDropItem({ source, mapDrops: map.drops, commonDrops: COMMON_DROPS, roll });
   state.drops.push(item);
-  log(`${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，靠近后按 F 拾取。`, "loot");
+  // 0.4.4：自动拾取上线后只有装备需要按 F，消耗品 / 货币 / 材料走近即自动入账，文案按类型区分。
+  log(
+    `${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，${isEquipmentDrop(item) ? "靠近后按 F 拾取" : "走近后自动拾取"}。`,
+    "loot"
+  );
 }
 
 // 战术节点激活：效果计算交给 drops.js，这里只负责写回、反馈与存档。
@@ -682,7 +691,7 @@ export function autoPickupPass() {
   }
   sfx.pickup();
   log(`自动拾取 ${nearby.length} 件消耗品 / 材料 / 货币（装备仍需按 F）。`, "loot");
-  advanceGuide(99, "拾取");
+  advanceGuide(99);
   persistGame();
   renderPlayer();
   renderInventory();
@@ -934,26 +943,22 @@ export function die() {
   const safeSpawn = { x: town.x + town.w / 2, y: town.y + town.h / 2 };
   state.player.deaths = (state.player.deaths || 0) + 1;
   sfx.death();
-  // 红名死亡爆装（docs/05 原型：掉 1 件穿戴装备在倒下位置，装备锁定不保护死亡掉落）。
-  if (isRedName()) {
-    const filled = EQUIPMENT_SLOT_KEYS.filter((slotKey) => state.player.equipment?.[slotKey]);
-    if (filled.length) {
-      const slotKey = filled[Math.floor(Math.random() * filled.length)];
-      const dropped = state.player.equipment[slotKey];
-      state.player.equipment[slotKey] = null;
-      state.drops.push({ ...dropped, x: state.player.x + rand(-30, 30), y: state.player.y + rand(-24, 24), source: "红名死亡" });
-      log(`<b>红名死亡爆装</b>：<b style="color:${dropped.color}">${dropped.name}</b> 掉落在倒下位置。`, "warn");
-    }
+  // 红名死亡爆装（docs/05：掉落是地面实体，保护期后可拾取；单机原型即跑尸拾回）。
+  // 0.4.4 修复 P2：此前 push 进 drops 后被下方 loadMap 的场景重置（state.drops = []）清空，
+  // 装备凭空销毁且日志谎称「掉落在倒下位置」。现在先抽件，loadMap 完成后回填到新场景。
+  const redDrop = isRedName() ? pickRedNameDrop(state.player.equipment, { x: state.player.x, y: state.player.y }) : null;
+  if (redDrop) {
+    state.player.equipment[redDrop.slotKey] = null;
+    log(`<b>红名死亡爆装</b>：<b style="color:${redDrop.drop.color}">${redDrop.drop.name}</b> 掉落在倒下位置。`, "warn");
   }
-  state.player.hp = Math.round(playerMaxHp() * 0.55);
-  state.player.resource = activeHero().resource * 0.45;
-  state.player.invulnerable = 3;
-  state.player.targetId = null;
-  state.player.poison = 0;
+  // 复活血量 / 资源 / 免疫 / 毒层 / 目标由 loadMap 统一满额重置（防低血量复活死循环的有意设计，
+  // 见 loadMap 内注释），此处不再单独赋值——原先的 55% 血量 / 45% 资源从未生效，属误导性死代码（0.4.4 移除）。
   setMoveTarget(null);
   log(`<b>你在野外倒下</b>，已返回${activeMap().name}安全营地；当前关卡进度保留。`, "warn");
   showToast("已在当前地图安全区复活");
   loadMap(mapId, safeSpawn.x, safeSpawn.y, true);
+  // 场景重置完成后回填爆装掉落：装备不会被 autoPickupPass 自动拾取，玩家需跑尸按 F 捡回。
+  if (redDrop) state.drops.push(redDrop.drop);
 }
 
 export function movePlayer(dt) {
@@ -1054,6 +1059,9 @@ export function updateEntities(dt) {
       return;
     }
     if (!entity.alive) {
+      // boss 召唤物尸体（0.4.4）：无复活周期，跳过 respawn 计时（undefined 递减为 NaN），
+      // 由 updateEntities 末尾的过滤统一回收。
+      if (entity.summonedMob) return;
       entity.respawn -= dt;
       if (entity.respawn <= 0) {
         entity.alive = true;
@@ -1074,8 +1082,9 @@ export function updateEntities(dt) {
     if (!entity.boss) updateMonsterAI(entity, dt);
     if (entity.boss) updateBoss(entity, dt);
   });
-  // 召唤时限结束的骨卫从实体表移除，避免留下 alive=false 但无 respawn 的残影。
-  state.entities = state.entities.filter((entity) => !(entity.summoned && !entity.alive));
+  // 召唤时限结束的骨卫（summoned）与被击杀的 boss 召唤物（summonedMob，0.4.4）整只移除：
+  // 召唤物没有复活语义，留在实体表只会累积尸体（每帧空转 NaN 计算，长 boss 战实体表无界增长）。
+  state.entities = state.entities.filter((entity) => entity.alive || !(entity.summoned || entity.summonedMob));
 }
 
 // 骨卫 AI（0.3.4）：优先跟随玩家，附近有敌人时自动索敌并按固定冷却出手；
@@ -1188,24 +1197,19 @@ export function updateBoss(boss, dt) {
       const aliveMobs = state.entities.filter((e) => e.alive && !e.boss).length;
       if (aliveMobs < def.summonMax + 8) {
         const type = map.monsterTypes[def.summonMob];
-        const id = `summon-${Date.now()}-${Math.random()}`;
-        state.entities.push({
-          id,
-          ...type,
-          level: map.levelMax,
-          x: boss.x + rand(-80, 80),
-          y: boss.y + rand(-60, 60),
-          maxHp: type.hp,
-          alive: true,
-          hitFlash: 0,
-          wander: Math.random() * 6,
-          poisonTimer: 0,
-          friendly: false,
-          attackCooldown: 0.5,
-          windup: 0,
-          windupTotal: MONSTER_ATTACK_RULES.normal.windup,
-          armorBreakTimer: 0
-        });
+        // 0.4.4 修复 P2：召唤实体改用 buildSummonedMob 构造，补齐 spawnX / spawnY /
+        // patrolRadius / aggro / morph——旧的内联构造缺这些字段，脱战距离与巡逻坐标
+        // 变 NaN（追击永不脱战、未仇恨时原地呆立），死后也永留实体表。
+        state.entities.push(
+          buildSummonedMob({
+            type,
+            id: `summon-${Date.now()}-${Math.random()}`,
+            x: boss.x + rand(-80, 80),
+            y: boss.y + rand(-60, 60),
+            level: map.levelMax,
+            windupTotal: MONSTER_ATTACK_RULES.normal.windup
+          })
+        );
         log(`<b>${boss.name}</b> 召唤了一只 ${type.name}。`, "warn");
         spark(boss.x + 60, boss.y, "#7a5a3a", 8);
       }
@@ -1626,7 +1630,9 @@ export function importSave(file) {
     try {
       const parsed = JSON.parse(String(reader.result));
       if (!parsed || !CLASSES[parsed.classId]) throw new Error("invalid save");
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      // 0.4.4：导入是唯一外部存档入口，先净化再落盘——物品的字符串字段会拼进渲染层
+      // innerHTML / title / style，剥除危险字符并校验数值后才允许写入 localStorage。
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeSavedGame(parsed)));
       showToast("存档已导入，正在刷新……");
       setTimeout(() => window.location.reload(), 400);
     } catch {

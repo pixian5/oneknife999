@@ -93,3 +93,51 @@ export function clearStorage() {
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   localStorage.removeItem(LEGACY_STORAGE_KEY_V2);
 }
+
+// ============ 0.4.4 导入存档净化（P3：导入是唯一外部存档入口） ============
+// 物品的字符串字段（name / desc / glyph / source / 词缀 label）会被渲染层拼进 innerHTML
+// 与 title / style 属性（renderEquipment / renderInventory），伪造存档可注入任意 HTML。
+// 导入时统一：剥除 HTML 危险字符、截断长度、校验颜色格式、数值字段强制非负整数。
+const cleanText = (value, max = 64) => (typeof value === "string" ? value.replace(/[<>&"']/g, "").slice(0, max) : "");
+
+function sanitizeItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const cleaned = { ...item };
+  cleaned.id = cleanText(item.id, 80) || `imported-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  cleaned.name = cleanText(item.name, 40) || "未知物品";
+  cleaned.desc = cleanText(item.desc, 200);
+  cleaned.glyph = cleanText(item.glyph, 4);
+  cleaned.source = cleanText(item.source, 40);
+  cleaned.color = /^#[0-9a-fA-F]{6}$/.test(String(item.color)) ? item.color : "#78b6ec";
+  for (const key of ["power", "value", "amount", "enhance", "blessing", "count"])
+    if (item[key] !== undefined) cleaned[key] = Math.max(0, Math.round(Number(item[key]) || 0));
+  if (Array.isArray(item.affixes))
+    cleaned.affixes = item.affixes
+      .slice(0, 4)
+      .map((affix) =>
+        affix && typeof affix === "object"
+          ? {
+              ...affix,
+              group: cleanText(affix.group, 12),
+              key: cleanText(affix.key, 20),
+              label: cleanText(affix.label, 12),
+              value: Math.max(0, Math.round(Number(affix.value) || 0))
+            }
+          : null
+      )
+      .filter(Boolean);
+  return cleaned;
+}
+
+// 净化整份导入存档：背包过滤非对象项，装备按 12 槽位白名单重建（多余键丢弃），
+// 顶层 equipment 与 player.equipment 同步净化结果（loadGame 优先读顶层）。
+export function sanitizeSavedGame(saved) {
+  if (!saved || typeof saved !== "object") return saved;
+  const cleaned = { ...saved, player: { ...(saved.player || {}) } };
+  if (Array.isArray(saved.inventory)) cleaned.inventory = saved.inventory.map(sanitizeItem).filter(Boolean);
+  const equipment = {};
+  for (const slotKey of EQUIPMENT_SLOT_KEYS) equipment[slotKey] = sanitizeItem(saved.equipment?.[slotKey]);
+  cleaned.equipment = equipment;
+  if (cleaned.player.equipment) cleaned.player.equipment = equipment;
+  return cleaned;
+}

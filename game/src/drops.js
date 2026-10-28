@@ -31,6 +31,12 @@ export function rollAffixes({ level = 1, count, random = Math.random }) {
   return picked;
 }
 
+// 是否装备类掉落：非消耗品 / 货币 / 材料的槽位即装备。
+// 自动拾取排除装备（保留按 F 的背包决策），掉落日志也按它区分「按 F 拾取」与「走近自动拾取」（0.4.4）。
+export function isEquipmentDrop(item) {
+  return Boolean(item?.slot) && !["consumable", "currency", "material"].includes(item.slot);
+}
+
 // 掷出一件掉落物：先抽地图专属物品，再用权重池决定最终物品，最后生成位置与金币数量。
 // 装备类物品追加词缀滚动（随机调用顺序：地图物品 → 权重池 → 词缀数 → 词缀 → 唯一 id → x → y → 金币数量）。
 export function rollDropItem({ source, mapDrops, commonDrops, random = Math.random, now = Date.now(), roll = 0 }) {
@@ -39,7 +45,7 @@ export function rollDropItem({ source, mapDrops, commonDrops, random = Math.rand
   pool.push({ item: mapItem, weight: source.boss ? 62 : 20 });
   if (source.boss) pool.push({ item: BOSS_MARK_SHARD, weight: 18 });
   const rolled = weightedPick(pool, random);
-  const isEquipment = rolled.slot && !["consumable", "currency", "material"].includes(rolled.slot);
+  const isEquipment = isEquipmentDrop(rolled);
   const affixes = isEquipment ? rollAffixes({ level: source.level, random }) : undefined;
   const item = {
     ...rolled,
@@ -56,6 +62,19 @@ export function rollDropItem({ source, mapDrops, commonDrops, random = Math.rand
 // 掉落次数：首领固定 2 次，普通怪 42% 概率掉 1 次。
 export function rollDropCount(source, random = Math.random) {
   return source.boss ? 2 : random() < 0.42 ? 1 : 0;
+}
+
+// 红名死亡爆装抽件（docs/05：穿戴掉落每次最多一件，从未绑定穿戴物等概率抽取）：
+// 从已穿戴槽位等概率抽 1 件，返回 { slotKey, drop }（drop 为带倒下位置坐标的地面实体）或 null（无穿戴）。
+// 0.4.4 从 main.js 的 die() 抽出为纯函数：坐标抖动 ±30/±24 与原实现一致，随机可注入便于单测。
+export function pickRedNameDrop(equipment, { random = Math.random, x = 0, y = 0 } = {}) {
+  const filled = Object.entries(equipment || {}).filter(([, item]) => item);
+  if (!filled.length) return null;
+  const [slotKey, item] = filled[Math.floor(random() * filled.length)];
+  return {
+    slotKey,
+    drop: { ...item, x: x + (random() * 2 - 1) * 30, y: y + (random() * 2 - 1) * 24, source: "红名死亡" }
+  };
 }
 
 // 拾取结算：返回 { patch } 表示需要写回玩家的字段；返回 { toInventory: true } 表示放入背包。

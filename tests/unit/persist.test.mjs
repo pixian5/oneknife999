@@ -78,3 +78,63 @@ test("migrateSave：结果可安全序列化（迁移字段随存档落盘）", 
   assert.equal(roundTrip.saveVersion, CURRENT_SAVE_VERSION);
   assert.equal(roundTrip.player.migrationLevelFloor, 7);
 });
+
+// ============ 0.4.4 导入存档净化（修复：导入是唯一外部存档入口的注入面） ============
+import { sanitizeSavedGame } from "../../game/src/persist.js";
+
+test("sanitizeSavedGame：物品字符串字段剥除 HTML 注入字符，颜色校验，数值强制", () => {
+  const saved = {
+    classId: "warrior",
+    inventory: [
+      {
+        id: "x1",
+        name: "<img src=x onerror=alert(1)>",
+        desc: '含"引号"<标签>&与号',
+        glyph: "矿<script>",
+        color: "red",
+        amount: "37.6",
+        affixes: [{ key: "defense", label: "<b>防御</b>", value: "15" }]
+      }
+    ],
+    equipment: { weapon: { id: "w1", name: "剑<svg onload=alert(2)>", color: "#a88ce3" } },
+    player: { equipment: { weapon: { id: "w1", name: "剑<svg onload=alert(2)>", color: "#a88ce3" } } }
+  };
+  const cleaned = sanitizeSavedGame(saved);
+  const item = cleaned.inventory[0];
+  assert.ok(!item.name.includes("<"), "物品名中的标签必须被剥除");
+  assert.ok(!item.desc.includes('"') && !item.desc.includes("<"), "描述中的引号与标签必须被剥除");
+  assert.ok(!item.glyph.includes("<"), "字形中的标签必须被剥除");
+  assert.equal(item.color, "#78b6ec", "非法颜色格式回退默认色");
+  assert.equal(item.amount, 38, "数值字符串强制为四舍五入整数");
+  assert.equal(item.affixes[0].label, "b防御/b", "标签字符被剥除后仅剩安全文本，无尖括号即无注入能力");
+  assert.ok(!item.affixes[0].label.includes("<"), "词缀标签不得残留尖括号");
+  assert.equal(item.affixes[0].value, 15, "词缀数值字符串强制数字");
+  assert.ok(!cleaned.equipment.weapon.name.includes("<svg"), "顶层装备名剥除注入");
+  assert.ok(!cleaned.player.equipment.weapon.name.includes("<svg"), "player.equipment 同步净化");
+  assert.equal(cleaned.equipment.weapon.color, "#a88ce3", "合法 6 位色保留");
+});
+
+test("sanitizeSavedGame：非对象物品被剔除，装备按 12 槽位白名单重建", () => {
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    inventory: [null, "junk", 42, { id: "m1", name: "黑铁矿石", slot: "material" }],
+    equipment: { weapon: null, helmet: { id: "h1", name: "头盔" }, hackSlot: { id: "evil", name: "伪造槽位" } },
+    player: {}
+  });
+  assert.equal(cleaned.inventory.length, 1, "null / 字符串 / 数字条目全部剔除");
+  assert.equal(cleaned.inventory[0].name, "黑铁矿石");
+  assert.equal(cleaned.equipment.weapon, null, "空槽保持 null");
+  assert.ok(cleaned.equipment.helmet.name === "头盔");
+  assert.equal(cleaned.equipment.hackSlot, undefined, "非 12 槽位的键被丢弃");
+  assert.equal(Object.keys(cleaned.equipment).length, 12, "装备重建后恰为 12 槽位");
+});
+
+test("sanitizeSavedGame：缺 id 物品补生成导入 id，词缀超过 4 条截断", () => {
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    inventory: [{ name: "无 id 物品", affixes: [1, 2, 3, 4, 5, 6].map((n) => ({ key: `k${n}`, label: `词${n}`, value: n })) }],
+    equipment: {}
+  });
+  assert.ok(cleaned.inventory[0].id.startsWith("imported-"), "缺 id 时补生成导入前缀 id");
+  assert.equal(cleaned.inventory[0].affixes.length, 4, "词缀最多保留 4 条");
+});

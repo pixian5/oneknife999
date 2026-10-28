@@ -125,6 +125,38 @@ export function createBoneGuard({ player, hero, level = 1, id = "bone-guard", ru
   };
 }
 
+// boss 召唤的普通怪实体（0.4.4 修复 P2）：此前在 main.js 的 updateBoss 内联构造，
+// 缺 spawnX / spawnY / patrolRadius / aggro / morph 字段——spawnX 缺失导致脱战距离
+// Math.hypot(x - undefined) 为 NaN（脱战判定失效）、patrolRadius 缺失导致巡逻坐标 NaN（未仇恨时原地呆立）。
+// respawn 刻意不给：召唤物被击杀后由 updateEntities 按 summonedMob 标记整只移除（不参与复活），
+// 避免旧实现「respawn undefined → NaN → 永不复活但尸体永留实体表」的累积。
+// windupTotal 由调用方传入（MONSTER_ATTACK_RULES 定义在 combat.js，本模块不反向依赖它）。
+export function buildSummonedMob({ type, id, x, y, level, windupTotal, random = Math.random }) {
+  return {
+    id,
+    ...type,
+    level: Math.max(1, Math.floor(Number(level) || 1)),
+    x,
+    y,
+    maxHp: type.hp,
+    alive: true,
+    summonedMob: true,
+    hitFlash: 0,
+    wander: random() * 6,
+    poisonTimer: 0,
+    morph: Math.floor(random() * 4),
+    friendly: false,
+    aggro: false,
+    spawnX: x,
+    spawnY: y,
+    patrolRadius: 55 + random() * 50,
+    attackCooldown: 0.5,
+    windup: 0,
+    windupTotal,
+    armorBreakTimer: 0
+  };
+}
+
 // 骨卫索敌：最近的存活敌对目标（排除友军 / 白名玩家），超出 engageRange 时返回 null。
 export function pickSummonTarget({ guard, entities, range = SKILL_RULES.summon.engageRange }) {
   return (

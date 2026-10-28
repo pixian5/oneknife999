@@ -258,3 +258,41 @@ test("normalizeInventory：恢复存档时合并重复同名材料，无 count �
   const armor = list.find((entry) => entry.slot === "armor");
   assert.equal(armor.count, undefined); // 装备不写 count
 });
+
+// ============ 0.4.4 掉落类型判定与红名爆装抽件 ============
+import { isEquipmentDrop, pickRedNameDrop } from "../../game/src/drops.js";
+
+test("isEquipmentDrop：装备槽位为真，消耗品 / 货币 / 材料与空槽位为假", () => {
+  for (const slot of ["weapon", "helmet", "neck", "armor", "braceletL", "ringR", "belt", "boots", "medal", "talisman"])
+    assert.equal(isEquipmentDrop({ slot }), true, `${slot} 应判定为装备`);
+  assert.equal(isEquipmentDrop({ slot: "consumable" }), false);
+  assert.equal(isEquipmentDrop({ slot: "currency" }), false);
+  assert.equal(isEquipmentDrop({ slot: "material" }), false);
+  assert.equal(isEquipmentDrop({}), false);
+  assert.equal(isEquipmentDrop(null), false);
+});
+
+test("pickRedNameDrop：只从已穿戴槽位等概率抽取，掉落围绕倒下位置", () => {
+  const equipment = {
+    weapon: { id: "w1", name: "黑铁长剑", color: "#a88ce3" },
+    helmet: null,
+    neck: { id: "n1", name: "魂链", color: "#78b6ec" }
+  };
+  const pick = pickRedNameDrop(equipment, { x: 500, y: 600, random: () => 0 });
+  assert.equal(pick.slotKey, "weapon", "random=0 命中第一个已穿槽位");
+  assert.equal(pick.drop.id, "w1");
+  assert.equal(pick.drop.source, "红名死亡");
+  assert.ok(Math.abs(pick.drop.x - 500) <= 30 && Math.abs(pick.drop.y - 600) <= 24, "坐标抖动 ±30/±24 与原实现一致");
+  // random 覆盖全区间只命中已穿槽位，永不选中空槽。
+  for (const roll of [0, 0.3, 0.6, 0.99]) {
+    const other = pickRedNameDrop(equipment, { random: () => roll });
+    assert.ok(["weapon", "neck"].includes(other.slotKey), `roll=${roll} 不应命中空槽 helmet`);
+    assert.equal(other.drop[other.slotKey], undefined);
+  }
+});
+
+test("pickRedNameDrop：无穿戴或装备为空返回 null", () => {
+  assert.equal(pickRedNameDrop({}, {}), null);
+  assert.equal(pickRedNameDrop(null, {}), null);
+  assert.equal(pickRedNameDrop({ weapon: null, armor: null }, {}), null);
+});

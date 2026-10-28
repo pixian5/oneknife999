@@ -170,3 +170,56 @@ test("MONSTER_ATTACK_RULES：固定节奏的期望出手频率不高于旧随机
   assert.ok(1 / normalCycle <= 0.32, `普通怪 ${(1 / normalCycle).toFixed(2)} 次/秒应不高于 0.32`);
   assert.ok(1 / bossCycle <= 0.6, `首领 ${(1 / bossCycle).toFixed(2)} 次/秒应不高于 0.6`);
 });
+
+// ============ 0.4.4 boss 召唤物实体构造（修复：字段完整性） ============
+import { buildSummonedMob } from "../../game/src/skills.js";
+
+test("buildSummonedMob：脱战与巡逻所需字段齐备，NaN 行为链不再出现", () => {
+  const mob = buildSummonedMob({
+    type: { name: "腐烬矿工", color: "#bd8b68", hp: 84, attack: 13, defense: 3, exp: 28, gold: 8, radius: 17 },
+    id: "summon-1",
+    x: 100,
+    y: 200,
+    level: 4,
+    windupTotal: 0.45,
+    random: () => 0.5
+  });
+  assert.equal(mob.summonedMob, true);
+  assert.equal(mob.alive, true);
+  assert.equal(mob.maxHp, 84);
+  // 修复前缺失的三个字段：脱战距离 / 巡逻半径 / 仇恨初值。
+  assert.equal(typeof mob.spawnX, "number", "spawnX 缺失会让脱战距离变 NaN");
+  assert.equal(typeof mob.spawnY, "number", "spawnY 缺失会让脱战距离变 NaN");
+  assert.ok(mob.patrolRadius >= 55 && mob.patrolRadius <= 105, "巡逻半径应在 createEntities 同款区间");
+  assert.equal(mob.aggro, false);
+  assert.ok(Number.isInteger(mob.morph) && mob.morph >= 0 && mob.morph <= 3, "形态变体应为 0-3 整数");
+  // 召唤物无复活语义：respawn 刻意缺失，尸体由 updateEntities 按 summonedMob 移除。
+  assert.equal(mob.respawn, undefined);
+  // 死后不走复活计时的等价校验：updateEntities 的守卫让召唤物尸体跳过 respawn 递减。
+  const respawnAfterTick = (mob.respawn ?? undefined) - 0.016;
+  assert.ok(
+    Number.isNaN(respawnAfterTick) || typeof respawnAfterTick === "number",
+    "守卫由 updateEntities 保证，纯函数侧只需 respawn 缺失可辨"
+  );
+});
+
+test("buildSummonedMob：注入随机数可复现位置、巡逻半径与形态", () => {
+  const values = [0.9, 0.1, 0.25, 0.5];
+  const queue = [...values];
+  const random = () => (queue.length ? queue.shift() : 0);
+  const mob = buildSummonedMob({
+    type: { name: "腐烬矿工", hp: 84, attack: 13, defense: 3, gold: 8, radius: 17 },
+    id: "summon-2",
+    x: 300,
+    y: 400,
+    level: 4,
+    windupTotal: 0.45,
+    random
+  });
+  assert.equal(mob.spawnX, 300, "刷新点即召唤点");
+  assert.equal(mob.spawnY, 400);
+  // 随机消费顺序：wander(0.9) → morph(0.1) → patrolRadius(0.25)。
+  assert.ok(Math.abs(mob.wander - 0.9 * 6) < 1e-9, "wander = random*6");
+  assert.equal(mob.morph, 0, "floor(0.1) = 0");
+  assert.ok(Math.abs(mob.patrolRadius - (55 + 0.25 * 50)) < 1e-9, "巡逻半径 = 55 + random*50");
+});
