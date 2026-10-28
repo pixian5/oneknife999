@@ -54,4 +54,6 @@ Thumbs.db
 .coverage
 htmlcov/
 *.egg-info/
-*.tmp.cjs
+
+# 设计 Brief 等中间产物不入库
+.creative-design/

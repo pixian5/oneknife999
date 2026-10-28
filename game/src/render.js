@@ -35,6 +35,20 @@ import { COMBO_RULES, resolveGuideTarget } from "./feedback.js";
 
 export const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
+
+// 战斗实体贴图缓存（0.4.4）：玩家 / 怪物 / Boss 用生成的美术贴图替换几何图形。
+// Image 加载是异步的——首次帧可能未就绪，此时 img.complete 为假，自动回退原几何绘制；
+// 加载完成后游戏每帧重绘自然生效，无需额外回调。
+const spriteCache = new Map();
+function loadSprite(key, src) {
+  if (!spriteCache.has(key)) {
+    const img = new Image();
+    img.src = src;
+    spriteCache.set(key, img);
+  }
+  return spriteCache.get(key);
+}
+const spriteReady = (img) => img && img.complete && img.naturalWidth > 0;
 const wrap = document.querySelector("#canvasWrap");
 
 let dpr = 1;
@@ -120,13 +134,24 @@ export function roundedRect(target, x, y, width, height, radius) {
 
 // 静态地图层离屏缓存：地形、道路、战区装饰、水道、网格与地标只在切换地图时绘制一次，
 // 每帧只做一次 drawImage，避免每帧重复描边整张地图（只保留当前地图的缓存）。
+// 0.4.6 章节氛围图作为地图底层背景：异步加载，就绪后重建缓存层（bgReady 参与缓存键）。
 let groundLayer = null;
 
-function paintGroundLayer(target, map) {
+function paintGroundLayer(target, map, bgImg) {
   const ctx = target;
   const p = map.palette;
-  ctx.fillStyle = p.ground;
-  ctx.fillRect(0, 0, map.width, map.height);
+  if (bgImg) {
+    // 章节氛围图 cover 铺满地图（等比裁切居中），底部压暗保证道路/网格/实体可读
+    const s = Math.max(map.width / bgImg.width, map.height / bgImg.height);
+    const w = bgImg.width * s;
+    const h = bgImg.height * s;
+    ctx.drawImage(bgImg, (map.width - w) / 2, (map.height - h) / 2, w, h);
+    ctx.fillStyle = "rgba(10, 15, 13, 0.66)";
+    ctx.fillRect(0, 0, map.width, map.height);
+  } else {
+    ctx.fillStyle = p.ground;
+    ctx.fillRect(0, 0, map.width, map.height);
+  }
   // 道路
   ctx.strokeStyle = p.road;
   ctx.lineWidth = 70;
@@ -189,16 +214,20 @@ function paintGroundLayer(target, map) {
 }
 
 function getGroundLayer(map) {
-  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr。
-  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr) return groundLayer.canvas;
+  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr 与章节背景就绪态。
+  const bgImg = loadSprite(`chapter-bg-${map.chapter}`, `assets/chapter-${String(map.chapter).padStart(2, "0")}.jpg`);
+  const bgReady = spriteReady(bgImg);
+  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgReady === bgReady) {
+    return groundLayer.canvas;
+  }
   const layer = document.createElement("canvas");
   const scale = Math.max(1, dpr);
   layer.width = map.width * scale;
   layer.height = map.height * scale;
   const layerCtx = layer.getContext("2d");
   layerCtx.scale(scale, scale);
-  paintGroundLayer(layerCtx, map);
-  groundLayer = { mapId: map.id, dpr: scale, canvas: layer };
+  paintGroundLayer(layerCtx, map, bgReady ? bgImg : null);
+  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgReady };
   return layer;
 }
 
@@ -315,15 +344,22 @@ export function drawGuideArrow() {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  ctx.fillStyle = guide.color;
-  ctx.globalAlpha = 0.88;
-  ctx.beginPath();
-  ctx.moveTo(9, 0);
-  ctx.lineTo(-5, -6);
-  ctx.lineTo(-2, 0);
-  ctx.lineTo(-5, 6);
-  ctx.closePath();
-  ctx.fill();
+  // 0.4.8 指引箭头用美术贴图（fx-arrow 金色火焰箭头，替代程序化三角形）
+  const arr = loadSprite("fx-arrow", "assets/fx-arrow.png");
+  if (spriteReady(arr)) {
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(arr, -20, -20, 40, 40);
+  } else {
+    ctx.fillStyle = guide.color;
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-5, -6);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.restore();
   ctx.save();
   ctx.globalAlpha = 0.72;
@@ -761,15 +797,49 @@ export function drawEntity(entity) {
     ctx.stroke();
   }
   if (entity.hitFlash > 0) ctx.globalAlpha = 0.45;
-  ctx.fillStyle = entity.color;
-  if (entity.npc) {
+  // 0.4.5 全身立绘精灵：monster-full-{名}.png / boss-full-{名}.png（透明抠图），
+  // 程序化动作动画——呼吸浮动 / 前摇蓄力压低 / 出手前扑 / 受击抖动。
+  const sprite = entity.npc
+    ? null
+    : entity.boss
+      ? loadSprite(`boss-full-${entity.name}`, `assets/boss-full-${entity.name}.png`)
+      : loadSprite(`monster-full-${entity.name}`, `assets/monster-full-${entity.name}.png`);
+  const sprH = entity.npc ? entity.radius * 1.6 : spriteHeight(entity);
+  const t = Date.now() / 1000;
+  const ph = (Number(entity.id) || 0) * 0.37; // 相位错开，避免同屏怪物步调一致
+  if (spriteReady(sprite)) {
+    const w = (sprH * sprite.width) / sprite.height;
+    const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55); // 脚底锚点
+    let dx = 0;
+    let dy = 0;
+    let rot = 0;
+    if (entity.hitFlash > 0) dx = Math.sin(t * 46 + ph) * 2.5; // 受击抖动
+    if (entity.windup > 0 && entity.windupTotal > 0) {
+      const r = entity.windup / entity.windupTotal; // 前摇蓄力：压低 + 微颤
+      dy += (1 - r) * 4;
+      dx += Math.sin(t * 30 + ph) * 1.5;
+    }
+    if (entity.attackCooldown > 0 && entity.attackCooldown < 0.4) {
+      const r = entity.attackCooldown / 0.4; // 出手瞬间前扑 + 前倾
+      dx += (1 - r) * 6;
+      rot += (1 - r) * 0.1;
+    }
+    dy += Math.sin(t * (entity.boss ? 2 : 3.2) + ph) * (entity.boss ? 2 : 1.6); // 呼吸浮动
+    ctx.save();
+    ctx.translate(entity.x + dx, footY + dy);
+    ctx.rotate(rot);
+    ctx.drawImage(sprite, -w / 2, -sprH, w, sprH);
+    ctx.restore();
+  } else if (entity.npc) {
     // 流浪武者：菱形轮廓 + 白名，与怪物在画面上直接区分。
+    ctx.fillStyle = entity.color;
     ctx.save();
     ctx.translate(entity.x, entity.y);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-entity.radius * 0.8, -entity.radius * 0.8, entity.radius * 1.6, entity.radius * 1.6);
     ctx.restore();
   } else {
+    ctx.fillStyle = entity.color;
     ctx.beginPath();
     ctx.arc(entity.x, entity.y, entity.radius * scale, 0, Math.PI * 2);
     ctx.fill();
@@ -797,31 +867,36 @@ export function drawEntity(entity) {
       ctx.fill();
     }
   }
-  ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
-  ctx.beginPath();
-  ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
-  ctx.fill();
+  // 眼睛点只在无贴图时绘制（贴图自带形象）
+  if (!spriteReady(sprite)) {
+    ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
+    ctx.beginPath();
+    ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (entity.boss) {
+    const ringR = sprH / 2; // 0.4.5 状态圈随全身贴图尺寸
     ctx.strokeStyle = "rgba(241, 109, 102, .65)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 8, 0, Math.PI * 2);
+    ctx.arc(entity.x, entity.y, ringR + 8, 0, Math.PI * 2);
     ctx.stroke();
     if (entity.phase >= 2) {
       ctx.strokeStyle = "rgba(255, 180, 90, .8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(entity.x, entity.y, entity.radius * scale + 14, 0, Math.PI * 2);
+      ctx.arc(entity.x, entity.y, ringR + 14, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
   // 0.3.4 攻击前摇：红色蓄力环随前摇收拢，收拢到底即出手；玩家可据此走位躲开（落空）。
   if (entity.windup > 0 && entity.windupTotal > 0) {
     const ratio = clamp(entity.windup / entity.windupTotal, 0, 1);
+    const ringR = sprH / 2;
     ctx.strokeStyle = `rgba(241, 109, 102, ${0.4 + (1 - ratio) * 0.5})`;
     ctx.lineWidth = 2 + (1 - ratio) * 2;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 10 + ratio * 26, 0, Math.PI * 2);
+    ctx.arc(entity.x, entity.y, ringR + 10 + ratio * 26, 0, Math.PI * 2);
     ctx.stroke();
   }
   // 召唤物（骨卫）：青色虚线环标识友军，避免误认为可攻击怪物。
@@ -840,24 +915,30 @@ export function drawEntity(entity) {
     ctx.strokeStyle = "rgba(241, 109, 102, .85)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.radius * scale + 7, angle - 0.45, angle + 0.45);
+    ctx.arc(entity.x, entity.y, sprH / 2 + 7, angle - 0.45, angle + 0.45);
     ctx.stroke();
   }
   ctx.restore();
 }
 
+// 0.4.5 全身立绘高度（融合自美术线）：怪物随体型放大，首领显著更大；铭牌 / 状态圈 / 飘字共用。
+export function spriteHeight(entity) {
+  if (entity.npc) return entity.radius * 1.6;
+  if (entity.boss) return clamp(entity.radius * 2.8, 110, 210);
+  return clamp(entity.radius * 4.2, 54, 110);
+}
+
 // 铭牌几何常量：名字 / 血量 / 血条三行共用一套纵向偏移，被 drawNameplate 与
 // 飘字避让（textAt 的 nameplateTop）共同引用，避免两处各写一份数字后走偏。
 const NAMEPLATE_HEIGHT = 31;
-// 铭牌底边与实体轮廓之间保留的间隙。原先小怪只有 8px、首领 14px，
-// 首领的红色饰环（radius*1.22+14）与中毒光环会伸进血条，读不清血量。
-const NAMEPLATE_GAP = { normal: 20, boss: 26 };
 // 铭牌宽度：drawNameplate 与视野裁剪共用，避免两处数字走偏。
 const NAMEPLATE_WIDTH = { normal: 118, boss: 160 };
 
 export function nameplateTop(entity) {
-  const gap = entity.boss ? NAMEPLATE_GAP.boss : NAMEPLATE_GAP.normal;
-  return entity.y - entity.radius * (entity.boss ? 1.22 : 1) - gap - NAMEPLATE_HEIGHT;
+  // 0.4.7 语义（美术线）：名牌锚定贴图头顶上方（脚底 y - 贴图高 - 间距），不再压进身体；
+  // 融入 0.4.2 阶梯避让体系后，drawWorld 仍可在 nameplateTop 基础上整牌上移。
+  const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55);
+  return footY - spriteHeight(entity) - (entity.boss ? 44 : 36);
 }
 
 // 飘字基线：伤害数字、落空等世界内文字一律画在铭牌**上方**，
@@ -867,13 +948,14 @@ export function floatYAboveNameplate(entity, offset = 4) {
 }
 
 // 玩家铭牌：玩家不是 state.entities 成员（单独绘制），但同样需要「往上抬 + 飘字避让」。
-// 玩家本体半径 19，加上中毒光环 28、破势环 30，铭牌按 30 作为有效轮廓计算。
-const PLAYER_BODY_RADIUS = 30;
+// 0.4.5 起玩家为全身立绘精灵（高 112、脚底基准 y+24，见 drawPlayer），铭牌锚定贴图头顶。
+const PLAYER_SPRITE_HEIGHT = 112;
+const PLAYER_FOOT_OFFSET = 24;
 const PLAYER_NAMEPLATE_HEIGHT = 24;
 const PLAYER_NAMEPLATE_WIDTH = 88;
 
 export function playerNameplateTop() {
-  return state.player.y - PLAYER_BODY_RADIUS - NAMEPLATE_GAP.normal - PLAYER_NAMEPLATE_HEIGHT;
+  return state.player.y + PLAYER_FOOT_OFFSET - PLAYER_SPRITE_HEIGHT - 8 - PLAYER_NAMEPLATE_HEIGHT;
 }
 
 export function floatYAbovePlayer(offset = 6) {
@@ -881,7 +963,7 @@ export function floatYAbovePlayer(offset = 6) {
 }
 
 export function drawNameplate(entity, topOverride) {
-  const width = entity.boss ? 160 : 118;
+  const width = entity.boss ? NAMEPLATE_WIDTH.boss : NAMEPLATE_WIDTH.normal;
   const left = entity.x - width / 2;
   const top = topOverride ?? nameplateTop(entity);
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
@@ -952,12 +1034,20 @@ export function drawDrop(drop) {
   const pulse = premium ? 0.72 + Math.sin(Date.now() / (drop.quality === "orange" ? 260 : 380)) * 0.2 : 0.66;
   ctx.save();
   ctx.translate(drop.x, drop.y);
+  // 0.4.4 品质光柱（白/蓝/紫/橙四档高度与脉动，docs/03 品质地面表现的核心）+
+  // 0.4.8 金色光束贴图叠加（美术线，未就绪时静默跳过、品质光柱仍然独立成立）。
   const gradient = ctx.createLinearGradient(0, -beamHeight, 0, 0);
   gradient.addColorStop(0, "rgba(0,0,0,0)");
   gradient.addColorStop(0.55, drop.color + "55");
   gradient.addColorStop(1, drop.color + (premium ? "bb" : "88"));
   ctx.fillStyle = gradient;
   ctx.fillRect(drop.quality === "orange" ? -7 : -5, -beamHeight, drop.quality === "orange" ? 14 : 10, beamHeight);
+  const beam = loadSprite("fx-beam", "assets/fx-beam.png");
+  if (spriteReady(beam)) {
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(beam, -30, -98, 60, 98);
+    ctx.globalAlpha = 1;
+  }
   ctx.rotate(Math.PI / 4);
   ctx.fillStyle = drop.color;
   ctx.globalAlpha = 0.9 * pulse + 0.1;
@@ -989,34 +1079,81 @@ export function drawSkillRangePreview() {
   ctx.restore();
 }
 
+// 0.4.5 玩家移动检测（供行走浮动动画使用）：比较前后帧坐标。
+let lastPlayerX = 0;
+let lastPlayerY = 0;
+
 export function drawPlayer() {
   const hero = activeHero();
+  // 0.4.5 玩家全身立绘精灵：player-full-{class}.png（透明抠图），程序化动作动画——
+  // 攻击前倾（attackTimer 期间）/ 移动浮动 / 待机呼吸。
+  // 融合说明：美术线原把血条铭牌画在这里，现改由 drawPlayerNameplate 在 drawWorld
+  // 最上层统一绘制（0.4.1 可读性重构），铭牌锚定贴图头顶（playerNameplateTop）。
   ctx.save();
   ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
-  ctx.fillStyle = hero.color;
-  ctx.beginPath();
-  ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,.7)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(state.player.x, state.player.y, 25, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#102027";
-  ctx.beginPath();
-  ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
-  ctx.fill();
+  const playerSprite = loadSprite(`player-full-${state.classId}`, `assets/player-full-${state.classId}.png`);
+  const pT = Date.now() / 1000;
+  const pH = PLAYER_SPRITE_HEIGHT;
+  const moving = Math.abs(state.player.x - lastPlayerX) + Math.abs(state.player.y - lastPlayerY) > 0.4;
+  lastPlayerX = state.player.x;
+  lastPlayerY = state.player.y;
+  if (spriteReady(playerSprite)) {
+    const pW = (pH * playerSprite.width) / playerSprite.height;
+    const footY = state.player.y + PLAYER_FOOT_OFFSET;
+    let rot = 0;
+    let dx = 0;
+    let dy = 0;
+    if (state.player.attackTimer > 0 && hero.cooldown > 0) {
+      const r = clamp(state.player.attackTimer / hero.cooldown, 0, 1); // 前倾+前冲
+      rot = r * 0.16;
+      dx = r * 5;
+      // 0.4.5 攻击挥击刀光：金色弧线随前倾闪现，增加传奇页游挥砍感
+      const target = state.entities.find((e) => e.id === state.player.targetId && e.alive);
+      const ang = target ? Math.atan2(target.y - state.player.y, target.x - state.player.x) : 0;
+      ctx.save();
+      ctx.translate(state.player.x + dx, state.player.y - 6);
+      ctx.rotate(ang);
+      ctx.globalAlpha = r;
+      ctx.strokeStyle = "#f5d78a";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 42, -0.85, 0.85);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 235, 180, .5)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, -0.6, 0.6);
+      ctx.stroke();
+      ctx.restore();
+    }
+    dy += Math.sin(pT * (moving ? 11 : 3.4)) * (moving ? 3 : 1.6); // 移动浮动 vs 待机呼吸
+    ctx.save();
+    ctx.translate(state.player.x + dx, footY + dy);
+    ctx.rotate(rot);
+    ctx.drawImage(playerSprite, -pW / 2, -pH, pW, pH);
+    ctx.restore();
+  } else {
+    // 贴图未就绪时的几何兜底（美术线语义保留）。
+    ctx.fillStyle = hero.color;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 19, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#102027";
+    ctx.beginPath();
+    ctx.arc(state.player.x + 6, state.player.y - 5, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (state.player.poison > 0) {
     ctx.fillStyle = `rgba(168, 140, 227, ${0.3 + state.player.poison * 0.12})`;
     ctx.beginPath();
-    ctx.arc(state.player.x, state.player.y, 28, 0, Math.PI * 2);
+    ctx.arc(state.player.x, state.player.y + 24, 30, 0, Math.PI * 2);
     ctx.fill();
   }
   if (state.player.charge >= 100) {
     ctx.strokeStyle = "#e7b36b";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(state.player.x, state.player.y, 30, 0, Math.PI * 2);
+    ctx.arc(state.player.x, state.player.y + 24, 34, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.restore();
@@ -1158,9 +1295,8 @@ export function renderPlayer() {
   ].join("|");
   if (!panelChanged($("powerText"), signature)) return;
   const avatar = $("avatar");
-  setText(avatar, hero.glyph);
-  setStyle(avatar, "color", hero.color);
-  setStyle(avatar, "borderColor", hero.color);
+  // 0.4.8 头像改用职业头像贴图（0.4.4 已生成 player-{class}.png，此前一直显示文字字形）
+  avatar.innerHTML = `<img class="avatar-img" src="assets/player-${state.classId}.png" alt="">`;
   setText($("className"), hero.name);
   setText($("playerName"), `${hero.name} · 灰烬旅人`);
   setText($("powerText"), formatNumber(power));
@@ -1178,8 +1314,9 @@ export function renderPlayer() {
   setText($("expText"), `${state.player.exp} / ${state.player.nextExp}`);
   setStyle($("expBar"), "width", `${clamp((state.player.exp / state.player.nextExp) * 100, 0, 100)}%`);
   setText($("potionKey"), keyLabel("potion"));
-  setText($("goldText"), formatNumber(state.player.gold));
-  setText($("markText"), `${state.player.marks} / 800`);
+  // 0.4.8 金币/首领印记前加货币美术图标
+  setHtml($("goldText"), `<img class="currency-ico" src="assets/currency-gold.png" alt=""> ${formatNumber(state.player.gold)}`);
+  setHtml($("markText"), `<img class="currency-ico" src="assets/currency-mark.png" alt=""> ${state.player.marks} / 800`);
   setText($("potionCount"), state.player.potion);
   // 战斗统计与罪恶值：PK 状态一眼可见（红名用红色胶囊）。
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
@@ -1428,6 +1565,7 @@ export function renderSkills() {
           const skillLevel = state.player.skillLevels?.[index] || 0;
           return (
             `<button class="skill-button" data-skill="${index}" aria-label="${skill.name}${skillLevel ? ` Lv.${skillLevel}` : ""}">` +
+            `<img class="skill-icon" src="assets/skill-${state.classId}-${index}.png" alt="">` +
             `<span class="skill-key">${keyLabel(`skill${index + 1}`)}${skillLevel ? `·${skillLevel}` : ""}</span><strong>${skill.name}</strong><small>${skill.cost} ${hero.resourceName}</small>` +
             `<span class="skill-tooltip"><b>${skill.name} · ${skill.kind}</b><span>${skill.desc}</span><em>${rangeText} · 冷却 ${skill.cd} 秒</em></span>` +
             `<span class="cooldown"></span>` +
@@ -1471,15 +1609,19 @@ export function renderEquipment() {
     EQUIPMENT_SLOT_KEYS.map((slotKey) => {
       const item = state.player.equipment?.[slotKey];
       const label = EQUIPMENT_SLOTS[slotKey].label;
+      // 装备图标：左右手镯/左右戒指共用一张图
+      const iconKey =
+        slotKey === "braceletL" || slotKey === "braceletR" ? "bracelet" : slotKey === "ringL" || slotKey === "ringR" ? "ring" : slotKey;
+      const icon = `<img class="slot-icon" src="assets/equip-${iconKey}.png" alt="">`;
       if (!item)
-        return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位"><span class="slot-glyph">+</span><span class="slot-name">${label}</span></button>`;
+        return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位">${icon}<span class="slot-name">${label}</span></button>`;
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
       const maxed = (item.enhance || 0) >= 15;
       // 0.4.0：已穿戴装备直接标出本件贡献，方便判断哪件在「拖后腿」。
       const own = equipmentItemStats(item);
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}\n有效战力 ${powerValue}；本件贡献：攻击 +${own.attack} · 生命 +${own.hp} · 防御 +${own.defense}\n点击强化（+8 起需材料，失败不降级）`;
-      return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}"><span class="slot-glyph">${item.glyph}</span><span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
+      return `<button class="equipment-slot filled${maxed ? " maxed" : ""}" data-equip-slot="${slotKey}" title="${title}">${icon}<span class="slot-name">${label}</span>${item.enhance ? `<span class="slot-enhance">+${item.enhance}</span>` : ""}${maxed ? `<span class="slot-max">MAX</span>` : ""}<span class="slot-power">${powerValue}</span>${item.blessing ? `<span class="slot-bless">${item.blessing}%</span>` : ""}</button>`;
     }).join("")
   );
 }
@@ -1503,7 +1645,7 @@ export function renderInventory() {
       if (item.slot === "material") {
         // 材料格：只显示数量（×N）与品质点，不显示战力（材料 power 0 无意义）。
         const count = item.count || 1;
-        return `<div class="inventory-slot" data-item-index="${index}" title="${item.name}：${item.desc}；持有 ×${count}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span><span class="slot-power">×${count}</span></div>`;
+        return `<div class="inventory-slot" data-item-index="${index}" title="${item.name}：${item.desc}；持有 ×${count}"><span class="quality-line" style="color:${item.color}"></span><img class="slot-icon" src="assets/equip-material.png" alt=""><span class="slot-power">×${count}</span></div>`;
       }
       const affixText = (item.affixes || []).map((affix) => `${affix.label} +${affix.value}${affix.percent ? "%" : ""}`).join("、");
       const powerValue = effectiveItemPower(item);
@@ -1515,7 +1657,16 @@ export function renderInventory() {
         ? `装备后：攻击 ${delta(preview.before.attack, preview.after.attack)} · 生命 ${delta(preview.before.hp, preview.after.hp)} · 防御 ${delta(preview.before.defense, preview.after.defense)}`
         : "";
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${previewText ? `\n${previewText}` : ""}`;
-      return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><span class="slot-glyph" style="color:${item.color}">${item.glyph}</span>${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
+      // 背包格图标按物品类型映射（消耗品/货币/材料用各自图，装备用部位图，左右手镯/戒指共用）
+      const invIcon =
+        item.slot === "consumable" || item.slot === "currency" || item.slot === "material"
+          ? item.slot
+          : item.slot === "braceletL" || item.slot === "braceletR"
+            ? "bracelet"
+            : item.slot === "ringL" || item.slot === "ringR"
+              ? "ring"
+              : item.slot || "weapon";
+      return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><img class="slot-icon" src="assets/equip-${invIcon}.png" alt="">${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
     }).join("")
   );
 }
@@ -1544,7 +1695,9 @@ export function renderShopPanel() {
     $("shopGoods"),
     SHOP_GOODS.map((good) => {
       const affordable = gold >= good.price;
-      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><span class="shop-good-glyph" style="color:${good.color}">${good.glyph}</span><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
+      // 0.4.8 商品用美术图标（material 商品对应黑铁矿石图）
+      const icon = good.id === "material" ? "ore" : good.id;
+      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/goods-${icon}.png" alt=""><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
     }).join("")
   );
   const rows = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
@@ -1564,13 +1717,23 @@ export function renderShopPanel() {
     });
     const owned = equipmentItemStats(item);
     // 重铸行同时给出「本件贡献」，让玩家知道这条词缀值多少，再决定是否花卷重掷。
-    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><span class="shop-good-glyph" style="color:${item.color}">${item.glyph}</span><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixChips.join(" ") || "无词缀"}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷${lockActive ? "（已锁定 ×1.8）" : ""}`}">重铸 ${quote.cost} 金${lockActive ? " 🔒" : ""}</button></div>`;
+    // 融合：装备图标用美术线贴图（equip-{slot}.png），词缀锁定芯片保留 0.4.2 逻辑（≥2 条可锁 1 条、报价 ×1.8）。
+    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><img class="shop-good-ico" src="assets/equip-${slotKey}.png" alt=""><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixChips.join(" ") || "无词缀"}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷${lockActive ? "（已锁定 ×1.8）" : ""}`}">重铸 ${quote.cost} 金${lockActive ? " 🔒" : ""}</button></div>`;
   }).join("");
   setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
 }
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
   if (!boss) return;
+  // 首领立绘按 Boss 名映射（assets/boss-{名字}.jpg）；无对应美术时保留默认裂碑领主图
+  const portrait = $("bossPortrait");
+  if (portrait) {
+    portrait.src = `assets/boss-${boss.name}.jpg`;
+    portrait.onerror = () => {
+      portrait.src = "assets/boss-liebei.jpg";
+      portrait.onerror = null;
+    };
+  }
   if (
     !panelChanged(
       $("bossAlertText"),
@@ -1677,6 +1840,11 @@ export function renderTravelConfirm(pending = null) {
     return;
   }
   overlay.classList.remove("hidden");
+  // 章节氛围图作弹层背景（chapter-0N.jpg），增强跨章征途的视觉记忆
+  const chapterNo = target.chapter ? String(target.chapter).padStart(2, "0") : "";
+  if (chapterNo) {
+    overlay.style.setProperty("--travel-bg", `url(assets/chapter-${chapterNo}.jpg)`);
+  }
   setText(
     $("travelConfirmText"),
     `即将进入 ${target.name}（推荐 Lv.${target.levelMin}-${target.levelMax}），你当前 Lv.${state.player.level}。危险等级：${target.dangerLabel}`

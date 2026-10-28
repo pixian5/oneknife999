@@ -1196,6 +1196,10 @@ export function updateBoss(boss, dt) {
     log(`<b>${boss.name}</b> 进入阶段 ${newPhase}：${phaseName}。`, "warn");
     showToast(`${boss.name} 阶段 ${newPhase}：${phaseName}`);
     spark(boss.x, boss.y, "#e7b36b", 24);
+    // 0.4.6 换阶段震屏 + 红色炸点，增强 Boss 战气势
+    fx.shake = 0.32;
+    fx.shakePower = 6;
+    spark(boss.x, boss.y, "#f16d66", 36);
   }
   // 召唤腐工（坑道尸皇阶段1）
   if (def.summonMob !== undefined && boss.phase === 1) {
@@ -1385,7 +1389,7 @@ export function setupClasses() {
   $("classOptions").innerHTML = Object.entries(CLASSES)
     .map(
       ([id, hero]) =>
-        `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`
+        `<button class="class-option" data-class="${id}" style="--class-color:${hero.color}"><img class="class-portrait" src="assets/hero-${id}.jpg" alt="${hero.name}立绘"><span class="class-glyph">${hero.glyph}</span><span><h3>${hero.name}</h3><p>${hero.subtitle}</p><span class="class-stat">生命 ${hero.hp} · ${hero.resourceName} ${hero.resource}</span></span></button>`
     )
     .join("");
   $("classOptions")
