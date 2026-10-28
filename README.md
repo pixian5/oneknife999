@@ -4,7 +4,7 @@
 
 - **可玩原型**：十章 100 张连续关卡、三职业、首领阶段战、掉落装备、自动保存；纯前端 Canvas 实现，代码位于 [game/](game/)。
 - **设计文档**：[docs/](docs/) 是设计事实源（产品、战斗、成长、地图、PK、行会、经济、服务器、QA、数值基线），治理规则见 [docs/README.md](docs/README.md)。
-- **当前版本**：0.6.5（见 [VERSION](VERSION)）
+- **当前版本**：0.6.6（见 [VERSION](VERSION)）
 
 ## 快速开始
 
@@ -39,6 +39,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.6.6 新增**云电脑会话环境与持久化确认**（本轮只改文档）：实测本机为 Ubuntu 24.04 / Xeon 8582C（`lscpu` 3 vCPU，但 `cpu.max=200000 100000` 实际只给 **2 核**）/ 内存 cgroup 上限 **4 GiB 且无 swap** / 1.5 TB 共享盘 / 无 GPU（headless 纯软件渲染）/ 出网走代理。更关键的是持久化：`/workspace` **每次会话启动都是重新 `git clone`**（`git reflog` 仅 `clone:` 与 `checkout:` 两条），`node_modules`、Playwright 浏览器、`.test-artifacts` 全部不保留，唯一事实源是已 push 的远端提交。据此固化流程约束：每轮结束必须 push、开场重装依赖并固定 `ONEKNIFE_CHANNEL=chromium`、浏览器任务串行（探针须空闲单跑）、perf 只在容器基线内比 p99 与长帧、凭据不落仓库。详见 [docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md](docs/20261029-0258-云电脑会话环境与持久化-DeepSeek-V4.1-Flash.md)。
 
 0.6.4 新增**云电脑交接提示词**：[docs/20261029-0056-云电脑交接提示词-GLM.md](docs/20261029-0056-云电脑交接提示词-GLM.md)——在云电脑/新机器从零接手的完整指令，新增第零步环境搭建（克隆→依赖→chromium→**ONEKNIFE_CHANNEL=chromium**→基线验证），并针对云环境调整两条铁律（perf 用 ONEKNIFE_PERF_P99_MAX=12 放宽、软件渲染绝对值不可比只看长帧；凭据不落盘、推送前向用户索取）。
 
