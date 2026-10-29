@@ -9,21 +9,25 @@
 // ============ 行为原语定义 ============
 // 每类原语的语义与参数见下；BEHAVIOR_LIBRARY 是「原语 id → 默认参数」的唯一事实源。
 
+// 0.7.5 形态烈度下调：0.7.3/0.7.4 的四臂实测证明第 30 关死亡断层由形态主导
+// （战士中位 8 死 → 关形态 1 死；法师 7 → 0），且这两个职业都超标，说明问题在形态参数本身。
+// 下调原则：只收「伤害/击退/射程」三项放大系数，不动段数与语义（multiHit 与形态挂载不变），
+// 使受击节奏仍由全局闸门控制，避免一次改动把整条难度曲线压平。
 export const ATTACK_SHAPES = {
   normal: { label: "基础近战", multiHit: 1, rangeMult: 1, damageMult: 1 },
   // 多段连击：撕咬 / 连射 / 破军连斩 / 逐浪三斩 / 星骸斩。每段独立结算，总伤按 multiHit 均分。
   multi: { label: "多段连击", multiHit: 2, rangeMult: 1, damageMult: 0.92 },
-  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 0.85 },
+  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 0.8 },
   // 蓄力重击：前摇更长、伤害更高、可击退（矿镐重击 / 重锤 / 神陨锤 / 铜棺砸击）。
-  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.35, knockback: 30, windupMult: 1.6 },
+  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.15, knockback: 20, windupMult: 1.45 },
   // 远程投掷：在更远距离出手（掷刃 / 投掷火石 / 冰弩 / 猎杀箭 / 雷羽 / 引魂灯 / 断界弹 / 魂火 / 怨火）。
-  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 1.9, damageMult: 0.85 },
+  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 1.6, damageMult: 0.85 },
   // 直线冲锋：向前突进并击退（晶角冲锋 / 魔血冲锋 / 礁壳冲撞 / 残甲冲撞 / 撕裂突进 / 跃袭 / 俯冲）。
-  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.45, damageMult: 1.2, knockback: 36, dash: 80 },
+  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.35, damageMult: 1.1, knockback: 24, dash: 64 },
   // 范围横扫 / 震击（石戟横扫 / 帝陵戟 / 黄泉戟 / 金甲重踏 / 冰壳震荡）：命中范围更大。
-  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.7, damageMult: 1.1 },
+  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.5, damageMult: 1.05 },
   // 锁链拖拽：命中把玩家拉近（炼狱行刑者）。
-  pull: { label: "锁链拖拽", multiHit: 1, rangeMult: 2.2, damageMult: 0.8 }
+  pull: { label: "锁链拖拽", multiHit: 1, rangeMult: 2.0, damageMult: 0.75 }
 };
 
 export const PASSIVE_IDS = {

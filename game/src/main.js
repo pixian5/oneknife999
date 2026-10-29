@@ -1067,7 +1067,8 @@ export function playerDamage(dt) {
     attacker.windup = step.windup;
     attacker.windupTotal = step.windupTotal;
     attacker.attackCooldown = step.cooldown;
-    // 0.6.0 P0：攻击距离随行为形态放大（远程投掷 2.4 倍、范围横扫 1.9 倍、冲锋 1.6 倍，其余 1 倍）。
+    // 0.6.0 P0：攻击距离随行为形态放大（数值以 monster-abilities.js 的 ATTACK_SHAPES 为准，
+    // 0.7.5 已整体下调一档：远程 1.6 倍、横扫 1.5 倍、冲锋 1.35 倍，其余 1 倍）。
     // 形态配置同时提供多段段数、伤害倍率与击退，出手时复用同一个 shape。
     const shape = attackShapeConfig(attacker.abilities?.attack || "normal", {
       hpRatio: attacker.hp / Math.max(1, attacker.maxHp),

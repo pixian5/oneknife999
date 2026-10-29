@@ -79,10 +79,27 @@ test("attackShapeConfig：多段 / 蓄力 / 远程 / 冲锋 / 横扫的差异可
   assert.equal(normal.multiHit, 1);
   assert.ok(heavy.damageMult > normal.damageMult, "蓄力重击伤害更高");
   assert.ok(heavy.knockback > 0, "蓄力重击可击退");
-  // 0.6.0 调平：远程从 2.4 倍降到 1.9 倍（战士仍能还手），仍显著大于基础射程。
-  assert.ok(ranged.rangeMult > normal.rangeMult * 1.5, "远程投掷距离显著更远");
+  // 0.6.0 调平：远程从 2.4 倍降到 1.9 倍；0.7.5 再降到 1.6 倍（仍显著大于基础射程）。
+  assert.ok(ranged.rangeMult > normal.rangeMult * 1.4, "远程投掷距离显著更远");
   assert.ok(sweep.rangeMult > normal.rangeMult, "横扫范围更大");
   assert.equal(attackShapeConfig("pull").pulls, true, "拖拽形态标记");
+});
+
+// 0.7.5：第 30 关四臂实测证明形态系数直接决定死亡数（关形态后中位 8 死 → 1 死），
+// 这里给每个放大项设上限，防止后续调参把系数悄悄加回去而没有任何信号。
+test("ATTACK_SHAPES：放大系数有上限，防止难度再次失控", () => {
+  const normal = attackShapeConfig("normal");
+  const heavy = attackShapeConfig("heavy");
+  const ranged = attackShapeConfig("ranged");
+  const charge = attackShapeConfig("charge");
+  const sweep = attackShapeConfig("sweep");
+  assert.ok(heavy.damageMult <= 1.2, `蓄力重击伤害倍率应 ≤1.2，实际 ${heavy.damageMult}`);
+  assert.ok(heavy.windupMult <= 1.5, `蓄力重击前摇倍率应 ≤1.5，实际 ${heavy.windupMult}`);
+  assert.ok(heavy.knockback <= 22, `蓄力重击击退应 ≤22，实际 ${heavy.knockback}`);
+  assert.ok(ranged.rangeMult <= 1.65 && ranged.rangeMult > normal.rangeMult, "远程射程应在 (1, 1.65]");
+  assert.ok(charge.knockback <= 26 && charge.knockback > 0, "冲锋击退应在 (0, 26]");
+  assert.ok(charge.dash <= 70, `冲锋位移应 ≤70，实际 ${charge.dash}`);
+  assert.ok(sweep.rangeMult <= 1.55, `横扫射程应 ≤1.55，实际 ${sweep.rangeMult}`);
 });
 
 test("attackShapeConfig：攻速叠加提升伤害倍率", () => {
