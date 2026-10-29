@@ -14,6 +14,9 @@
 //   ONEKNIFE_PROBE_DEFENSE_AFFIX=1      防御词缀对照组（P1-8）：每关先跑基线装备，再跑
 //                                       「每件装备 +1 条防御词缀」的对照臂，输出死亡/耗时差值，
 //                                       量化防御词缀的真实收益（0.4.3）。
+// 输出（0.7.6 起）：除 deaths / seconds，每次运行还打印 firstDeath（首次死亡秒数，未死为 -1）、
+// damage100（每百秒净生命损失）与 killers（致死来源计数）。死亡数是离散且带正反馈的量，
+// 这三个指标随调参单调变化，用于判定 10%~20% 级调整（n=3 只看死亡数判不了，见 docs 0.7.5 记录）。
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
@@ -225,10 +228,31 @@ async function moveToPoint(page, point, expectedMap, radius = 54) {
   return false;
 }
 
+// 0.7.6 低方差指标：死亡数受「死亡 → 回城重生 → 普通怪满血重清」的正反馈放大，单次跨度可达 0~15 死，
+// 15% 级的调参在 n=3 下完全测不出来（0.7.5 的教训）。这里额外采集三个随调参单调变化的量：
+//   damage100：每 100 秒模拟时间的净生命损失（只累加 hp 下降，喝药 / 复活回血不计）；
+//   firstDeath：首次死亡发生的模拟秒数（未死亡记 -1）；
+//   killers：致死来源计数（怪物名 / 中毒 / 地面危险区），用于定位「谁在杀人」。
+function sampleCombat(stats, snap, atMs) {
+  const hp = snap.player.hp;
+  if (hp < stats.lastHp) stats.damage += stats.lastHp - hp;
+  stats.lastHp = hp;
+  const deaths = snap.player.deaths || 0;
+  if (deaths > stats.deathsSeen) {
+    const killer = snap.player.lastKiller || "未知";
+    for (let index = stats.deathsSeen; index < deaths; index += 1) {
+      stats.deathTimes.push(atMs);
+      stats.killers[killer] = (stats.killers[killer] || 0) + 1;
+    }
+    stats.deathsSeen = deaths;
+  }
+  return stats;
+}
+
 // 玩家模型：普攻与技能交替、低血喝药、近战躲首领前摇、远程停在射程边缘。
 // 这套模型刻意「不菜也不神」：能反映数值回退，又不追求极限操作。
 // 返回本次消耗的模拟毫秒数，供探针统计单关耗时。
-async function defeatEntity(page, entityId, mapId, safePoint) {
+async function defeatEntity(page, entityId, mapId, safePoint, stats, baseMs = 0) {
   const isBoss = entityId.startsWith("boss-");
   let elapsed = 0;
   const spend = async (milliseconds) => {
@@ -247,6 +271,7 @@ async function defeatEntity(page, entityId, mapId, safePoint) {
     }
     let snap = await snapshot(page);
     if (snap.currentMapId !== mapId) return elapsed;
+    sampleCombat(stats, snap, baseMs + elapsed);
     const entity = snap.entities.find((item) => item.id === entityId);
     if (!entity || !entity.alive) return elapsed;
     const attackRange = ATTACK_RANGE[snap.classId] || 160;
@@ -327,6 +352,8 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
   const started = await snapshot(page);
   if (started.currentMapId !== mapId) throw new Error(`存档未停放在 ${mapId}：${started.currentMapId}`);
   const deathsBefore = started.player.deaths || 0;
+  // 0.7.6：低方差指标的累计容器，跨「清怪 + 首领战」全程采样（见 sampleCombat）。
+  const stats = { lastHp: started.player.hp, damage: 0, deathsSeen: deathsBefore, deathTimes: [], killers: {} };
   let elapsedMs = 0;
   let snap = started;
   while ((snap.progress[mapId]?.kills || 0) < stage.need) {
@@ -337,24 +364,41 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
       snap = await snapshot(page);
       continue;
     }
-    elapsedMs += await defeatEntity(page, target.id, mapId, stage.safePoint);
+    elapsedMs += await defeatEntity(page, target.id, mapId, stage.safePoint, stats, elapsedMs);
     snap = await snapshot(page);
   }
   const boss = snap.entities.find((entity) => entity.alive && entity.boss);
   if (!boss) throw new Error(`${mapId} 清怪后首领已消失，无法测量首领战`);
   if (snap.progress[mapId]?.bossDefeated) throw new Error(`${mapId} 首领在清怪阶段被提前击杀`);
-  elapsedMs += await defeatEntity(page, boss.id, mapId, stage.safePoint);
+  elapsedMs += await defeatEntity(page, boss.id, mapId, stage.safePoint, stats, elapsedMs);
   snap = await snapshot(page);
   if (!snap.progress[mapId]?.completed) throw new Error(`${mapId} 未进入完成状态`);
   const deaths = (snap.player.deaths || 0) - deathsBefore;
   const seconds = Math.round(elapsedMs / 1000);
+  // 低方差指标：净承伤速率（每百秒）、首次死亡时间、致死来源分布。
+  const damage100 = seconds > 0 ? Math.round((stats.damage / seconds) * 100) : 0;
+  const firstDeath = stats.deathTimes.length ? Math.round(stats.deathTimes[0] / 1000) : -1;
+  const killers = Object.entries(stats.killers)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name}x${count}`)
+    .join("/");
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} firstDeath=${firstDeath}s damage100=${damage100} killers=${killers || "-"}\n`
   );
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
   // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，
   // 只跑一次就按单次判定会把偶发失误误报成难度回退。耗时仍在单次判，因为它代表「能否推进」。
-  return { stageNumber: stage.stageNumber, mapId, arm, deaths, seconds, deathsOverLimit: deaths > MAX_DEATHS };
+  return {
+    stageNumber: stage.stageNumber,
+    mapId,
+    arm,
+    deaths,
+    seconds,
+    firstDeath,
+    damage100,
+    killers,
+    deathsOverLimit: deaths > MAX_DEATHS
+  };
 }
 
 // 每关用全新的 context + page：连续在同一页面注入存档时，上一关的虚拟时钟 /
@@ -425,6 +469,10 @@ function median(values) {
         for (let run = 1; run <= PROBE_RUNS; run += 1) runs.push(await runStageInFreshPage(browser, stage, run, PROBE_RUNS, arm));
         const deaths = median(runs.map((item) => item.deaths));
         const seconds = median(runs.map((item) => item.seconds));
+        // 0.7.6：低方差指标也取中位数；未死亡的运行记 -1，不参与首死中位数（全部未死则保持 -1）。
+        const firstDeathRuns = runs.map((item) => item.firstDeath).filter((value) => value >= 0);
+        const firstDeath = firstDeathRuns.length ? median(firstDeathRuns) : -1;
+        const damage100 = median(runs.map((item) => item.damage100));
         // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
         for (const [index, run] of runs.entries()) {
           if (run.deathsOverLimit) {
@@ -435,7 +483,7 @@ function median(values) {
         }
         if (deaths > MAX_DEATHS)
           throw new Error(`${stage.mapId}(${arm}) 非快进死亡中位数 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
-        results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, arm, deaths, seconds, runs });
+        results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, arm, deaths, seconds, firstDeath, damage100, runs });
       }
     }
     const totalDeaths = results.filter((item) => item.arm === "baseline").reduce((sum, item) => sum + item.deaths, 0);
@@ -443,7 +491,7 @@ function median(values) {
       `DIFFICULTY PROBE PASS${PROBE_SEED === null ? "" : ` seeds=${PROBE_SEED}~${PROBE_SEED + PROBE_RUNS - 1}`} runs=${PROBE_RUNS} stages=${results
         .map(
           (item) =>
-            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}]`
+            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}] 首死中位=${item.firstDeath}s 承伤中位=${item.damage100}/百秒`
         )
         .join(" ")} totalDeaths(median)=${totalDeaths}\n`
     );

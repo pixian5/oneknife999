@@ -1107,6 +1107,9 @@ export function playerDamage(dt) {
         // 护盾 / 反伤等防御被动（怪物侧）在玩家攻击时结算，此处只处理控制类。
         if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${total} hits=${hits}`);
         state.player.hp = Math.max(0, state.player.hp - total);
+        // 0.7.6 诊断：记录最近一次伤害来源，死亡时它就是「致死怪」。
+        // 只服务难度探针的死因统计，不参与结算，也不写入存档。
+        state.player.lastKiller = attacker.name;
         spark(state.player.x, state.player.y, "#f16d66", 4);
         applyOnHitPassives(attacker, total);
         // 冲锋 / 击退形态：把玩家推开，制造位移压力。
@@ -1146,6 +1149,7 @@ export function playerDamage(dt) {
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
         state.player.hp = Math.max(0, state.player.hp - amount);
+        if (state.player.hp <= 0) state.player.lastKiller = "地面危险区";
         textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
       }
@@ -1162,6 +1166,7 @@ export function playerDamage(dt) {
       state.player.poisonTimer = 1.2;
       const amount = state.player.poison * 4;
       state.player.hp = Math.max(0, state.player.hp - amount);
+      if (state.player.hp <= 0) state.player.lastKiller = "中毒";
       textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 12);
     }
   } else if (atSanctuary && state.player.poison > 0) {
@@ -2051,6 +2056,8 @@ if (TEST_MODE) {
                 // 0.7.2：致盲诊断字段，浏览器用例据此确认「命中真的写入了停滞效果」。
                 blind: state.player.blindTimer || 0,
                 blindMissChance: state.player.blindMissChance || 0,
+                // 0.7.6：最近伤害来源（诊断字段），难度探针据此统计致死怪分布。
+                lastKiller: state.player.lastKiller || null,
                 charge: state.player.charge,
                 level: state.player.level,
                 exp: state.player.exp,
