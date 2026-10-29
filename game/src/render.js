@@ -9,6 +9,7 @@ import {
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
+import { resolveMonsterSpriteName, resolveBossSprite, resolveBossUiPortrait, resolveMapBackgroundName } from "./assets.js";
 import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier, abyssProgress } from "./endgame.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
@@ -23,6 +24,7 @@ import {
   mapProgress,
   playerMaxHp,
   playerDefense,
+  setBonuses,
   equipmentItemStats,
   previewEquipStats,
   isForwardExit,
@@ -34,6 +36,9 @@ import {
 import { COMBO_RULES, resolveGuideTarget } from "./feedback.js";
 
 // 《一刀999》渲染层：Canvas 世界绘制、右侧 HUD 的 DOM 渲染与屏幕反馈。
+
+// 图鉴全集只算一次：renderEndgameLine 每帧都会读，避免每帧遍历 100 图 × 9 怪。
+const ALL_MONSTER_NAMES = [...new Set(Object.values(MAPS).flatMap((map) => map.monsterTypes.map((type) => type.name)))];
 
 export const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -51,6 +56,26 @@ function loadSprite(key, src) {
   return spriteCache.get(key);
 }
 const spriteReady = (img) => img && img.complete && img.naturalWidth > 0;
+const tintCache = new Map();
+function loadTintedSprite(key, src, color) {
+  const img = loadSprite(key, src);
+  if (!spriteReady(img)) return null;
+  const cacheKey = `${key}|${color}`;
+  if (!tintCache.has(cacheKey)) {
+    const tinted = document.createElement("canvas");
+    tinted.width = img.naturalWidth;
+    tinted.height = img.naturalHeight;
+    const g = tinted.getContext("2d");
+    g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = "source-atop";
+    g.globalAlpha = 0.22;
+    g.fillStyle = color;
+    g.fillRect(0, 0, tinted.width, tinted.height);
+    tintCache.set(cacheKey, tinted);
+  }
+  return tintCache.get(cacheKey);
+}
+const drawableReady = (source) => !!source && (source.naturalWidth ? source.complete && source.naturalWidth > 0 : source.width > 0);
 const wrap = document.querySelector("#canvasWrap");
 
 let dpr = 1;
@@ -216,10 +241,12 @@ function paintGroundLayer(target, map, bgImg) {
 }
 
 function getGroundLayer(map) {
-  // 按 dpr 绘制静态层，避免 Retina 屏上 1× 位图被放大发虚；缓存键含 dpr 与章节背景就绪态。
-  const bgImg = loadSprite(`chapter-bg-${map.chapter}`, `assets/chapter-${String(map.chapter).padStart(2, "0")}.jpg`);
-  const bgReady = spriteReady(bgImg);
-  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgReady === bgReady) {
+  // 按 dpr 绘制静态层；0.8.5：优先每图底图 map-cXX-YY，加载前回退章节氛围图。
+  const mapBgName = resolveMapBackgroundName(map);
+  const mapBg = loadSprite(`map-bg-${mapBgName}`, `assets/${mapBgName}`);
+  const chapterBg = loadSprite(`chapter-bg-${map.chapter}`, `assets/chapter-${String(map.chapter).padStart(2, "0")}.jpg`);
+  const bgKey = spriteReady(mapBg) ? mapBgName : spriteReady(chapterBg) ? `chapter-${map.chapter}` : "none";
+  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgKey === bgKey) {
     return groundLayer.canvas;
   }
   const layer = document.createElement("canvas");
@@ -228,8 +255,9 @@ function getGroundLayer(map) {
   layer.height = map.height * scale;
   const layerCtx = layer.getContext("2d");
   layerCtx.scale(scale, scale);
-  paintGroundLayer(layerCtx, map, bgReady ? bgImg : null);
-  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgReady };
+  const bg = bgKey === mapBgName ? mapBg : bgKey === "none" ? null : chapterBg;
+  paintGroundLayer(layerCtx, map, bg);
+  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgKey };
   return layer;
 }
 
@@ -813,22 +841,28 @@ export function drawEntity(entity) {
   // 程序化动作动画——呼吸浮动 / 前摇蓄力压低 / 出手前扑 / 受击抖动。
   // 0.6.0 P1 四动作帧：优先按状态取 monster-full-{名}-{action}.png（idle/walk/attack/hit），
   // 素材缺失时逐级回退——动作帧 → 单帧静态立绘 → 程序化几何图形，任何一环缺失都不影响可玩性。
+  const map = activeMap();
   const action = monsterAction(entity);
-  const actionSprite =
-    entity.npc || entity.boss
-      ? null
-      : loadSprite(`monster-full-${entity.name}-${action}`, `assets/monster-full-${entity.name}-${action}.png`);
-  const sprite = entity.npc
-    ? null
-    : entity.boss
-      ? loadSprite(`boss-full-${entity.name}`, `assets/boss-full-${entity.name}.png`)
-      : spriteReady(actionSprite)
-        ? actionSprite
-        : loadSprite(`monster-full-${entity.name}`, `assets/monster-full-${entity.name}.png`);
+  let sprite = null;
+  if (!entity.npc) {
+    if (entity.boss) {
+      const bossSprite = resolveBossSprite(map);
+      if (bossSprite) {
+        const bossKey = `boss-${bossSprite.name}`;
+        sprite = bossSprite.tint
+          ? loadTintedSprite(bossKey, `assets/${bossSprite.path}`, bossSprite.tint)
+          : loadSprite(bossKey, `assets/${bossSprite.path}`);
+        if (!sprite) sprite = loadSprite(bossKey, `assets/${bossSprite.path}`);
+      }
+    } else {
+      const spriteName = resolveMonsterSpriteName(entity.name, action, map);
+      if (spriteName) sprite = loadSprite(`monster-${spriteName}`, `assets/${spriteName}`);
+    }
+  }
   const sprH = entity.npc ? entity.radius * 1.6 : spriteHeight(entity);
   const t = Date.now() / 1000;
   const ph = (Number(entity.id) || 0) * 0.37; // 相位错开，避免同屏怪物步调一致
-  if (spriteReady(sprite)) {
+  if (drawableReady(sprite)) {
     const w = (sprH * sprite.width) / sprite.height;
     const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55); // 脚底锚点
     let dx = 0;
@@ -889,7 +923,7 @@ export function drawEntity(entity) {
     }
   }
   // 眼睛点只在无贴图时绘制（贴图自带形象）
-  if (!spriteReady(sprite)) {
+  if (!drawableReady(sprite)) {
     ctx.fillStyle = entity.boss ? "#f4c484" : "rgba(242, 220, 174, .7)";
     ctx.beginPath();
     ctx.arc(entity.x - entity.radius * 0.28, entity.y - entity.radius * 0.3, entity.boss ? 6 : 4, 0, Math.PI * 2);
@@ -1323,7 +1357,7 @@ export function renderPlayer() {
   // - 攻击与 computeDamage 的 base 公式一致（装备战力 ×0.9），不是简单相加；
   // - 生命取 playerMaxHp()（含部位基础加成与生命词缀）；
   // - 防御取 playerDefense()（职业基础 + 防御词缀），与承伤结算同源。
-  const attackStat = Math.round(hero.attack + state.player.level * 4 + equippedPower * 0.9);
+  const attackStat = Math.round(hero.attack + state.player.level * 4 + equippedPower * 0.9 + setBonuses().attack);
   const hpStat = playerMaxHp();
   const defenseStat = playerDefense();
   const signature = [
@@ -1414,9 +1448,7 @@ export function renderEndgameLine(clearedMaps = 0) {
   const el = $("endgameLine");
   if (!el) return;
   const difficulty = resolveDifficulty(state.difficulty, clearedMaps);
-  const names = new Set();
-  for (const map of Object.values(MAPS)) for (const type of map.monsterTypes) names.add(type.name);
-  const stats = bestiaryStats(state.bestiary || {}, [...names]);
+  const stats = bestiaryStats(state.bestiary || {}, ALL_MONSTER_NAMES);
   const counts = setCounts(state.player.equipment || {});
   const setEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   let setTextValue = "套装无";
@@ -1810,11 +1842,15 @@ export function renderBoss() {
   // 首领立绘按 Boss 名映射（assets/boss-{名字}.jpg）；无对应美术时保留默认裂碑领主图
   const portrait = $("bossPortrait");
   if (portrait) {
-    portrait.src = `assets/boss-${boss.name}.jpg`;
-    portrait.onerror = () => {
-      portrait.src = "assets/boss-liebei.jpg";
-      portrait.onerror = null;
-    };
+    const portraitName = resolveBossUiPortrait(activeMap());
+    if (portrait.dataset.boss !== portraitName) {
+      portrait.dataset.boss = portraitName;
+      portrait.src = `assets/${portraitName}`;
+      portrait.onerror = () => {
+        portrait.src = "assets/boss-liebei.jpg";
+        portrait.onerror = null;
+      };
+    }
   }
   if (
     !panelChanged(

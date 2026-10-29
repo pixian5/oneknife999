@@ -311,11 +311,13 @@ export function reflectDamage(passives, damage) {
 
 // 致命伤保留：伤害足以致死时，若带 lethalSave 且未用过，保留 hpRatio 生命并标记消耗。
 // 返回 { hp, saved }。
-export function resolveLethalSave({ passives, hp, damage, usedLethalSave }) {
+export function resolveLethalSave({ passives, hp, maxHp = 100, damage, usedLethalSave }) {
   const entry = (passives || []).find((passive) => passive.id === "lethalSave");
   if (!entry || usedLethalSave) return { hp: Math.max(0, hp - damage), saved: false };
-  if (damage < hp) return { hp: hp - damage, saved: false };
-  const floor = Math.max(1, Math.round((entry.params?.hpRatio ?? 0.12) * 100));
+  if (hp <= 0 || damage < hp || damage <= 0) return { hp: Math.max(0, hp - damage), saved: false };
+  // 按「最大生命的 hpRatio」保留，而不是固定 12 点；同时不允许把低血怪治疗到更高血量。
+  const ratio = entry.params?.hpRatio ?? 0.12;
+  const floor = Math.max(1, Math.min(hp, Math.round(maxHp * ratio)));
   return { hp: floor, saved: true };
 }
 

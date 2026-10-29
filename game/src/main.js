@@ -104,6 +104,7 @@ import {
   unlockedDifficulties,
   DIFFICULTY_TIERS,
   abyssMultipliers,
+  abyssQualityBonus,
   isAbyssBossFloor,
   abyssProgress
 } from "./endgame.js";
@@ -412,6 +413,7 @@ export function resolveDamage(target, multiplier, skillName, kind) {
   const lethal = resolveLethalSave({
     passives: target.abilities?.passives,
     hp: hpBefore,
+    maxHp: target.maxHp,
     damage,
     usedLethalSave: target.usedLethalSave
   });
@@ -422,8 +424,9 @@ export function resolveDamage(target, multiplier, skillName, kind) {
   target.hp = Math.max(0, lethal.hp);
   target.hitFlash = 0.12;
   state.player.charge = clamp(state.player.charge + chargeGain, 0, 100);
-  // 近战反伤：命中带 meleeReflect 的怪时，玩家承受一部分反噬伤害。
-  const reflected = reflectDamage(target.abilities?.passives, damage);
+  // 近战反伤：只有普通 / 破甲 / 冲锋等近战命中才反噬，远程与范围技能不触发。
+  const meleeHit = kind === "普通" || kind === "破甲" || kind === "冲锋";
+  const reflected = meleeHit ? reflectDamage(target.abilities?.passives, damage) : 0;
   if (reflected > 0) {
     state.player.hp = Math.max(0, state.player.hp - reflected);
     textAt(`-${reflected}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 11);
@@ -702,7 +705,8 @@ export function defeat(target) {
   state.bestiary = recordBestiary(state.bestiary || {}, target.name);
   // 0.6.0 P2 难度模式：烬火 / 灰烬难度下击杀经验加成。
   const difficulty = resolveDifficulty(state.difficulty, MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length);
-  gainExperience(Math.round(reward.expGain * (1 + difficulty.expBonus)));
+  const abyssExp = state.abyssFloor > 0 ? abyssMultipliers(state.abyssFloor).exp : 1;
+  gainExperience(Math.round(reward.expGain * (1 + difficulty.expBonus) * abyssExp));
   state.player.gold += target.gold;
   state.player.totalKills += 1;
   state.player.kills += 1;
@@ -786,7 +790,8 @@ export function spawnDrop(source, roll = 0) {
   // 0.6.0 P2 难度模式：烬火 / 灰烬难度掉落的品质整体提档（docs/03 高品质地面表现随之变化）。
   if (item.quality) {
     const difficulty = resolveDifficulty(state.difficulty, MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length);
-    item.quality = upgradeQuality(item.quality, difficulty.qualityBonus);
+    const abyssBonus = state.abyssFloor > 0 ? abyssQualityBonus(state.abyssFloor) : 0;
+    item.quality = upgradeQuality(item.quality, difficulty.qualityBonus + abyssBonus);
   }
   state.drops.push(item);
   // 0.4.4：自动拾取上线后只有装备需要按 F，消耗品 / 货币 / 材料走近即自动入账，文案按类型区分。
@@ -1049,6 +1054,16 @@ export function pullPlayerToward(attacker) {
   state.player.y = clamp(state.player.y + (dy / len) * travel, 55, map.height - 55);
 }
 
+// 冲锋形态的位移：沿怪物→玩家方向前进，夹在地图边界内。
+export function dashMonsterToward(attacker, amount) {
+  const map = activeMap();
+  const dx = state.player.x - attacker.x;
+  const dy = state.player.y - attacker.y;
+  const len = Math.hypot(dx, dy) || 1;
+  attacker.x = clamp(attacker.x + (dx / len) * amount, 55, map.width - 55);
+  attacker.y = clamp(attacker.y + (dy / len) * amount, 55, map.height - 55);
+}
+
 export function playerDamage(dt) {
   const atWell = nearWaterWell();
   const atRestPoint = nearRestPoint();
@@ -1088,6 +1103,8 @@ export function playerDamage(dt) {
       const playerMax = playerMaxHp();
       const playerHpRatio = state.player.hp / Math.max(1, playerMax);
       if (inRange && state.player.invulnerable <= 0) {
+        // 冲锋形态：出手瞬间向玩家突进一段，制造位移压力。
+        if (shape.dash > 0) dashMonsterToward(attacker, shape.dash);
         // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
         // 防御取「职业基础 + 装备防御词缀」（0.3.7 起装备防御真正参与结算）。
         // 0.6.0：叠加怪物行为修正——同类增伤 / 自身残血增伤 / 玩家残血增伤 / 多段分摊。
@@ -1110,6 +1127,7 @@ export function playerDamage(dt) {
         // 护盾 / 反伤等防御被动（怪物侧）在玩家攻击时结算，此处只处理控制类。
         if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${total} hits=${hits}`);
         state.player.hp = Math.max(0, state.player.hp - total);
+        state.player.hitFlash = 0.2;
         // 0.7.6 诊断：记录最近一次伤害来源，死亡时它就是「致死怪」。
         // 只服务难度探针的死因统计，不参与结算，也不写入存档。
         state.player.lastKiller = attacker.name;
@@ -1140,8 +1158,10 @@ export function playerDamage(dt) {
   if (readyToWindup.length && MAX_WINDUP_ATTACKERS > windingUp) {
     const closest = readyToWindup.sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
     const rules = closest.boss ? MONSTER_ATTACK_RULES.boss : MONSTER_ATTACK_RULES.normal;
-    closest.windup = rules.windup;
-    closest.windupTotal = rules.windup;
+    const shape = attackShapeConfig(closest.abilities?.attack || "normal");
+    const windup = rules.windup * (shape.windupMult || 1);
+    closest.windup = windup;
+    closest.windupTotal = windup;
   }
   // 危险区地面危险区伤害（BOSS阶段二以上）
   state.hazards.forEach((h) => {
@@ -1646,7 +1666,8 @@ export function loadGame() {
     // 0.6.0 P2：恢复终局状态（旧档缺省为常规难度 / 空图鉴 / 未进深层）。
     state.difficulty = saved.difficulty || "normal";
     state.bestiary = saved.bestiary || {};
-    state.abyssBest = saved.abyssBest || 0;
+    state.abyssBest = Math.max(0, Math.min(9999, Math.floor(Number(saved.abyssBest) || 0)));
+    state.abyssFloor = Math.max(0, Math.min(state.abyssBest, Math.floor(Number(saved.abyssFloor) || 0)));
     if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
     syncCampaignGrowth(true);
     const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
@@ -1784,7 +1805,7 @@ export function enterAbyss() {
     showToast(`无尽深层需通关百图后解锁（当前 ${cleared}/100）`);
     return;
   }
-  const floor = (state.abyssFloor || 0) + 1;
+  const floor = Math.max(state.abyssFloor || 0, state.abyssBest || 0) + 1;
   state.abyssFloor = floor;
   state.abyssBest = Math.max(state.abyssBest || 0, floor);
   // 地形随机：按层数取确定性的地图（同层可复现，不同层布局不同）。

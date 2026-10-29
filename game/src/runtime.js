@@ -100,7 +100,10 @@ export function createState(classId) {
     healZones: [],
     // 城镇杂货商面板开关（0.3.5）：瞬态 UI 状态，不写入存档；离开城镇时自动关闭。
     shopOpen: false,
-    hoveredEntityId: null
+    hoveredEntityId: null,
+    // 无尽深层：floor 为当前层（0 表示未进入），best 为历史最高层。
+    abyssFloor: 0,
+    abyssBest: 0
   };
 }
 
@@ -211,14 +214,18 @@ export function previewEquipStats(item) {
   if (!item || !EQUIPMENT_SLOT_KEYS.includes(item.slot)) return null;
   const hero = activeHero();
   const level = state.player.level;
-  const before = equipmentTotals(state.player.equipment || {});
-  const after = equipmentTotals({ ...(state.player.equipment || {}), [item.slot]: item });
-  const stats = (totals) => ({
-    attack: Math.round(hero.attack + level * 4 + totals.power * 0.9),
-    hp: hero.hp + level * 18 + totals.hp,
-    defense: hero.defense + totals.defense
+  const current = state.player.equipment || {};
+  const nextEquipment = { ...current, [item.slot]: item };
+  const beforeTotals = equipmentTotals(current);
+  const afterTotals = equipmentTotals(nextEquipment);
+  const beforeBonus = setBonusTotals(current);
+  const afterBonus = setBonusTotals(nextEquipment);
+  const stats = (totals, bonus) => ({
+    attack: Math.round(hero.attack + level * 4 + totals.power * 0.9 + bonus.attack),
+    hp: hero.hp + level * 18 + totals.hp + bonus.hp,
+    defense: hero.defense + totals.defense + bonus.defense
   });
-  return { slotKey: item.slot, before: stats(before), after: stats(after) };
+  return { slotKey: item.slot, before: stats(beforeTotals, beforeBonus), after: stats(afterTotals, afterBonus) };
 }
 
 // 是否红名（docs/05：罪恶值 ≥ 300）。

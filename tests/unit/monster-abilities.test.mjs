@@ -149,14 +149,18 @@ test("reflectDamage 与 resolveLethalSave：反伤按比例、致命保留一次
   assert.equal(reflectDamage(passives, 200), 50);
   assert.equal(reflectDamage([], 200), 0);
   // 伤害不足以致死：不减伤、不触发保留。
-  const survived = resolveLethalSave({ passives, hp: 500, damage: 100, usedLethalSave: false });
+  const survived = resolveLethalSave({ passives, hp: 500, maxHp: 500, damage: 100, usedLethalSave: false });
   assert.deepEqual(survived, { hp: 400, saved: false });
   // 致死伤害：保留少量生命并标记。
-  const saved = resolveLethalSave({ passives, hp: 500, damage: 900, usedLethalSave: false });
+  const saved = resolveLethalSave({ passives, hp: 500, maxHp: 500, damage: 900, usedLethalSave: false });
   assert.equal(saved.saved, true);
-  assert.ok(saved.hp > 0 && saved.hp <= 12, "保留 12% 生命");
+  assert.equal(saved.hp, 60, "保留 12% 最大生命（500 × 12% = 60）");
+  // 低血怪不能被“保留”治疗到更高血量。
+  const low = resolveLethalSave({ passives, hp: 5, maxHp: 500, damage: 10, usedLethalSave: false });
+  assert.equal(low.saved, true);
+  assert.equal(low.hp, 5, "低血时最多保留当前血量，不允许回血");
   // 已用过：正常死亡。
-  const dead = resolveLethalSave({ passives, hp: 500, damage: 900, usedLethalSave: true });
+  const dead = resolveLethalSave({ passives, hp: 500, maxHp: 500, damage: 900, usedLethalSave: true });
   assert.equal(dead.saved, false);
   assert.equal(dead.hp, 0);
 });

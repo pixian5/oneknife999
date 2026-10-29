@@ -68,7 +68,8 @@ export function persistGame() {
       // 0.6.0 P2：终局系统状态（难度档、怪物图鉴、深层最高层）。
       difficulty: state.difficulty || "normal",
       bestiary: state.bestiary || {},
-      abyssBest: state.abyssBest || 0
+      abyssBest: state.abyssBest || 0,
+      abyssFloor: state.abyssFloor || 0
     })
   );
   return true;
@@ -143,5 +144,8 @@ export function sanitizeSavedGame(saved) {
   for (const slotKey of EQUIPMENT_SLOT_KEYS) equipment[slotKey] = sanitizeItem(saved.equipment?.[slotKey]);
   cleaned.equipment = equipment;
   if (cleaned.player.equipment) cleaned.player.equipment = equipment;
+  // 终局字段净化：防止导入存档把深层层数写成 Infinity / 超大值导致怪物数值溢出。
+  cleaned.abyssBest = Math.max(0, Math.min(9999, Math.floor(Number(saved.abyssBest) || 0)));
+  cleaned.abyssFloor = Math.max(0, Math.min(cleaned.abyssBest, Math.floor(Number(saved.abyssFloor) || 0)));
   return cleaned;
 }
