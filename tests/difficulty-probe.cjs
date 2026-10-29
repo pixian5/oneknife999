@@ -19,6 +19,8 @@
 // 这三个指标随调参单调变化，用于判定 10%~20% 级调整（n=3 只看死亡数判不了，见 docs 0.7.5 记录）。
 // 输出（0.7.8 起）：追加 totalDamage（本次通关的净生命损失总量）。判「关卡变简单」看它，
 // 因为 damage100 会被通关效率抵消——攻击变低 → 少撤退喝药 → 战斗变短 → 单位时间承伤不降反平。
+// 输出（0.8.4 起）：追加 hazard=命中/引爆(命中率)。命中率高说明躲不掉（该改半径或引爆时间），
+// 低说明躲得掉但刷得勤（该改 specialInterval）——用于区分不同职业的痛点成因。
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
@@ -408,8 +410,12 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => `${name}x${count}`)
     .join("/");
+  // 0.8.4：危险区命中率 = 命中次数 / 引爆次数。高 → 玩家躲不掉（该改半径或引爆时间）；
+  // 低 → 躲得掉但刷得太勤（该改 specialInterval）。用于区分战士与法师的差异到底出在哪。
+  const hazard = snap.hazardStats || { detonated: 0, hit: 0 };
+  const hazardRate = hazard.detonated > 0 ? Math.round((hazard.hit / hazard.detonated) * 100) : -1;
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} totalDamage=${totalDamage} firstDeath=${firstDeath}s damage100=${damage100} killers=${killers || "-"}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} totalDamage=${totalDamage} firstDeath=${firstDeath}s damage100=${damage100} hazard=${hazard.hit}/${hazard.detonated}(${hazardRate}%) killers=${killers || "-"}\n`
   );
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
   // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，

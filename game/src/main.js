@@ -289,6 +289,9 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   state.texts = [];
   state.hazards = [];
   state.hazardsSpawned = 0;
+  // 0.8.4：危险区引爆 / 命中计数。只在「真正进入新场景」时重置——死亡复活（keepBossHp=true）
+  // 会走同一个 loadMap，若一并清零，探针就会把「死亡前的引爆」丢掉，算出 6% 这种假命中率。
+  if (!keepBossHp) state.hazardStats = { detonated: 0, hit: 0 };
   // 生息法阵属于当前场景的瞬态区域：换图 / 复活时清空，避免在营地继续回血。
   state.healZones = [];
   // 杂货商面板只在城镇内有效，换图 / 复活时收起，避免跨场景残留。
@@ -1146,7 +1149,12 @@ export function playerDamage(dt) {
     h.life -= dt;
     if (h.life <= 0) {
       h.snap = true;
+      // 0.8.4 诊断：统计「引爆次数」与「命中次数」，用于区分「危险区刷得多」与「玩家躲不掉」。
+      // 只读计数，不参与结算；难度探针据此判断近战的痛点是频率还是走位空间。
+      state.hazardStats = state.hazardStats || { detonated: 0, hit: 0 };
+      state.hazardStats.detonated += 1;
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
+        state.hazardStats.hit += 1;
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
         state.player.hp = Math.max(0, state.player.hp - amount);
         if (state.player.hp <= 0) state.player.lastKiller = "地面危险区";
@@ -2111,6 +2119,8 @@ if (TEST_MODE) {
                   shield: entity.shieldValue || 0
                 })),
               hazardsSpawned: state.hazardsSpawned || 0,
+              // 0.8.4：危险区引爆 / 命中计数（只读诊断）。命中率高说明躲不掉，命中率低说明刷得太勤。
+              hazardStats: { ...(state.hazardStats || { detonated: 0, hit: 0 }) },
               // 0.8.0：危险区的实时位置与半径。探针据此走位躲红圈；
               // 此前只暴露 hazardsSpawned 计数，探针完全看不到脚下正在倒计时的危险区，
               // 导致「脱手伤害」型关卡（如第 75 关）的数字系统性偏悲观。
