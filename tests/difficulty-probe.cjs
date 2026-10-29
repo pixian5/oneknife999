@@ -17,6 +17,8 @@
 // 输出（0.7.6 起）：除 deaths / seconds，每次运行还打印 firstDeath（首次死亡秒数，未死为 -1）、
 // damage100（每百秒净生命损失）与 killers（致死来源计数）。死亡数是离散且带正反馈的量，
 // 这三个指标随调参单调变化，用于判定 10%~20% 级调整（n=3 只看死亡数判不了，见 docs 0.7.5 记录）。
+// 输出（0.7.8 起）：追加 totalDamage（本次通关的净生命损失总量）。判「关卡变简单」看它，
+// 因为 damage100 会被通关效率抵消——攻击变低 → 少撤退喝药 → 战斗变短 → 单位时间承伤不降反平。
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
@@ -375,15 +377,18 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
   if (!snap.progress[mapId]?.completed) throw new Error(`${mapId} 未进入完成状态`);
   const deaths = (snap.player.deaths || 0) - deathsBefore;
   const seconds = Math.round(elapsedMs / 1000);
-  // 低方差指标：净承伤速率（每百秒）、首次死亡时间、致死来源分布。
+  // 低方差指标：净承伤速率（每百秒）、通关总承伤、首次死亡时间、致死来源分布。
+  // 0.7.8：总承伤 stats.damage 直接输出——0.7.7 判定难度时是手工用 damage100 × 耗时 / 100 换算的，
+  // 而 damage100 会被通关效率抵消（攻击变低 → 战斗变短 → 单位时间承伤不降），总承伤才是该看的量。
   const damage100 = seconds > 0 ? Math.round((stats.damage / seconds) * 100) : 0;
+  const totalDamage = Math.round(stats.damage);
   const firstDeath = stats.deathTimes.length ? Math.round(stats.deathTimes[0] / 1000) : -1;
   const killers = Object.entries(stats.killers)
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => `${name}x${count}`)
     .join("/");
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} firstDeath=${firstDeath}s damage100=${damage100} killers=${killers || "-"}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} totalDamage=${totalDamage} firstDeath=${firstDeath}s damage100=${damage100} killers=${killers || "-"}\n`
   );
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
   // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，
@@ -394,6 +399,7 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
     arm,
     deaths,
     seconds,
+    totalDamage,
     firstDeath,
     damage100,
     killers,
@@ -473,6 +479,8 @@ function median(values) {
         const firstDeathRuns = runs.map((item) => item.firstDeath).filter((value) => value >= 0);
         const firstDeath = firstDeathRuns.length ? median(firstDeathRuns) : -1;
         const damage100 = median(runs.map((item) => item.damage100));
+        // 0.7.8：通关总承伤的中位数——判定「关卡变简单」的主指标（damage100 会被通关效率抵消）。
+        const totalDamage = median(runs.map((item) => item.totalDamage));
         // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
         for (const [index, run] of runs.entries()) {
           if (run.deathsOverLimit) {
@@ -483,7 +491,17 @@ function median(values) {
         }
         if (deaths > MAX_DEATHS)
           throw new Error(`${stage.mapId}(${arm}) 非快进死亡中位数 ${deaths} 次，超过上限 ${MAX_DEATHS}（难度可能被改坏）`);
-        results.push({ stageNumber: stage.stageNumber, mapId: stage.mapId, arm, deaths, seconds, firstDeath, damage100, runs });
+        results.push({
+          stageNumber: stage.stageNumber,
+          mapId: stage.mapId,
+          arm,
+          deaths,
+          seconds,
+          totalDamage,
+          firstDeath,
+          damage100,
+          runs
+        });
       }
     }
     const totalDeaths = results.filter((item) => item.arm === "baseline").reduce((sum, item) => sum + item.deaths, 0);
@@ -491,7 +509,7 @@ function median(values) {
       `DIFFICULTY PROBE PASS${PROBE_SEED === null ? "" : ` seeds=${PROBE_SEED}~${PROBE_SEED + PROBE_RUNS - 1}`} runs=${PROBE_RUNS} stages=${results
         .map(
           (item) =>
-            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}] 首死中位=${item.firstDeath}s 承伤中位=${item.damage100}/百秒`
+            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}] 首死中位=${item.firstDeath}s 总承伤中位=${item.totalDamage} 承伤中位=${item.damage100}/百秒`
         )
         .join(" ")} totalDeaths(median)=${totalDeaths}\n`
     );
