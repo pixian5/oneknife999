@@ -11,23 +11,25 @@
 
 // 0.7.5 形态烈度下调：0.7.3/0.7.4 的四臂实测证明第 30 关死亡断层由形态主导
 // （战士中位 8 死 → 关形态 1 死；法师 7 → 0），且这两个职业都超标，说明问题在形态参数本身。
-// 下调原则：只收「伤害/击退/射程」三项放大系数，不动段数与语义（multiHit 与形态挂载不变），
-// 使受击节奏仍由全局闸门控制，避免一次改动把整条难度曲线压平。
+// 下调分两步：
+//   1. 收「伤害 / 击退 / 射程」三项放大系数（不动段数与形态挂载）；
+//   2. 新增 `gateMult`：形态越重，出手后全局闸门越久——重击保留爆发但后摇更长，
+//      持续 DPS 下降，比单纯削伤害更符合「重锤砸下去就该慢一拍」的手感。
 export const ATTACK_SHAPES = {
-  normal: { label: "基础近战", multiHit: 1, rangeMult: 1, damageMult: 1 },
+  normal: { label: "基础近战", multiHit: 1, rangeMult: 1, damageMult: 1, gateMult: 1 },
   // 多段连击：撕咬 / 连射 / 破军连斩 / 逐浪三斩 / 星骸斩。每段独立结算，总伤按 multiHit 均分。
-  multi: { label: "多段连击", multiHit: 2, rangeMult: 1, damageMult: 0.92 },
-  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 0.8 },
+  multi: { label: "多段连击", multiHit: 2, rangeMult: 1, damageMult: 0.92, gateMult: 1 },
+  multi3: { label: "三段连击", multiHit: 3, rangeMult: 1, damageMult: 0.8, gateMult: 1 },
   // 蓄力重击：前摇更长、伤害更高、可击退（矿镐重击 / 重锤 / 神陨锤 / 铜棺砸击）。
-  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.15, knockback: 20, windupMult: 1.45 },
+  heavy: { label: "蓄力重击", multiHit: 1, rangeMult: 1.1, damageMult: 1.15, knockback: 20, windupMult: 1.45, gateMult: 1.35 },
   // 远程投掷：在更远距离出手（掷刃 / 投掷火石 / 冰弩 / 猎杀箭 / 雷羽 / 引魂灯 / 断界弹 / 魂火 / 怨火）。
-  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 1.6, damageMult: 0.85 },
+  ranged: { label: "远程投掷", multiHit: 1, rangeMult: 1.6, damageMult: 0.85, gateMult: 1.15 },
   // 直线冲锋：向前突进并击退（晶角冲锋 / 魔血冲锋 / 礁壳冲撞 / 残甲冲撞 / 撕裂突进 / 跃袭 / 俯冲）。
-  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.35, damageMult: 1.1, knockback: 24, dash: 64 },
+  charge: { label: "冲锋", multiHit: 1, rangeMult: 1.35, damageMult: 1.1, knockback: 24, dash: 64, gateMult: 1.2 },
   // 范围横扫 / 震击（石戟横扫 / 帝陵戟 / 黄泉戟 / 金甲重踏 / 冰壳震荡）：命中范围更大。
-  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.5, damageMult: 1.05 },
+  sweep: { label: "范围横扫", multiHit: 1, rangeMult: 1.5, damageMult: 1.05, gateMult: 1.1 },
   // 锁链拖拽：命中把玩家拉近（炼狱行刑者）。
-  pull: { label: "锁链拖拽", multiHit: 1, rangeMult: 2.0, damageMult: 0.75 }
+  pull: { label: "锁链拖拽", multiHit: 1, rangeMult: 2.0, damageMult: 0.75, gateMult: 1.15 }
 };
 
 export const PASSIVE_IDS = {
@@ -256,6 +258,8 @@ export function attackShapeConfig(shapeId, { hpRatio = 1, rageStacks = 0 } = {})
     knockback: Number(shape.knockback) || 0,
     dash: Number(shape.dash) || 0,
     windupMult: Number(shape.windupMult) || 1,
+    // 0.7.5：出手后全局闸门的放大系数（1 = 与普通怪一致）。
+    gateMult: Number(shape.gateMult) || 1,
     pulls: shapeId === "pull",
     hpRatio
   };

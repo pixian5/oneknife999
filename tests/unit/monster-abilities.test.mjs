@@ -100,6 +100,13 @@ test("ATTACK_SHAPES：放大系数有上限，防止难度再次失控", () => {
   assert.ok(charge.knockback <= 26 && charge.knockback > 0, "冲锋击退应在 (0, 26]");
   assert.ok(charge.dash <= 70, `冲锋位移应 ≤70，实际 ${charge.dash}`);
   assert.ok(sweep.rangeMult <= 1.55, `横扫射程应 ≤1.55，实际 ${sweep.rangeMult}`);
+  // 0.7.5：重形态后摇更长（gateMult），持续 DPS 因此下降；段数形态不加后摇。
+  const heavyGate = attackShapeConfig("heavy").gateMult;
+  const chargeGate = attackShapeConfig("charge").gateMult;
+  assert.ok(heavyGate > 1 && heavyGate <= 1.4, `重击后摇倍率应在 (1, 1.4]，实际 ${heavyGate}`);
+  assert.ok(chargeGate > 1 && chargeGate <= 1.25, `冲锋后摇倍率应在 (1, 1.25]，实际 ${chargeGate}`);
+  assert.equal(attackShapeConfig("normal").gateMult, 1, "基础近战不加后摇");
+  assert.equal(attackShapeConfig("multi3").gateMult, 1, "三段连击不加后摇");
 });
 
 test("attackShapeConfig：攻速叠加提升伤害倍率", () => {

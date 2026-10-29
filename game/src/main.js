@@ -1080,7 +1080,8 @@ export function playerDamage(dt) {
     const engaged = Boolean(attacker.boss || attacker.aggro);
     if (step.strike) {
       // 出手即锁定全局闸门：不论命中还是落空，下一次怪物抬手都要重新等待。
-      state.player.attackGate = rules.gate;
+      // 0.7.5：重形态（重击 / 远程 / 冲锋 / 横扫 / 拖拽）后摇更长，持续 DPS 随之下调。
+      state.player.attackGate = rules.gate * shape.gateMult;
       const playerMax = playerMaxHp();
       const playerHpRatio = state.player.hp / Math.max(1, playerMax);
       if (inRange && state.player.invulnerable <= 0) {
