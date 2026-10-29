@@ -2073,6 +2073,15 @@ if (TEST_MODE) {
                 previewSkill: state.player.previewSkill
               },
               inventoryCount: (state.inventory || []).length,
+              // 0.7.7：地面掉落的位置与槽位（只给测试用）。0.4.4 起装备必须站到 85px 内按 F 才能拾取，
+              // 用例需要据此走到掉落点，而不是盲按 F（盲按只会得到「附近没有可拾取物品」）。
+              drops: (state.drops || []).map((drop) => ({
+                id: drop.id,
+                x: drop.x,
+                y: drop.y,
+                name: drop.name,
+                slot: drop.slot || null
+              })),
               equipmentIds: Object.fromEntries(
                 Object.entries(state.player.equipment || {}).map(([slot, item]) => [slot, item?.id || null])
               ),

@@ -11,6 +11,19 @@ function spawnTier(index, stageNumber, slot) {
   return (index + stageNumber) % 6;
 }
 
+// 0.7.7 关卡局部难度修正：百图共用同一条成长曲线，个别关卡会因章节档位与装备节奏错位
+// 出现死亡峰值。第 30 关实测（战士 n=8，seed 2000–2007）死亡中位 7、承伤中位 5741/百秒、
+// 首死中位 33s，而第 60 / 75 / 90 关只有 0–2 死；致死来源集中在攻击最高的四只怪与首领上。
+// 这里只登记「实测出峰值」的关卡，避免继续全局削形态系数把 100 张图一起变简单。
+// attackMult 同时作用于该关普通怪与首领的输出（生命不变，只降承伤速率）。
+export const MAP_DIFFICULTY_OVERRIDES = {
+  30: { attackMult: 0.88, reason: "战士 n=8 死亡中位 7、承伤 5741/百秒；相邻关 60/75/90 为 0–2 死" }
+};
+
+export function mapDifficultyOverride(stageNumber) {
+  return MAP_DIFFICULTY_OVERRIDES[stageNumber] || null;
+}
+
 // 0.6.0 P2 套装键：10 章映射到 6 套（与 endgame.js 的 SET_BONUSES 对齐）。
 const SET_KEYS = ["边境", "苍月", "龙脉", "冰封", "烬火", "帝陵", "烬火", "帝陵", "烬火", "帝陵"];
 
@@ -1098,9 +1111,12 @@ export function generatedMap(stageNumber) {
   // 数值曲线以第 4 关（手工图「赤砂大漠」）为锚点：第 5 关起与关 4 数值衔接并线性增长，
   // 消除手工图与生成图之间的难度/装备断崖；第 100 关峰值与旧曲线基本一致。
   const anchored = (base, slope) => Math.round(base + (stageNumber - 4) * slope);
+  // 0.7.7：局部难度修正只降输出，不动生命（耗时基本不变，便于用承伤速率判定是否生效）。
+  const difficulty = mapDifficultyOverride(stageNumber);
+  const attackMult = difficulty?.attackMult || 1;
   const monsterTypes = chapter.monsters.map((name, typeIndex) => {
     // 9 档步长 2.785：第 8 档（最强）在第 100 关仍等于旧曲线峰值的 123。
-    const attack = anchored(70 + typeIndex * 2.785, 0.32);
+    const attack = Math.round(anchored(70 + typeIndex * 2.785, 0.32) * attackMult);
     return {
       // 章节前缀与怪物名重复时不再二次拼接（避免「龙脉龙脉毒虫」式 stutter）。
       name: name.startsWith(chapter.short) ? name : `${chapter.short}${name}`,
@@ -1159,12 +1175,14 @@ export function generatedMap(stageNumber) {
     ],
     monsterTypes,
     monsterSpawns: layout.monsterSpawns,
+    // 0.7.7：局部难度修正记录在关卡对象上，单测据此确认「只作用于登记过的关卡」。
+    difficulty: { attackMult, reason: difficulty?.reason || null },
     boss: {
       id: `boss-${id}`,
       name: bossName,
       color: chapter.accent,
       hp: anchored(3000, 67.5),
-      attack: anchored(112, 0.42),
+      attack: Math.round(anchored(112, 0.42) * attackMult),
       defense: anchored(60, 0.05),
       exp: 0,
       gold: anchored(1100, 6.5),

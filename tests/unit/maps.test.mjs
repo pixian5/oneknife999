@@ -5,6 +5,8 @@ import {
   MAPS,
   MAP_ORDER,
   CHAPTERS,
+  MAP_DIFFICULTY_OVERRIDES,
+  mapDifficultyOverride,
   campaignGrowth,
   mapsPerLevel,
   generatedLayout,
@@ -204,4 +206,32 @@ test("生成器鲁棒性：101–110 关（未来关号）也能生成合法布�
     assert.ok(layout.monsterSpawns.length >= 12, `stage ${stage} 营位异常`);
     assert.ok(layout.tacticalPoints.length === 3, `stage ${stage} 节点异常`);
   }
+});
+
+// 0.7.7：关卡局部难度修正（MAP_DIFFICULTY_OVERRIDES）只登记实测出现死亡峰值的关卡。
+// 这里锁住三件事：登记值合法、只作用登记关卡、确实把该关压到相邻关之下。
+test("关卡局部难度修正：只作用于登记过的关卡，且不误伤相邻关", () => {
+  const keys = Object.keys(MAP_DIFFICULTY_OVERRIDES).map(Number);
+  assert.ok(keys.length > 0, "至少登记一个修正关卡");
+  for (const stage of keys) {
+    const override = MAP_DIFFICULTY_OVERRIDES[stage];
+    assert.ok(Number.isInteger(stage) && stage >= 5 && stage <= 100, `修正关号 ${stage} 越界`);
+    assert.ok(override.attackMult > 0.8 && override.attackMult < 1, `第 ${stage} 关 attackMult 应落在 (0.8, 1)`);
+    assert.ok(String(override.reason || "").length > 0, `第 ${stage} 关必须写明登记理由`);
+    assert.equal(MAPS[`stage_${String(stage).padStart(3, "0")}`].difficulty.attackMult, override.attackMult);
+  }
+  // 未登记的关卡一律 1.0，避免「顺手把整条曲线压低」；前 4 张手工图不参与生成曲线，无该字段。
+  for (const map of ALL_MAPS.filter((item) => item.difficulty)) {
+    if (keys.includes(map.stageNumber)) continue;
+    assert.equal(map.difficulty.attackMult, 1, `${map.id} 不应被修正`);
+  }
+  for (const map of ALL_MAPS.filter((item) => item.stageNumber <= 4)) {
+    assert.equal(map.difficulty, undefined, `${map.id} 为手工地图，不应带生成曲线修正`);
+  }
+  // 第 30 关修正后，其最强普通怪与首领的输出应低于相邻的第 31 关（否则修正没有意义）。
+  const maxAttack = (map) => Math.max(...map.monsterTypes.map((type) => type.attack));
+  assert.ok(maxAttack(MAPS.stage_030) < maxAttack(MAPS.stage_031), "第 30 关最强普通怪应低于第 31 关");
+  assert.ok(MAPS.stage_030.boss.attack < MAPS.stage_031.boss.attack, "第 30 关首领攻击应低于第 31 关");
+  assert.equal(mapDifficultyOverride(29), null, "相邻关不应被修正");
+  assert.equal(mapDifficultyOverride(31), null, "相邻关不应被修正");
 });

@@ -20,6 +20,36 @@ const pressKey = (page, key, down) =>
     { key, down }
   );
 
+// 0.7.7：朝目标走到指定距离内。0.4.4 起装备必须站到 85px 内按 F 才能拾取，
+// 首领战结束后玩家常被击退到范围外，因此用例需要真的走过去，而不是盲按 F。
+async function walkToward(page, target, stopDistance = 60, maxMs = 6000) {
+  const startedAt = Date.now();
+  let held = [];
+  const release = async () => {
+    for (const key of held) await pressKey(page, key, false);
+    held = [];
+  };
+  while (Date.now() - startedAt < maxMs) {
+    const position = await page.evaluate(() => {
+      const snap = window.__ONEKNIFE_E2E__.snapshot();
+      return { x: snap.player.x, y: snap.player.y };
+    });
+    const dx = target.x - position.x;
+    const dy = target.y - position.y;
+    if (Math.hypot(dx, dy) <= stopDistance) break;
+    const keys = [];
+    if (Math.abs(dx) > 12) keys.push(dx > 0 ? "d" : "a");
+    if (Math.abs(dy) > 12) keys.push(dy > 0 ? "s" : "w");
+    if (keys.join() !== held.join()) {
+      await release();
+      for (const key of keys) await pressKey(page, key, true);
+      held = keys;
+    }
+    await sleep(150);
+  }
+  await release();
+}
+
 function makeSavedRun() {
   // v4 存档格式：12 装备槽位 + 技能点 / 技能等级 / 罪恶值字段。
   const equipment = {
@@ -217,25 +247,10 @@ async function verifyBossRespawnCountdown(page) {
   assert.ok(second.respawn < first.respawn && first.respawn <= 42, `倒计时未递减：${first.respawn}s -> ${second.respawn}s`);
   assert.match(second.alert, /已击破 · \d+ 秒后刷新/, `首领情报条读秒异常：${second.alert}`);
 
-  // 拾取路径：背包/药水/日志必须按需刷新（验证签名缓存不漏更新）
-  const before = await page.evaluate(() => ({
-    inv: document.querySelector("#inventoryCount").textContent,
-    potion: document.querySelector("#potionCount").textContent,
-    gold: document.querySelector("#goldText").textContent,
-    marks: document.querySelector("#markText").textContent,
-    log: document.querySelector("#eventLog").textContent
-  }));
-  let picked = false;
-  for (let i = 0; i < 12 && !picked; i += 1) {
-    picked = await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
-      return /拾取/.test(document.querySelector("#toast").textContent);
-    });
-    if (!picked) await sleep(700);
-  }
-  assert.ok(picked, "按 F 未拾取到任何地面掉落");
-  // 0.6.8：Toast 在按键回调里同步更新，HUD 面板却按帧刷新；软件渲染下一帧可能长达数百毫秒，
-  // 拾取后立刻读 DOM 会读到旧值。这里轮询到面板出现变化或超时，与帧率解耦。
+  // 拾取路径：背包/药水/日志必须按需刷新（验证签名缓存不漏更新）。
+  // 0.7.7 修复用例缺陷：0.4.4 起装备必须站到 85px 内按 F 才能拾取，而首领的击退常把玩家推出范围；
+  // 旧逻辑盲按 F 会命中「附近没有可拾取物品」的提示，而提示里也含「拾取」二字，被误判成拾取成功，
+  // 随后面板当然不会变化。现在改为「走到最近的装备掉落点 → 按 F → 只认资产 / 日志真的变化」。
   const readPanels = () =>
     page.evaluate(() => ({
       inv: document.querySelector("#inventoryCount").textContent,
@@ -245,16 +260,40 @@ async function verifyBossRespawnCountdown(page) {
       log: document.querySelector("#eventLog").textContent,
       objective: document.querySelector("#mapObjectiveChecks").textContent
     }));
-  const panelChanged = () => after.inv !== before.inv || after.potion !== before.potion || after.log !== before.log;
-  let after = await readPanels();
-  for (let i = 0; i < 40 && !panelChanged(); i += 1) {
-    await sleep(100);
-    after = await readPanels();
-  }
-  assert.ok(panelChanged(), "拾取后面板未刷新");
-  // 掉落内容随机，且一次 F 会拾取附近多件掉落（材料/药水/金币/印记碎片），
-  // 因此只要求至少一类资产增加，不写死背包格数（避免随机掉落造成偶发失败）
   const countOf = (text) => Number(String(text).replace(/[^\d]/g, ""));
+  const gearDrop = await page.evaluate(() => {
+    const snap = window.__ONEKNIFE_E2E__.snapshot();
+    const player = snap.player;
+    return (
+      (snap.drops || [])
+        .filter((drop) => drop.slot)
+        .map((drop) => ({ ...drop, distance: Math.hypot(drop.x - player.x, drop.y - player.y) }))
+        .sort((a, b) => a.distance - b.distance)[0] || null
+    );
+  });
+  assert.ok(gearDrop, "首领击杀后应留下可拾取的装备掉落");
+  await walkToward(page, gearDrop, 60);
+  const before = await readPanels();
+  let after = before;
+  let picked = false;
+  for (let i = 0; i < 12 && !picked; i += 1) {
+    await pressKey(page, "f", true);
+    await pressKey(page, "f", false);
+    // 面板走按帧刷新：每按一次 F 都轮询一小段，拾到即退出（不再依赖 Toast 文案判断）。
+    for (let j = 0; j < 20 && !picked; j += 1) {
+      await sleep(100);
+      after = await readPanels();
+      picked =
+        countOf(after.inv) > countOf(before.inv) ||
+        countOf(after.potion) > countOf(before.potion) ||
+        countOf(after.gold) > countOf(before.gold) ||
+        countOf(after.marks) > countOf(before.marks) ||
+        after.log !== before.log;
+    }
+    // 被击退或掉落被推到边缘：朝掉落点再走一步后重试。
+    if (!picked) await walkToward(page, gearDrop, 55, 900);
+  }
+  assert.ok(picked, "按 F 未拾取到任何地面掉落");
   const gainedAsset =
     countOf(after.inv) > countOf(before.inv) ||
     countOf(after.potion) > countOf(before.potion) ||
