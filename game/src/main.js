@@ -2032,6 +2032,9 @@ if (TEST_MODE) {
                 maxHp: playerMaxHp(),
                 resource: state.player.resource,
                 poison: state.player.poison,
+                // 0.7.2：致盲诊断字段，浏览器用例据此确认「命中真的写入了停滞效果」。
+                blind: state.player.blindTimer || 0,
+                blindMissChance: state.player.blindMissChance || 0,
                 charge: state.player.charge,
                 level: state.player.level,
                 exp: state.player.exp,
