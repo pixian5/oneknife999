@@ -2107,6 +2107,12 @@ if (TEST_MODE) {
                   shield: entity.shieldValue || 0
                 })),
               hazardsSpawned: state.hazardsSpawned || 0,
+              // 0.8.0：危险区的实时位置与半径。探针据此走位躲红圈；
+              // 此前只暴露 hazardsSpawned 计数，探针完全看不到脚下正在倒计时的危险区，
+              // 导致「脱手伤害」型关卡（如第 75 关）的数字系统性偏悲观。
+              hazards: (state.hazards || [])
+                .filter((hazard) => !hazard.snap)
+                .map((hazard) => ({ x: hazard.x, y: hazard.y, r: hazard.r, life: hazard.life })),
               progress: state.mapProgress,
               // 0.6.0 P2 终局：难度、图鉴条目数、套装件数、引导步骤。
               difficulty: state.difficulty || "normal",

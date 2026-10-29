@@ -287,13 +287,34 @@ async function defeatEntity(page, entityId, mapId, safePoint, stats, baseMs = 0)
     if (!current) return elapsed;
     // 真实最大生命由游戏侧给出（含装备生命加成）；漏算装备会把「半血」误判成「满血」。
     const maxHp = snap.player.maxHp || (BASE_HP[snap.classId] || 280) + snap.player.level * 18;
+    // 0.8.0：躲地面危险区。此前探针完全看不到危险区（快照只有 hazardsSpawned 计数），
+    // 第 75 关这类「红圈跟脚 + 首领叠毒」的关卡会系统性高估难度——真玩家会走开，探针站着挨打。
+    // 只躲「脚下已经在倒计时」的圈：走位方向是背离圈心，移动距离足以离开半径 + 24px 的余量。
+    const dangerUnderfoot = (snap.hazards || []).find(
+      (hazard) => Math.hypot(hazard.x - snap.player.x, hazard.y - snap.player.y) < hazard.r + 18
+    );
+    if (dangerUnderfoot) {
+      const awayX = snap.player.x - dangerUnderfoot.x;
+      const awayY = snap.player.y - dangerUnderfoot.y;
+      // 圈心与玩家重合时没有「背离方向」，退化成向左闪避（与真实玩家的反应一致）。
+      const magnitude = Math.hypot(awayX, awayY) || 1;
+      const target = {
+        x: snap.player.x + (awayX / magnitude) * 90,
+        y: snap.player.y + (awayY / magnitude) * 90
+      };
+      await moveToPoint(page, target, mapId, 26);
+      await spend(260);
+      continue;
+    }
     // 药水：血量掉到 65% 就喝（0.3.9 从 55% 上调）。55% 时往往已经进入「一次重击就死」的区间，
     // 死亡又会让首领回血重置，连锁放大成整场拉锯；提前喝能把波动压下来。
     if (guard % 3 === 0 && (snap.player.potion || 0) > 0 && snap.player.hp < maxHp * 0.65) await page.keyboard.press("q");
     const nearSafePoint = Math.hypot(snap.player.x - safePoint.x, snap.player.y - safePoint.y) <= 54;
     // 阈值放到 60% / 3 层毒：85% 就撤退会让「撤退—回营地—再进场」无限循环，反而测不出 DPS。
-    const needsRecovery = snap.player.poison >= 3 || snap.player.hp < maxHp * 0.6;
-    // 首领：掉到 60% 或中毒 3 层就回营地脱战回血（真实玩家在非快进下的常规打法）。
+    // 0.8.0：中毒阈值 3 → 2 层。中毒是「层数 × 4 每 1.2s」的持续伤害，3 层已经过半血；
+    // 带 poisonStacks 的首领（如第 75 关）会持续叠层，等到 3 层常常已经来不及撤。
+    const needsRecovery = snap.player.poison >= 2 || snap.player.hp < maxHp * 0.6;
+    // 首领：掉到 60% 或中毒 ≥2 层就回营地脱战回血（真实玩家在非快进下的常规打法）。
     if (current.boss && !nearSafePoint && needsRecovery) {
       if (await moveToPoint(page, safePoint, mapId)) {
         await spend(1800);
