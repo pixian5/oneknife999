@@ -1496,7 +1496,11 @@ export function spawnHazard(boss) {
   const map = activeMap();
   const def = map.boss;
   const radius = def.specialKind === "logs" ? 50 : def.specialKind === "devour" ? 70 : 55;
-  const damage = Math.round(boss.attack * 1.4);
+  // 0.8.3：关卡级危险区修正。第 75 关的「红圈跟脚 + 最短特殊间隔」同时压住战士与法师，
+  // 且惩罚的是远程职业「停在射程边缘」的正确打法，因此只降危险区伤害、不动首领本体输出。
+  // 手工地图没有 difficulty 字段，缺省为 1。
+  const hazardMult = map.difficulty?.hazardMult || 1;
+  const damage = Math.round(boss.attack * 1.4 * hazardMult);
   let target;
   if (def.specialKind === "logs") {
     // 森林巨猿：在玩家附近随机落木

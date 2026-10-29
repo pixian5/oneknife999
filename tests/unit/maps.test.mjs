@@ -216,14 +216,25 @@ test("关卡局部难度修正：只作用于登记过的关卡，且不误伤�
   for (const stage of keys) {
     const override = MAP_DIFFICULTY_OVERRIDES[stage];
     assert.ok(Number.isInteger(stage) && stage >= 5 && stage <= 100, `修正关号 ${stage} 越界`);
-    assert.ok(override.attackMult > 0.8 && override.attackMult < 1, `第 ${stage} 关 attackMult 应落在 (0.8, 1)`);
     assert.ok(String(override.reason || "").length > 0, `第 ${stage} 关必须写明登记理由`);
-    assert.equal(MAPS[`stage_${String(stage).padStart(3, "0")}`].difficulty.attackMult, override.attackMult);
+    // 两个系数正交：可以只登记其中一个，但登记了就必须落在合理区间。
+    assert.ok(
+      override.attackMult === undefined || (override.attackMult > 0.8 && override.attackMult < 1),
+      `第 ${stage} 关 attackMult 应落在 (0.8, 1)`
+    );
+    assert.ok(
+      override.hazardMult === undefined || (override.hazardMult > 0.5 && override.hazardMult < 1),
+      `第 ${stage} 关 hazardMult 应落在 (0.5, 1)`
+    );
+    const map = MAPS[`stage_${String(stage).padStart(3, "0")}`];
+    assert.equal(map.difficulty.attackMult, override.attackMult ?? 1, `第 ${stage} 关 attackMult 应生效`);
+    assert.equal(map.difficulty.hazardMult, override.hazardMult ?? 1, `第 ${stage} 关 hazardMult 应生效`);
   }
   // 未登记的关卡一律 1.0，避免「顺手把整条曲线压低」；前 4 张手工图不参与生成曲线，无该字段。
   for (const map of ALL_MAPS.filter((item) => item.difficulty)) {
     if (keys.includes(map.stageNumber)) continue;
-    assert.equal(map.difficulty.attackMult, 1, `${map.id} 不应被修正`);
+    assert.equal(map.difficulty.attackMult, 1, `${map.id} 的 attackMult 不应被修正`);
+    assert.equal(map.difficulty.hazardMult, 1, `${map.id} 的 hazardMult 不应被修正`);
   }
   for (const map of ALL_MAPS.filter((item) => item.stageNumber <= 4)) {
     assert.equal(map.difficulty, undefined, `${map.id} 为手工地图，不应带生成曲线修正`);
@@ -232,6 +243,11 @@ test("关卡局部难度修正：只作用于登记过的关卡，且不误伤�
   const maxAttack = (map) => Math.max(...map.monsterTypes.map((type) => type.attack));
   assert.ok(maxAttack(MAPS.stage_030) < maxAttack(MAPS.stage_031), "第 30 关最强普通怪应低于第 31 关");
   assert.ok(MAPS.stage_030.boss.attack < MAPS.stage_031.boss.attack, "第 30 关首领攻击应低于第 31 关");
+  // 第 75 关只降危险区：本体输出必须与第 74 / 76 关同曲线（不能被 attackMult 牵连）。
+  assert.equal(MAPS.stage_075.difficulty.attackMult, 1, "第 75 关不应改本体输出");
+  assert.ok(MAPS.stage_075.difficulty.hazardMult < 1, "第 75 关应降低危险区伤害");
   assert.equal(mapDifficultyOverride(29), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(31), null, "相邻关不应被修正");
+  assert.equal(mapDifficultyOverride(74), null, "相邻关不应被修正");
+  assert.equal(mapDifficultyOverride(76), null, "相邻关不应被修正");
 });

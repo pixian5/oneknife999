@@ -16,8 +16,14 @@ function spawnTier(index, stageNumber, slot) {
 // 首死中位 33s，而第 60 / 75 / 90 关只有 0–2 死；致死来源集中在攻击最高的四只怪与首领上。
 // 这里只登记「实测出峰值」的关卡，避免继续全局削形态系数把 100 张图一起变简单。
 // attackMult 同时作用于该关普通怪与首领的输出（生命不变，只降承伤速率）。
+// hazardMult 只作用于该关首领技能生成的地面危险区伤害（不动普通怪与首领本体输出）。
 export const MAP_DIFFICULTY_OVERRIDES = {
-  30: { attackMult: 0.88, reason: "战士 n=8 死亡中位 7、承伤 5741/百秒；相邻关 60/75/90 为 0–2 死" }
+  30: { attackMult: 0.88, reason: "战士 n=8 死亡中位 7、承伤 5741/百秒；相邻关 60/75/90 为 0–2 死" },
+  // 0.8.3：第 75 关是「脱手伤害」型峰值——两职业致死来源都指向地面危险区
+  // （战士 8/13、法师 6/15），且该关 specialKind=sting 的红圈直接落在玩家脚下、
+  // 不看距离，专门惩罚远程职业「停在射程边缘」的正确打法。只降危险区伤害，
+  // 保留「毒首领 + 最短特殊间隔」的设计辨识度，也不影响怪物正面输出。
+  75: { hazardMult: 0.75, reason: "两职业致死来源均以地面危险区为主（战士 8/13、法师 6/15）" }
 };
 
 export function mapDifficultyOverride(stageNumber) {
@@ -1112,8 +1118,10 @@ export function generatedMap(stageNumber) {
   // 消除手工图与生成图之间的难度/装备断崖；第 100 关峰值与旧曲线基本一致。
   const anchored = (base, slope) => Math.round(base + (stageNumber - 4) * slope);
   // 0.7.7：局部难度修正只降输出，不动生命（耗时基本不变，便于用承伤速率判定是否生效）。
+  // 0.8.3：拆成两个正交系数——attackMult 管普通怪与首领本体，hazardMult 只管首领技能的危险区。
   const difficulty = mapDifficultyOverride(stageNumber);
   const attackMult = difficulty?.attackMult || 1;
+  const hazardMult = difficulty?.hazardMult || 1;
   const monsterTypes = chapter.monsters.map((name, typeIndex) => {
     // 9 档步长 2.785：第 8 档（最强）在第 100 关仍等于旧曲线峰值的 123。
     const attack = Math.round(anchored(70 + typeIndex * 2.785, 0.32) * attackMult);
@@ -1176,7 +1184,7 @@ export function generatedMap(stageNumber) {
     monsterTypes,
     monsterSpawns: layout.monsterSpawns,
     // 0.7.7：局部难度修正记录在关卡对象上，单测据此确认「只作用于登记过的关卡」。
-    difficulty: { attackMult, reason: difficulty?.reason || null },
+    difficulty: { attackMult, hazardMult, reason: difficulty?.reason || null },
     boss: {
       id: `boss-${id}`,
       name: bossName,
