@@ -13,6 +13,12 @@ export const FAST_FORWARD = TEST_MODE && URL_FLAGS.has("fast");
 // 0.6.0 P0 行为系统开关（仅测试用）：`?e2e=1&noabilities=1` 关闭全部怪物行为，
 // 用于 A/B 对照量化「行为系统对难度的真实影响」。生产环境（非 e2e）恒为 false。
 export const ABILITIES_ENABLED = !(TEST_MODE && URL_FLAGS.has("noabilities"));
+// 0.7.3 细粒度消融：`noabilities` 是总闸，下面三个正交开关分别只关一类行为，
+// 用来定位「第 30 关的死亡压力到底来自攻击形态、被动，还是亡语」。
+// 语义约定：noabilities 全关；其余三个开关在总闸关闭时无意义（已随总闸一起失效）。
+export const ATTACK_SHAPES_ENABLED = ABILITIES_ENABLED && !(TEST_MODE && URL_FLAGS.has("noabishapes"));
+export const PASSIVES_ENABLED = ABILITIES_ENABLED && !(TEST_MODE && URL_FLAGS.has("noabipassives"));
+export const DEATH_EFFECTS_ENABLED = ABILITIES_ENABLED && !(TEST_MODE && URL_FLAGS.has("noabideath"));
 
 export const CLASSES = {
   warrior: {

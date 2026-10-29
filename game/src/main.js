@@ -3,7 +3,9 @@ import {
   COMMON_DROPS,
   TEST_MODE,
   FAST_FORWARD,
-  ABILITIES_ENABLED,
+  ATTACK_SHAPES_ENABLED,
+  PASSIVES_ENABLED,
+  DEATH_EFFECTS_ENABLED,
   STORAGE_KEY,
   EQUIPMENT_SLOT_KEYS,
   enhanceQuote,
@@ -132,6 +134,17 @@ let pendingTravel = null;
 // 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
 const MAX_WINDUP_ATTACKERS = 1;
 
+// 0.7.3 细粒度行为开关：把「攻击形态 / 被动 / 亡语」分开消融，便于定位具体元凶。
+// 生产环境三个开关恒为 true，走进来等价于原样返回（不复制对象，避免额外分配）。
+function gateAbilities(abilities) {
+  if (ATTACK_SHAPES_ENABLED && PASSIVES_ENABLED && DEATH_EFFECTS_ENABLED) return abilities;
+  return {
+    attack: ATTACK_SHAPES_ENABLED ? abilities.attack : "normal",
+    passives: PASSIVES_ENABLED ? abilities.passives : [],
+    onDeath: DEATH_EFFECTS_ENABLED ? abilities.onDeath : null
+  };
+}
+
 export function createEntities(map) {
   const result = [];
   // 0.6.0 P2：难度模式对怪物生命 / 攻击的缩放（常规难度倍率恒为 1，行为完全不变）。
@@ -162,8 +175,9 @@ export function createEntities(map) {
       aggro: false,
       friendly: false,
       // 0.6.0 P0 怪物行为：把 config 里 56 种怪的行为描述落成可执行配置（见 monster-abilities.js）。
-      // ABILITIES_ENABLED=false 时（仅 e2e 的 noabilities 参数）回落普通行为，供难度 A/B 对照。
-      abilities: ABILITIES_ENABLED ? resolveAbilities(type.name) : { attack: "normal", passives: [], onDeath: null },
+      // 0.7.3 gateAbilities 再按细粒度开关裁剪：noabilities 总闸关闭时三个开关全 false，
+      // 等价于旧的「回落普通行为」；noabishapes / noabipassives / noabideath 只关对应一类。
+      abilities: gateAbilities(resolveAbilities(type.name)),
       usedLethalSave: false,
       shieldValue: 0,
       shieldTimer: 0,
@@ -2070,6 +2084,8 @@ if (TEST_MODE) {
                   // 0.6.0：暴露行为配置，e2e / 探针可断言「这只怪确实是冲锋形态、确实带首击减伤」。
                   attackShape: entity.abilities?.attack || "normal",
                   passives: (entity.abilities?.passives || []).map((passive) => passive.id),
+                  // 0.7.3：亡语也要能被 e2e 观察到，否则 noabideath 的消融没有断言入口。
+                  onDeath: entity.abilities?.onDeath || null,
                   shield: entity.shieldValue || 0
                 })),
               hazardsSpawned: state.hazardsSpawned || 0,

@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.7.2。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.7.3。
 
 ## 启动
 
@@ -58,6 +58,7 @@ npm run serve
 - 铭牌与飘字（0.4.1–0.4.2）：名字 / 血量 / 血条统一画在场景最上层，伤害飘字、粒子与技能环不会再压住血条；铭牌只绘制视野内目标（按纵深排序），靠地图边缘的飘字会被夹回视口内；死亡复活后**首领保留已损失生命**（普通怪仍满血重置），不会因一次失误把整条首领血条重打一遍。
 - 铭牌可读性回归（0.4.2）：`npm run test:ui:nameplate` 插桩 Canvas 绘制并逐帧检测「非铭牌内容命中铭牌」，断言飘字 / 粒子 / 特效环遮挡为 0。0.7.0 按 GitCode 平行线决定删除 GitHub Actions，门禁改为提交前本地跑 `npm run verify` + 三项浏览器回归。
 - 致盲被动回归（0.7.2）：`npm run test:ui:blind` 把玩家放到第 31 关「冰封雪原猎手」旁不还手，等它命中后断言 `snapshot().player.blind > 0`、`blindMissChance === 0.3` 且生命确实下降——防的是「参数写好了但没人读」这类静默失效。
+- 行为开关回归（0.7.3）：`npm run test:ui:abilities` 在雾松林逐只对比 16 只怪的 `attackShape / passives / onDeath` 签名，断言 `noabishapes` / `noabipassives` / `noabideath` 各自只关一维、其余逐只不变，`noabilities` 仍三类全关。难度消融结论：第 30 关死亡压力主要来自**攻击形态**（基线中位 8 死 → 关形态 1 死），被动中等（5 死），亡语无影响（8 死）。
 - 角色面板三围（0.3.8）：头像 / 战力下方显示 **生命 / 攻击 / 防御**，三项均与战斗结算同源——攻击含装备有效战力 ×0.9（与伤害公式一致）、生命取 `playerMaxHp()`、防御取 `playerDefense()`。重铸或换装后可直接对照数值变化；「战力」仍是综合评分，不等同于伤害。
 - 怪物头顶显示等级和生命；悬停显示背景、攻击、防御和技能。
 - 普通怪和 Boss 都带独立背景与至少两条技能资料；后 96 图的生成怪会按章节显示专属介绍。
@@ -122,6 +123,7 @@ npm run test:ui               # 桌面 + 移动视口冒烟测试（需要先 np
 npm run test:ui:levelup       # 首关击杀升级回归（需要先 npm run serve）
 npm run test:ui:regression    # 界面渲染与输入回归（需要先 npm run serve）
 npm run test:ui:blind         # 致盲被动端到端回归（需要先 npm run serve）
+npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
 npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）
