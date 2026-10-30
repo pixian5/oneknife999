@@ -48,6 +48,7 @@ import {
   canvas,
   canvasPoint,
   resizeCanvas,
+  scheduleResize,
   getViewScale,
   getCamera,
   showToast,
@@ -324,6 +325,9 @@ export function chooseClass(classId) {
   state.player.guideStep = 1;
   loadMap("ash_outskirts", 480, 780, true);
   $("classModal").classList.add("hidden");
+  // 0.8.6：选完职业立即落盘。此前只在升级/通关/拾取等事件才 persistGame，
+  // 玩家选完职业立刻刷新会退回职业选择，等于白选一次。
+  persistGame();
   log(`你选择了 <b>${CLASSES[classId].name}</b>，矿道深处传来石碑碎裂声。`);
   log("百图征途开启：每关都要完成<b>普通怪清剿</b>并击破<b>区域首领</b>。", "loot");
   log("前 10 关每图提升一级，后期逐步变为每 2、3、4 图提升一级。", "loot");

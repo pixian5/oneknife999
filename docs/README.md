@@ -397,3 +397,7 @@ QA：成功、边界、异常、性能、灾备
 ### 0.8.5 资产解析与终局修复
 
 新增 `game/src/assets.js`，把「地图数据名 → 素材文件名」收敛到一处：剥离章节前缀、40 个旧生成怪别名到 50 个动作帧物种、4 个缺失命名显式映射。第 5/91 关实测资源 404 从 24 个唯一 URL 降到仅 `favicon.ico`；Boss 情报头像改为按章节回退并缓存，消除单会话 5000+ 次 404。同步修复 `resolveLethalSave`（按最大生命 12% 保留、低血不回血）、套装攻击进入角色面板与装备预览、`meleeReflect` 仅近战生效、玩家受击帧、深层 `abyssFloor` 持久化与经验/品质成长、图鉴全集缓存。验证：167 单测全绿；第 5/91 关浏览器 0 资源 404。详见 [20261030-0135-资产解析与终局修复-DeepSeek-V4.1-Flash.md](20261030-0135-资产解析与终局修复-DeepSeek-V4.1-Flash.md)。
+
+### 0.8.6 公网部署加固与两处前端缺陷修复
+
+本轮只做部署验收与缺陷收口。**修 resize 必抛 `ReferenceError: scheduleResize is not defined`**：`render.js` 导出了它、`main.js` 的 import 列表却漏了，导致每次拖窗口/横竖屏都抛异常且画布不重算（实测 900×600 与 1440×900 下 canvas 恒为 444×215），补一行 import 即修好。**修 `chooseClass()` 不落盘**：选完职业立刻刷新会退回职业选择，改为选定即 `persistGame()`。**修 favicon 404**：内联 SVG 图标，首屏不再有非 2xx 请求。部署侧把 `python -m http.server` 换成 `serve.py`（禁目录列表、支持 Range 206、带缓存头），并加 `keepalive.sh` 守护静态服务与隧道。另记录一条硬限制：免费套餐 `autoSuspendAfterSeconds` 恒为 1800 秒，`setAutoSuspend(0)` 返回 `permission_denied`，要真正「不掉线」需升级 Pro。详见 [20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md](20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md)。
