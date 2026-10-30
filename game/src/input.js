@@ -3,6 +3,7 @@ import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybind
 import { $, distance } from "./util.js";
 import { isMuted, toggleMute, unlockAudio } from "./audio.js";
 import { loadKeybinds, actionForKey, setKeybind, resetKeybinds } from "./keybinds.js";
+import { logDebug, logInfo, logThrottled } from "./logger.js";
 import {
   normalAttack,
   collectDrops,
@@ -133,6 +134,8 @@ export function setupInput() {
     // 0.3.2：动作全部走 keybinds 查表，默认普攻为 X（紧邻 1-4 技能键）。
     const action = actionForKey(key);
     if (!action) return;
+    // 0.8.7：按键触发的动作按动作键 250ms 节流记录——「按了没反应」时先看动作有没有派发。
+    logThrottled(`key-${action}`, 250, "debug", "input", "action", { action, key });
     if (action === "attack") normalAttack();
     if (action === "potion") usePotion();
     if (action === "pickup") collectDrops();
@@ -160,7 +163,10 @@ export function setupInput() {
     // 友军（骨卫）不参与点击锁定，点击其位置视为走位指令。
     const target = state?.entities.find((entity) => entity.alive && !entity.friendly && distance(point, entity) < entity.radius + 22);
     if (target) selectTarget(target);
-    else setMoveTarget(point);
+    else {
+      logThrottled("click-move", 200, "debug", "input", "moveOrder", { x: Math.round(point.x), y: Math.round(point.y) });
+      setMoveTarget(point);
+    }
   });
   canvas.addEventListener("pointerup", () => {
     pointer.down = false;

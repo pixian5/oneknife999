@@ -2,6 +2,8 @@
 // 键位独立存储（不进 v4 存档），重置游戏不会清掉玩家自定义键位。
 // 纯函数（sanitizeKeybinds / validateKeybindChange）可在 Node 单测中直接引用。
 
+import { logDebug, logInfo, logWarn } from "./logger.js";
+
 export const KEYBINDS_STORAGE_KEY = "oneknife999-keybinds-v1";
 
 // 默认键位：普攻改为 X，紧邻技能键 1-4，避免 J 与数字键跨度过大。
@@ -110,11 +112,14 @@ export function loadKeybinds() {
   if (hasStorage()) {
     try {
       raw = JSON.parse(localStorage.getItem(KEYBINDS_STORAGE_KEY) || "null");
-    } catch {
+    } catch (error) {
       raw = null;
+      logWarn("keybind", "readRejected", { reason: String(error && error.message ? error.message : error) });
     }
   }
-  Object.assign(keybinds, sanitizeKeybinds(raw));
+  const sanitized = sanitizeKeybinds(raw);
+  Object.assign(keybinds, sanitized);
+  logDebug("keybind", "load", { stored: Boolean(raw), binds: { ...keybinds } });
   return keybinds;
 }
 
@@ -122,23 +127,30 @@ export function persistKeybinds() {
   if (!hasStorage()) return;
   try {
     localStorage.setItem(KEYBINDS_STORAGE_KEY, JSON.stringify(keybinds));
-  } catch {
+  } catch (error) {
     // 隐私模式 / 配额满时静默失败：本局键位仍然生效，只是无法跨刷新保留。
+    logWarn("keybind", "writeFailed", { reason: String(error && error.message ? error.message : error) });
   }
 }
 
 // 修改单个键位：校验通过才写入并持久化，返回 { ok, error } 供 UI 提示。
 export function setKeybind(action, rawKey) {
   const checked = validateKeybindChange(keybinds, action, rawKey);
-  if (!checked.ok) return checked;
+  if (!checked.ok) {
+    logInfo("keybind", "setBlocked", { action, key: normalizeKey(rawKey), reason: checked.error });
+    return checked;
+  }
+  const previous = keybinds[action];
   keybinds[action] = checked.key;
   persistKeybinds();
+  logInfo("keybind", "set", { action, from: previous, to: checked.key });
   return checked;
 }
 
 export function resetKeybinds() {
   Object.assign(keybinds, DEFAULT_KEYBINDS);
   persistKeybinds();
+  logInfo("keybind", "reset", { binds: { ...keybinds } });
 }
 
 // 显示用标签：字母统一大写，F 键保持大写。
