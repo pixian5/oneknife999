@@ -3,6 +3,7 @@ import {
   COMMON_DROPS,
   TEST_MODE,
   FAST_FORWARD,
+  ABILITIES_ENABLED,
   ATTACK_SHAPES_ENABLED,
   PASSIVES_ENABLED,
   DEATH_EFFECTS_ENABLED,
@@ -125,8 +126,27 @@ import {
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
+import {
+  logDebug,
+  logInfo,
+  logWarn,
+  logError,
+  logThrottled,
+  logSample,
+  setLogContext,
+  installGlobalErrorHooks,
+  exposeLogConsole,
+  dumpLogs,
+  logsText,
+  logStats,
+  clearLogs,
+  loggerConfig,
+  configureLogger
+} from "./logger.js";
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
+// 0.8.7 构建版本：与仓库根目录 VERSION 文件保持同步，启动横幅会写进诊断日志。
+const BUILD_VERSION = "0.8.7";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -281,6 +301,23 @@ export function createEntities(map) {
 
 export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   const map = MAPS[mapId];
+  // 0.8.7：进图前后各一条 info。进图失败、坐标异常、首领血量丢失都能从上下文直接看出来。
+  if (!map) {
+    logError("map", "loadMissing", { mapId });
+    throw new Error(`未知地图：${mapId}`);
+  }
+  logInfo("map", "loadStart", {
+    mapId,
+    stage: map.stageNumber,
+    chapter: map.chapter,
+    keepBossHp,
+    silent: Boolean(silent),
+    spawn: { x: Math.round(spawnX), y: Math.round(spawnY) },
+    difficulty: map.difficulty || null,
+    boss: map.boss?.name || null,
+    bossAttack: map.boss?.attack ?? null,
+    bossHp: map.boss?.hp ?? null
+  });
   // 0.4.2 复活保留首领已损失生命：死亡复活会走 loadMap → createEntities，首领被重建为满血，
   // 玩家一次失误就要把整条首领血条重打一遍（难度探针的 0/1/5 死波动也源于此）。
   // 只在「同图复活」时记录并回填；换图与首次进入仍按满血刷新。
@@ -333,10 +370,21 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
     const progress = mapProgress(mapId);
     if (!progress.completed) log(`关卡目标：击败 <b>${progress.need} 只普通怪物</b>并击破<b>${MAP_CLEAR_RULES[mapId].boss}</b>。`, "loot");
   }
+  const bossEntity = state.entities.find((entity) => entity.boss);
+  logInfo("map", "loadReady", {
+    mapId,
+    entities: state.entities.length,
+    monsters: state.entities.filter((entity) => !entity.boss && !entity.friendly).length,
+    bossHp: bossEntity ? Math.round(bossEntity.hp) : null,
+    bossMaxHp: bossEntity ? Math.round(bossEntity.maxHp) : null,
+    playerHp: Math.round(state.player.hp),
+    playerMaxHp: playerMaxHp()
+  });
   renderAll();
 }
 
 export function chooseClass(classId) {
+  logInfo("boot", "chooseClass", { classId, name: CLASSES[classId]?.name || null });
   setState(createState(classId));
   // 0.4.3：仅新档开启三步引导。
   state.player.guideStep = 1;
@@ -367,17 +415,30 @@ export function findTarget() {
 
 export function selectTarget(entity) {
   // 召唤物是友军：点击不锁定，避免玩家普攻指向自己的骨卫。
-  if (entity?.friendly) return;
+  if (entity?.friendly) {
+    logDebug("input", "selectIgnored", { reason: "friendly", id: entity.id });
+    return;
+  }
   // 20 级前不能主动攻击玩家（docs/05 PK 保护）。
   if (entity?.npc && state.player.level < PK_RULES.minLevelToAttack) {
+    logDebug("input", "selectIgnored", { reason: "pkProtect", id: entity.id, level: state.player.level });
     showToast(`Lv.${PK_RULES.minLevelToAttack} 前不能主动攻击其他玩家（PK 保护）`);
     return;
   }
   state.player.targetId = entity ? entity.id : null;
   setMoveTarget(null);
   if (entity) {
+    logDebug("input", "selectTarget", {
+      id: entity.id,
+      name: entity.name,
+      boss: Boolean(entity.boss),
+      dist: Math.round(distance(state.player, entity)),
+      hp: Math.round(entity.hp)
+    });
     log(`锁定目标：<b>${entity.name}</b>${entity.boss ? ` · 阶段 ${entity.phase}/${activeMap().boss.phases}` : ""}`);
     showToast(`${entity.name} 已锁定，按 ${keyLabel("attack")} 或点击普攻攻击`);
+  } else {
+    logDebug("input", "clearTarget");
   }
   renderTarget();
 }
@@ -455,6 +516,17 @@ export function resolveDamage(target, multiplier, skillName, kind) {
   spark(target.x, target.y, hero.color, kind === "范围" ? 14 : 7);
   textAt(`${damage}`, target.x, floatYAboveNameplate(target, 6), kind === "爆发" ? "#e7b36b" : "#eff4ef", kind === "爆发" ? 18 : 13);
   if (skillName) log(`${skillName} 命中 <b>${target.name}</b>，造成 ${damage} 点伤害。`);
+  // 0.8.7：玩家输出按 8 次采样记一条，能看出「打不动」是伤害低、被盾吸收，还是被减伤被动吃掉。
+  logSample("player-hit", 8, "debug", "combat", "playerHit", {
+    target: target.id,
+    name: target.name,
+    kind,
+    damage,
+    mitigated: Math.max(0, rawDamage - damage),
+    hp: Math.round(target.hp),
+    maxHp: Math.round(target.maxHp),
+    crit: critical
+  });
   if (target.hp <= 0) defeat(target);
   return damage;
 }
@@ -469,23 +541,48 @@ export function nearestTargets(range, limit = 1) {
 export function normalAttack() {
   if (!state) return;
   const hero = activeHero();
-  if (state.player.attackTimer > 0) return;
+  // 0.8.7：普攻的每个「什么都不发生」分支都留痕——否则玩家反馈「攻击没反应」时无从判断。
+  if (state.player.attackTimer > 0) {
+    logThrottled("attack-cooldown", 400, "debug", "input", "attackBlocked", {
+      reason: "cooldown",
+      remain: Math.round(state.player.attackTimer * 100) / 100
+    });
+    return;
+  }
   const target = findTarget();
   if (!target) {
+    logThrottled("attack-notarget", 800, "debug", "input", "attackBlocked", { reason: "noTarget", range: hero.range });
     showToast("附近没有可攻击目标，点击地图移动或按 Space 搜索");
     return;
   }
   if (distance(state.player, target) > hero.range) {
     state.player.targetId = target.id;
     setMoveTarget({ x: target.x, y: target.y });
+    logThrottled("attack-outrange", 400, "debug", "input", "attackBlocked", {
+      reason: "outOfRange",
+      target: target.id,
+      dist: Math.round(distance(state.player, target)),
+      range: hero.range
+    });
     showToast(`正在接近 ${target.name}`);
     return;
   }
   const normalAttackCost = state.classId === "mage" ? 8 : 0;
   if (normalAttackCost > 0 && state.player.resource < normalAttackCost) {
+    logThrottled("attack-resource", 600, "debug", "input", "attackBlocked", {
+      reason: "noResource",
+      need: normalAttackCost,
+      have: Math.round(state.player.resource)
+    });
     showToast(`${hero.resourceName}不足，普攻需要 ${normalAttackCost} 点${hero.resourceName}`);
     return;
   }
+  logSample("normal-attack", 12, "debug", "combat", "attack", {
+    target: target.id,
+    name: target.name,
+    dist: Math.round(distance(state.player, target)),
+    resource: Math.round(state.player.resource)
+  });
   state.player.attackTimer = hero.cooldown;
   state.player.resource = clamp(
     state.player.resource + (state.classId === "warrior" ? 6 : state.classId === "taoist" ? 4 : -normalAttackCost),
@@ -499,19 +596,41 @@ export function castSkill(index) {
   if (!state) return;
   const hero = activeHero();
   const skill = hero.skills[index];
-  if (!skill || state.player.cooldowns[index] > 0) return;
+  if (!skill) {
+    logWarn("skill", "castMissing", { index, classId: state.classId });
+    return;
+  }
+  if (state.player.cooldowns[index] > 0) {
+    logThrottled(`skill-cd-${index}`, 400, "debug", "skill", "castBlocked", {
+      reason: "cooldown",
+      skill: skill.name,
+      remain: Math.round(state.player.cooldowns[index] * 100) / 100
+    });
+    return;
+  }
   // 0.6.0 P0 技能封锁（镇国符）：被封锁期间不能施法。
   if ((state.player.skillLock || 0) > 0) {
+    logThrottled("skill-lock", 600, "debug", "skill", "castBlocked", {
+      reason: "skillLock",
+      remain: Math.round(state.player.skillLock * 100) / 100
+    });
     showToast(`技能被封锁（剩余 ${state.player.skillLock.toFixed(1)} 秒）`);
     return;
   }
   if (state.player.resource < skill.cost) {
+    logThrottled(`skill-res-${index}`, 600, "debug", "skill", "castBlocked", {
+      reason: "noResource",
+      skill: skill.name,
+      need: skill.cost,
+      have: Math.round(state.player.resource)
+    });
     showToast(`${hero.resourceName}不足，击杀怪物或使用药水恢复`);
     return;
   }
   const target = findTarget();
   // 生息法阵（0.3.4）：在脚下展开 4 秒持续回复区，每秒回 8% 最大生命，离开立即失效。
   if (skill.kind === "治疗") {
+    logInfo("skill", "cast", { skill: skill.name, kind: skill.kind, hp: Math.round(state.player.hp), maxHp: playerMaxHp() });
     state.player.resource -= skill.cost;
     state.player.cooldowns[index] = skill.cd;
     state.healZones = [
@@ -532,14 +651,29 @@ export function castSkill(index) {
     return;
   }
   if (!target) {
+    logThrottled("skill-notarget", 800, "debug", "skill", "castBlocked", { reason: "noTarget", skill: skill.name });
     showToast("先锁定一个目标");
     return;
   }
   if (distance(state.player, target) > skill.range) {
     setMoveTarget({ x: target.x, y: target.y });
+    logThrottled("skill-outrange", 500, "debug", "skill", "castBlocked", {
+      reason: "outOfRange",
+      skill: skill.name,
+      dist: Math.round(distance(state.player, target)),
+      range: skill.range
+    });
     showToast(`正在进入 ${skill.name} 的施法距离`);
     return;
   }
+  logInfo("skill", "cast", {
+    skill: skill.name,
+    kind: skill.kind,
+    target: target.id,
+    targetName: target.name,
+    dist: Math.round(distance(state.player, target)),
+    resource: Math.round(state.player.resource - skill.cost)
+  });
   state.player.resource -= skill.cost;
   state.player.cooldowns[index] = skill.cd;
   // 0.6.0 P1：施法动作帧窗口（cast 动作在 render 里按 castTimer > 0 选取）。
@@ -622,14 +756,23 @@ export function castSkill(index) {
 
 export function oneMoment() {
   if (!state || state.player.charge < 100) {
+    logThrottled("onemoment-charge", 800, "debug", "skill", "burstBlocked", {
+      reason: "noCharge",
+      charge: Math.round(state.player.charge || 0)
+    });
     showToast("破势槽未满，先用职业行为积累一刀时刻");
     return;
   }
   const target = findTarget();
   if (!target || distance(state.player, target) > 330) {
+    logThrottled("onemoment-target", 800, "debug", "skill", "burstBlocked", {
+      reason: "noTarget",
+      dist: target ? Math.round(distance(state.player, target)) : null
+    });
     showToast("锁定一个目标再释放一刀时刻");
     return;
   }
+  logInfo("skill", "oneMoment", { target: target.id, name: target.name, classId: state.classId });
   state.player.charge = 0;
   const firstDisplay = !state.player.oneMomentUsed;
   state.player.oneMomentUsed = true;
@@ -754,6 +897,18 @@ export function defeat(target) {
   }
   spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
   const dropRolls = rollDropCount(target);
+  // 0.8.7：击杀结算写日志——「为什么经验 / 金币没涨」时可直接对照 reward 与难度加成。
+  logInfo("combat", "kill", {
+    target: target.id,
+    name: target.name,
+    boss: Boolean(target.boss),
+    exp: reward.expGain,
+    gold: target.gold,
+    marks: reward.marksGain,
+    difficulty: difficulty.id || state.difficulty || "normal",
+    level: state.player.level,
+    drops: dropRolls
+  });
   for (let roll = 0; roll < dropRolls; roll += 1) spawnDrop(target, roll);
   const mapJustCompleted = checkMapCompletion();
   if (mapJustCompleted) autoSaveProgress(activeMap().name);
@@ -808,6 +963,16 @@ export function spawnDrop(source, roll = 0) {
     item.quality = upgradeQuality(item.quality, difficulty.qualityBonus);
   }
   state.drops.push(item);
+  // 0.8.7：掉落生成只记 debug，避免每只怪都刷 info；带来源、品质、槽位与战力。
+  logDebug("drop", "spawn", {
+    from: source.name,
+    item: item.name,
+    quality: item.quality || null,
+    slot: item.slot || null,
+    power: item.power ?? null,
+    roll,
+    groundDrops: state.drops.length
+  });
   // 0.4.4：自动拾取上线后只有装备需要按 F，消耗品 / 货币 / 材料走近即自动入账，文案按类型区分。
   log(
     `${source.name} 掉落 <b style="color:${item.color}">${item.name}</b>，${isEquipmentDrop(item) ? "靠近后按 F 拾取" : "走近后自动拾取"}。`,
@@ -834,6 +999,7 @@ export function activateSitePoint(point) {
   spark(point.x, point.y, "#b99bea", 22);
   textAt("已激活", point.x, point.y - 30, "#d8c5ff", 14);
   log("<b>" + point.name + "</b>已激活：" + result + "。", "loot");
+  logInfo("map", "siteActivated", { point: point.name, effect: point.effect, result });
   showToast(point.name + "：" + result);
   persistGame();
   renderAll();
@@ -856,6 +1022,7 @@ export function autoPickupPass() {
     } else Object.assign(state.player, pickup.patch);
   }
   sfx.pickup();
+  logInfo("drop", "autoPickup", { count: nearby.length, items: nearby.map((drop) => drop.name) });
   log(`自动拾取 ${nearby.length} 件消耗品 / 材料 / 货币（装备仍需按 F）。`, "loot");
   advanceGuide(99);
   persistGame();
@@ -911,6 +1078,14 @@ export function collectDrops() {
       toggleShop();
       return;
     }
+    // 0.8.7：拾取失败的现场（附近掉落数、背包格数、是否在城镇）写日志，
+    // 排查「按 F 没反应」时不必再复现操作。
+    logDebug("drop", "collectMiss", {
+      groundDrops: state.drops.length,
+      inventory: (state.inventory || []).length,
+      nearestDrop: state.drops.length ? Math.round(Math.min(...state.drops.map((drop) => distance(state.player, drop)))) : null,
+      inTown: nearTown()
+    });
     showToast(cache ? "秘藏补给箱已被搜索" : "附近没有可拾取物品");
     return;
   }
@@ -947,6 +1122,13 @@ export function collectDrops() {
   });
   if (!collected) showToast("背包已满，装备仍保留在地面");
   if (collected) {
+    logInfo("drop", "collect", {
+      count: collected,
+      items: nearby.map((drop) => drop.name),
+      inventory: state.inventory.length,
+      gold: state.player.gold,
+      potion: state.player.potion
+    });
     advanceGuide(99);
     persistGame();
   }
@@ -968,6 +1150,13 @@ export function equipItem(item) {
     `穿戴 <b style="color:${item.color}">${item.name}</b>，有效战力 ${effectiveItemPower(item)}${item.affixes?.length ? `（含 ${item.affixes.length} 条词缀）` : ""}。`,
     "loot"
   );
+  logInfo("equipment", "equip", {
+    slot: item.slot,
+    item: item.name,
+    power: effectiveItemPower(item),
+    replaced: previous?.name || null,
+    affixes: item.affixes?.length || 0
+  });
   showToast(`${item.name} 已装备，死亡掉落资格仍按绑定与区域规则判定`);
   persistGame();
   renderAll();
@@ -993,6 +1182,13 @@ export function syncCampaignGrowth(silent = false) {
     state.player.resource = activeHero().resource;
     sfx.levelup();
     log(`<b>等级提升</b>：百图历练达到 Lv.${growth.level}，当前阶段每 ${growth.mapsPerLevel} 张地图提升一级，技能点 +1。`, "loot");
+    logInfo("level", "up", {
+      from: previousLevel,
+      to: growth.level,
+      completedMaps,
+      mapsPerLevel: growth.mapsPerLevel,
+      skillPoints: state.player.skillPoints
+    });
     showToast(`升级成功：Lv.${growth.level}（技能点 +1，按 K 打开技能）`);
   }
 }
@@ -1045,6 +1241,18 @@ export function applyOnHitPassives(attacker, damage) {
     const cap = PASSIVE_PARAMS.rageStack.max;
     attacker.rageStacks = Math.min(cap, (attacker.rageStacks || 0) + 1);
   }
+  // 0.8.7：记录触发后的最终状态（中毒层数 / 减速 / 致盲 / 封锁 / 攻速层），
+  // 按 10 次采样，既能看到「被控住」的现场，又不会刷爆缓冲。
+  logSample(`passive-${attacker.id}`, 10, "debug", "combat", "passiveHit", {
+    attacker: attacker.id,
+    passives: passives.map((passive) => passive.id),
+    poison: state.player.poison || 0,
+    slow: Boolean(state.player.slowTimer > 0),
+    blind: Boolean(state.player.blindTimer > 0),
+    potionLock: Math.round((state.player.potionLock || 0) * 10) / 10,
+    skillLock: Math.round((state.player.skillLock || 0) * 10) / 10,
+    rage: attacker.rageStacks || 0
+  });
 }
 
 // 击退玩家（冲锋 / 击退形态）：沿怪物→玩家方向推开，落地后夹在地图内。
@@ -1131,6 +1339,17 @@ export function playerDamage(dt) {
         state.player.hp = Math.max(0, state.player.hp - total);
         // 0.8.6：按来源累计承伤，探针据此给出「普通怪 / 首领本体」的占比。
         recordDamage("monster", total);
+        // 0.8.7：每 5 次怪物命中采样一条，带形态 / 段数 / 承伤前后血量，定位「为什么突然暴毙」。
+        logSample("monster-hit", 5, "debug", "combat", "monsterHit", {
+          attacker: attacker.id,
+          name: attacker.name,
+          boss: Boolean(attacker.boss),
+          shape: shape.id || attacker.abilities?.attack || "normal",
+          damage: total,
+          hits,
+          hp: Math.round(state.player.hp),
+          maxHp: Math.round(playerMax)
+        });
         // 0.7.6 诊断：记录最近一次伤害来源，死亡时它就是「致死怪」。
         // 只服务难度探针的死因统计，不参与结算，也不写入存档。
         state.player.lastKiller = attacker.name;
@@ -1175,6 +1394,14 @@ export function playerDamage(dt) {
       state.hazardStats = state.hazardStats || { detonated: 0, hit: 0 };
       state.hazardStats.detonated += 1;
       recordHazard(h.kind || "other", "detonated", 1);
+      // 0.8.7：每 5 次引爆采样一条，带玩家与圈心的距离，命中/落空的现场一目了然。
+      logSample("hazard-detonate", 5, "debug", "hazard", "detonate", {
+        kind: h.kind || "other",
+        radius: h.r,
+        damage: h.damage,
+        playerDistance: Math.round(distance(state.player, h)),
+        invulnerable: state.player.invulnerable > 0
+      });
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
         state.hazardStats.hit += 1;
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
@@ -1184,6 +1411,12 @@ export function playerDamage(dt) {
         recordDamage("hazard", amount);
         recordHazard(h.kind || "other", "hit", 1);
         recordHazard(h.kind || "other", "damage", amount);
+        logDebug("hazard", "hit", {
+          kind: h.kind || "other",
+          amount,
+          hp: Math.round(state.player.hp),
+          poison: state.player.poison || 0
+        });
         if (state.player.hp <= 0) state.player.lastKiller = "地面危险区";
         textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
@@ -1202,6 +1435,11 @@ export function playerDamage(dt) {
       const amount = state.player.poison * 4;
       state.player.hp = Math.max(0, state.player.hp - amount);
       recordDamage("poison", amount);
+      logSample("poison-tick", 6, "debug", "combat", "poisonTick", {
+        stacks: state.player.poison,
+        amount,
+        hp: Math.round(state.player.hp)
+      });
       if (state.player.hp <= 0) state.player.lastKiller = "中毒";
       textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 12);
     }
@@ -1244,6 +1482,8 @@ export function die() {
     level: state.player.level
   });
   if (state.diagnostics.deaths.length > 20) state.diagnostics.deaths.shift();
+  // 0.8.7：死亡上下文同时写日志，dump 时不用再去翻 diagnostics 结构。
+  logWarn("death", "player", state.diagnostics.deaths[state.diagnostics.deaths.length - 1]);
   sfx.death();
   // 红名死亡爆装（docs/05：掉落是地面实体，保护期后可拾取；单机原型即跑尸拾回）。
   // 0.4.4 修复 P2：此前 push 进 drops 后被下方 loadMap 的场景重置（state.drops = []）清空，
@@ -1314,6 +1554,13 @@ export function tryTravel(exit) {
     if (progress.kills < progress.need) missing.push(`再击败 ${progress.need - progress.kills} 只普通怪物`);
     if (!progress.bossDefeated) missing.push(`击败 ${rule.boss}`);
     const message = `前进出口尚未开启：${missing.join("，")}`;
+    logThrottled("travel-locked", 1000, "info", "travel", "blocked", {
+      from: state.currentMapId,
+      to: exit.target,
+      kills: progress.kills,
+      need: progress.need,
+      bossDefeated: Boolean(progress.bossDefeated)
+    });
     showToast(message);
     log(message, "warn");
     state.player.x = exit.x < activeMap().width / 2 ? exit.x + exit.w + 70 : exit.x - 70;
@@ -1323,6 +1570,12 @@ export function tryTravel(exit) {
   if (state.player.level < target.levelMin - 2) {
     // 低等级进入高压图：游戏内确认弹层（替代阻塞主线程的 window.confirm）。
     pendingTravel = exit;
+    logInfo("travel", "confirmOpen", {
+      from: state.currentMapId,
+      to: exit.target,
+      level: state.player.level,
+      targetLevelMin: target.levelMin
+    });
     renderTravelConfirm({ exit, target });
     return;
   }
@@ -1332,6 +1585,13 @@ export function tryTravel(exit) {
 function doTravel(exit, target) {
   pendingTravel = null;
   sfx.travel();
+  logInfo("travel", "enter", {
+    from: state.currentMapId,
+    to: exit.target,
+    name: target.name,
+    stage: target.stageNumber,
+    spawn: { x: Math.round(exit.spawn.x), y: Math.round(exit.spawn.y) }
+  });
   log(`通过出口前往 <b>${target.name}</b>……`, "loot");
   loadMap(exit.target, exit.spawn.x, exit.spawn.y);
 }
@@ -1339,12 +1599,14 @@ function doTravel(exit, target) {
 export function confirmTravel() {
   if (!pendingTravel) return;
   const exit = pendingTravel;
+  logInfo("travel", "confirmAccept", { to: exit.target, level: state.player.level });
   doTravel(exit, MAPS[exit.target]);
 }
 
 export function cancelTravel() {
   if (!pendingTravel) return;
   const exit = pendingTravel;
+  logInfo("travel", "confirmCancel", { to: exit.target });
   pendingTravel = null;
   renderTravelConfirm(null);
   // 把玩家弹回安全方向
@@ -1508,6 +1770,15 @@ export function updateBoss(boss, dt) {
     // 0.8.6 诊断日志：阶段切换是难度突变点（特殊技能从此刻开始），记下触发时的血量比例，
     // 便于把「死亡集中在二阶段」与「阶段触发太早」区分开。
     if (TEST_MODE) console.info(`[boss] ${boss.id} phase=${newPhase} hpRatio=${Math.round(hpRatio * 100)}%`);
+    logInfo("boss", "phase", {
+      boss: boss.id,
+      name: boss.name,
+      phase: newPhase,
+      hpRatio: Math.round(hpRatio * 100),
+      specialInterval: def.specialInterval,
+      hazardMult: map.difficulty?.hazardMult || 1,
+      attackMult: map.difficulty?.attackMult || 1
+    });
     showToast(`${boss.name} 阶段 ${newPhase}：${phaseName}`);
     spark(boss.x, boss.y, "#e7b36b", 24);
     // 0.4.6 换阶段震屏 + 红色炸点，增强 Boss 战气势
@@ -1537,6 +1808,13 @@ export function updateBoss(boss, dt) {
           })
         );
         log(`<b>${boss.name}</b> 召唤了一只 ${type.name}。`, "warn");
+        logInfo("boss", "summon", {
+          boss: boss.id,
+          mob: type.name,
+          aliveMobs,
+          summonMax: def.summonMax,
+          bossPhase: boss.phase
+        });
         spark(boss.x + 60, boss.y, "#7a5a3a", 8);
       }
     }
@@ -1581,6 +1859,15 @@ export function spawnHazard(boss) {
   state.hazards.push(target);
   state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
   recordHazard(target.kind, "spawned", 1);
+  logDebug("hazard", "spawn", {
+    kind: target.kind,
+    x: Math.round(target.x),
+    y: Math.round(target.y),
+    radius,
+    damage,
+    bossPhase: boss.phase,
+    playerDistance: Math.round(distance(state.player, target))
+  });
   if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
 }
 
@@ -1667,20 +1954,33 @@ export function update(dt) {
 }
 
 export function autoSaveProgress(mapName) {
-  if (!persistGame()) return;
+  const saved = persistGame();
+  logInfo("save", "autosave", { mapName, ok: saved, map: state.currentMapId });
+  if (!saved) {
+    logWarn("save", "autosaveFailed", { mapName });
+    return;
+  }
   log(`<b>${mapName}通关进度已自动保存</b>：刷新或任务中断后会从当前地图恢复。`, "loot");
   showToast(`${mapName}已通关并自动保存`);
 }
 
 export function saveGame() {
-  if (!persistGame()) return;
+  const saved = persistGame();
+  logInfo("save", "manual", { ok: saved, map: state.currentMapId, level: state.player.level });
+  if (!saved) {
+    logWarn("save", "manualFailed", { map: state.currentMapId });
+    return;
+  }
   showToast("进度已保存在本机浏览器");
   log("进度已保存：下次打开可继续当前职业、装备与地图通关状态。", "loot");
 }
 export function loadGame() {
   try {
     const restored = readSavedGame();
-    if (!restored) return false;
+    if (!restored) {
+      logInfo("save", "loadSkipped", { reason: "noValidSave" });
+      return false;
+    }
     const { saved, migrated, fromVersion } = restored;
     setState(createState(saved.classId));
     Object.assign(state.player, saved.player);
@@ -1702,6 +2002,16 @@ export function loadGame() {
     if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
     syncCampaignGrowth(true);
     const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
+    logInfo("save", "loadReady", {
+      fromVersion,
+      migrated,
+      classId: state.classId,
+      level: state.player.level,
+      map: startMap,
+      inventory: state.inventory.length,
+      difficulty: state.difficulty,
+      clearedMaps: MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length
+    });
     loadMap(startMap, state.player.x || 480, state.player.y || 780, true);
     $("classModal").classList.add("hidden");
     if (migrated) {
@@ -1711,11 +2021,20 @@ export function loadGame() {
     return true;
   } catch (error) {
     // 存档损坏时回退到职业选择，但要留下诊断线索而不是静默吞掉。
+    logError("save", "loadFailed", {
+      message: String(error && error.message ? error.message : error),
+      stack: String((error && error.stack) || "").slice(0, 400)
+    });
     console.warn("[oneknife999] 存档读取失败，已回退到新档：", error);
     return false;
   }
 }
 export function resetGame() {
+  logWarn("save", "reset", {
+    map: state?.currentMapId || null,
+    classId: state?.classId || null,
+    level: state?.player?.level || null
+  });
   clearStorage();
   setState(null);
   $("classModal").classList.remove("hidden");
@@ -1736,22 +2055,36 @@ export function setupClasses() {
 
 export function usePotion() {
   if (!state || state.player.potion <= 0) {
+    logThrottled("potion-empty", 600, "debug", "item", "potionBlocked", { reason: "noPotion" });
     showToast("生命药水已用完");
     return;
   }
   // 0.6.0 P0 药水封锁（名册封锁）：被封锁期间不能喝药。
   if ((state.player.potionLock || 0) > 0) {
+    logThrottled("potion-lock", 600, "debug", "item", "potionBlocked", {
+      reason: "potionLock",
+      remain: Math.round(state.player.potionLock * 100) / 100
+    });
     showToast(`药水回复被封锁（剩余 ${state.player.potionLock.toFixed(1)} 秒）`);
     return;
   }
   const maxHp = playerMaxHp();
   if (state.player.hp >= maxHp) {
+    logThrottled("potion-full", 600, "debug", "item", "potionBlocked", { reason: "hpFull", hp: Math.round(state.player.hp), maxHp });
     showToast("生命值已满");
     return;
   }
   state.player.potion -= 1;
   const restore = Math.round(maxHp * 0.32);
+  const before = state.player.hp;
   state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
+  logInfo("item", "potion", {
+    hpBefore: Math.round(before),
+    hpAfter: Math.round(state.player.hp),
+    maxHp,
+    restored: Math.round(state.player.hp - before),
+    left: state.player.potion
+  });
   sfx.potion();
   textAt(`+${restore}`, state.player.x, floatYAbovePlayer(6), "#78b6ec", 15);
   log(`使用生命药水，恢复 ${restore} 点生命。`);
@@ -1763,11 +2096,20 @@ export function enhanceItem(slotKey) {
   if (!state) return;
   const item = state.player.equipment?.[slotKey];
   if (!item) {
+    logDebug("equipment", "enhanceBlocked", { reason: "emptySlot", slot: slotKey });
     showToast("该部位没有穿戴装备");
     return;
   }
   const quote = enhanceQuote(item, state.player.gold, state.inventory || []);
   if (!quote.canEnhance) {
+    logInfo("equipment", "enhanceBlocked", {
+      reason: quote.reason,
+      slot: slotKey,
+      item: item.name,
+      enhance: item.enhance || 0,
+      gold: state.player.gold,
+      cost: quote.cost ?? null
+    });
     showToast(quote.reason);
     return;
   }
@@ -1784,6 +2126,15 @@ export function enhanceItem(slotKey) {
   if (success) {
     item.enhance = (item.enhance || 0) + 1;
     item.blessing = 0;
+    logInfo("equipment", "enhanceSuccess", {
+      slot: slotKey,
+      item: item.name,
+      enhance: item.enhance,
+      power: effectiveItemPower(item),
+      cost: quote.cost,
+      rate: quote.rate,
+      goldLeft: state.player.gold
+    });
     sfx.enhanceSuccess();
     log(`强化成功：<b style="color:${item.color}">${item.name} +${item.enhance}</b>，有效战力 ${effectiveItemPower(item)}。`, "loot");
     showToast(`${item.name} 强化至 +${item.enhance}`);
@@ -1791,6 +2142,16 @@ export function enhanceItem(slotKey) {
     const target = (item.enhance || 0) + 1;
     const tier = ENHANCE_RULES.rates.find((rule) => target >= rule.from && target <= rule.to);
     if (target >= 10) item.blessing = Math.min(100, (item.blessing || 0) + (tier?.blessingOnFail || 0));
+    logInfo("equipment", "enhanceFail", {
+      slot: slotKey,
+      item: item.name,
+      enhance: item.enhance || 0,
+      target,
+      rate: quote.rate,
+      blessing: item.blessing || 0,
+      cost: quote.cost,
+      goldLeft: state.player.gold
+    });
     sfx.enhanceFail();
     log(
       `强化失败：${item.name} 保持 +${item.enhance || 0}${item.blessing ? `，祝福值 ${item.blessing}%` : "（不降级、不销毁）"}。`,
@@ -1808,6 +2169,7 @@ export function enhanceItem(slotKey) {
 export function salvageItem(itemId) {
   const item = (state.inventory || []).find((entry) => entry.id === itemId);
   if (!item || item.slot === "material" || item.slot === "consumable" || item.slot === "currency") {
+    logInfo("equipment", "salvageBlocked", { itemId, found: Boolean(item), slot: item?.slot || null });
     showToast("该物品不能拆解");
     return;
   }
@@ -1818,6 +2180,14 @@ export function salvageItem(itemId) {
     else state.inventory = stackMaterial(state.inventory, reward);
   }
   const gold = rewards.find((reward) => reward.kind === "gold")?.amount || 0;
+  logInfo("equipment", "salvage", {
+    itemId,
+    name: item.name,
+    slot: item.slot,
+    power: item.power,
+    gold,
+    materials: rewards.filter((reward) => reward.kind !== "gold").map((reward) => reward.name)
+  });
   sfx.salvage();
   log(`拆解 <b style="color:${item.color}">${item.name}</b>：返还 1 黑铁矿石与 ${gold} 金币。`, "loot");
   showToast(`${item.name} 已拆解，获得基础材料与 ${gold} 金币`);
@@ -1833,6 +2203,7 @@ export function enterAbyss() {
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
   const progress = abyssProgress({ clearedMaps: cleared, bestFloor: state.abyssBest || 0 });
   if (!progress.unlocked) {
+    logInfo("abyss", "blocked", { reason: "locked", cleared });
     showToast(`无尽深层需通关百图后解锁（当前 ${cleared}/100）`);
     return;
   }
@@ -1843,6 +2214,14 @@ export function enterAbyss() {
   const mapId = MAP_ORDER[(floor * 37) % MAP_ORDER.length];
   const map = MAPS[mapId];
   const spawn = { x: map.townRect.x + map.townRect.w / 2, y: map.townRect.y + map.townRect.h / 2 };
+  logInfo("abyss", "enter", {
+    floor,
+    mapId,
+    best: state.abyssBest,
+    bossFloor: isAbyssBossFloor(floor),
+    level: state.player.level,
+    cleared
+  });
   loadMap(mapId, spawn.x, spawn.y, true);
   const bossFloor = isAbyssBossFloor(floor);
   log(
@@ -1861,11 +2240,18 @@ export function cycleDifficulty() {
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
   const unlocked = unlockedDifficulties(cleared);
   if (unlocked.length <= 1) {
+    logInfo("difficulty", "blocked", { reason: "locked", cleared, unlocked: unlocked.length });
     showToast(`难度需通关百图后解锁（当前 ${cleared}/100）`);
     return;
   }
   const currentIndex = unlocked.findIndex((tier) => tier.id === (state.difficulty || "normal"));
   const next = unlocked[(currentIndex + 1) % unlocked.length];
+  logInfo("difficulty", "switch", {
+    from: state.difficulty || "normal",
+    to: next.id,
+    cleared,
+    unlocked: unlocked.map((tier) => tier.id)
+  });
   state.difficulty = next.id;
   log(`<b>难度切换</b>：${next.label} —— ${next.desc}。`, "warn");
   showToast(`难度已切换为「${next.label}」`);
@@ -1880,10 +2266,12 @@ export function cycleDifficulty() {
 export function toggleShop() {
   if (!state) return;
   if (!nearTown()) {
+    logDebug("shop", "blocked", { reason: "notInTown", map: state.currentMapId });
     showToast("需要回到城镇才能与杂货商交易");
     return;
   }
   state.shopOpen = !state.shopOpen;
+  logInfo("shop", "toggle", { open: state.shopOpen, gold: state.player.gold });
   renderAll();
   if (state.shopOpen) showToast("杂货商：可用金币购买药水、材料与词缀重铸卷");
 }
@@ -1891,6 +2279,7 @@ export function toggleShop() {
 export function closeShop() {
   if (!state?.shopOpen) return;
   state.shopOpen = false;
+  logDebug("shop", "close");
   renderAll();
 }
 
@@ -1899,12 +2288,14 @@ export function buyGoods(goodId) {
   if (!state) return;
   if (!nearTown()) {
     state.shopOpen = false;
+    logDebug("shop", "buyBlocked", { reason: "notInTown", goodId });
     showToast("离开城镇后杂货商不再营业");
     renderAll();
     return;
   }
   const purchase = buyShopItem(goodId, { gold: state.player.gold });
   if (!purchase.ok) {
+    logInfo("shop", "buyBlocked", { reason: purchase.reason, goodId, gold: state.player.gold });
     showToast(purchase.reason);
     return;
   }
@@ -1922,6 +2313,7 @@ export function buyGoods(goodId) {
       : good.effect === "scroll"
         ? `词缀重铸卷 ×${state.player.reforgeScroll || 0}`
         : `黑铁矿石 ×${(state.inventory || []).find((entry) => entry.slot === "material" && entry.name === BASIC_MATERIAL.name)?.count || 1}`;
+  logInfo("shop", "buy", { goodId, good: good.name, price: purchase.price, owned, goldLeft: state.player.gold });
   sfx.pickup();
   log(`杂货商：花费 ${purchase.price} 金币购买 <b>${good.name}</b>，当前${owned}。`, "loot");
   showToast(`${good.name} 已购买，剩余金币 ${state.player.gold}`);
@@ -1942,6 +2334,14 @@ export function reforgeEquipped(slotKey) {
     lockIndex: lockActive ? lockIndex : null
   });
   if (!quote.canReforge) {
+    logInfo("equipment", "reforgeBlocked", {
+      reason: quote.reason,
+      slot: slotKey,
+      item: item?.name || null,
+      gold: state.player.gold,
+      scrolls: state.player.reforgeScroll || 0,
+      lockActive
+    });
     showToast(quote.reason);
     return;
   }
@@ -1958,6 +2358,17 @@ export function reforgeEquipped(slotKey) {
   textAt(`重铸 ${describe(result.newAffix)}`, state.player.x, floatYAbovePlayer(8), "#a88ce3", 14);
   const transition =
     result.index >= 0 ? `${describe(result.oldAffix)} → ${describe(result.newAffix)}` : `新附 ${describe(result.newAffix)}`;
+  logInfo("equipment", "reforge", {
+    slot: slotKey,
+    item: item.name,
+    index: result.index,
+    oldAffix: result.oldAffix || null,
+    newAffix: result.newAffix || null,
+    locked: lockActive,
+    cost: quote.cost,
+    scrolls: quote.scrollNeeded,
+    goldLeft: state.player.gold
+  });
   log(
     `词缀重铸：<b style="color:${item.color}">${item.name}</b> ${transition}，消耗 ${quote.cost} 金币与 ${quote.scrollNeeded} 张词缀重铸卷。`,
     "loot"
@@ -1972,6 +2383,7 @@ export function toggleReforgeLock(slotKey, affixIndex) {
   if (!state) return;
   const item = state.player.equipment?.[slotKey];
   if (!item || (item.affixes?.length || 0) < 2) {
+    logDebug("equipment", "lockBlocked", { slot: slotKey, item: item?.name || null, affixes: item?.affixes?.length || 0 });
     showToast("至少 2 条词缀才能锁定重铸");
     return;
   }
@@ -1981,6 +2393,7 @@ export function toggleReforgeLock(slotKey, affixIndex) {
   else state.reforgeLocks[slotKey] = affixIndex;
   const affix = item.affixes[affixIndex];
   const locked = state.reforgeLocks[slotKey] === affixIndex;
+  logInfo("equipment", "reforgeLock", { slot: slotKey, item: item.name, affix: affix.label, index: affixIndex, locked });
   showToast(locked ? `已锁定「${affix.label} +${affix.value}」：重铸保留它，报价 ×1.8` : `已解锁「${affix.label}」`);
   renderAll();
 }
@@ -1989,18 +2402,31 @@ export function toggleReforgeLock(slotKey, affixIndex) {
 export function upgradeSkill(index) {
   if (!state) return;
   const skill = activeHero().skills[index];
-  if (!skill) return;
+  if (!skill) {
+    logWarn("skill", "upgradeMissing", { index, classId: state.classId });
+    return;
+  }
   const level = state.player.skillLevels?.[index] || 0;
   if (level >= SKILL_UPGRADE.maxLevel) {
+    logInfo("skill", "upgradeBlocked", { reason: "maxLevel", skill: skill.name, level });
     showToast("该技能已达原型上限");
     return;
   }
   if ((state.player.skillPoints || 0) < 1) {
+    logInfo("skill", "upgradeBlocked", { reason: "noPoints", skill: skill.name, level, points: state.player.skillPoints || 0 });
     showToast("技能点不足：升级自动获得");
     return;
   }
   state.player.skillPoints -= 1;
   state.player.skillLevels[index] = level + 1;
+  logInfo("skill", "upgrade", {
+    skill: skill.name,
+    index,
+    from: level,
+    to: level + 1,
+    multiplier: skill.damage * (1 + SKILL_UPGRADE.multiplierPerLevel * (level + 1)),
+    pointsLeft: state.player.skillPoints
+  });
   sfx.skillUp();
   persistGame();
   log(`<b>${skill.name}</b> 升至 ${level + 1} 级：技能倍率 +${Math.round(SKILL_UPGRADE.multiplierPerLevel * 100)}%。`, "loot");
@@ -2009,12 +2435,17 @@ export function upgradeSkill(index) {
 
 // 导出存档为 JSON 文件（换设备 / 备份）。
 export function exportSave() {
-  if (!persistGame()) return;
+  if (!persistGame()) {
+    logWarn("save", "exportBlocked", { reason: "persistFailed" });
+    return;
+  }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
+    logWarn("save", "exportBlocked", { reason: "noData" });
     showToast("没有可导出的存档");
     return;
   }
+  logInfo("save", "export", { bytes: raw.length, version: CURRENT_SAVE_VERSION, map: state.currentMapId });
   const blob = new Blob([raw], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -2035,18 +2466,43 @@ export function importSave(file) {
       // 0.4.4：导入是唯一外部存档入口，先净化再落盘——物品的字符串字段会拼进渲染层
       // innerHTML / title / style，剥除危险字符并校验数值后才允许写入 localStorage。
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeSavedGame(parsed)));
+      logInfo("save", "import", {
+        bytes: String(reader.result).length,
+        classId: parsed.classId,
+        level: parsed.player?.level ?? null,
+        map: parsed.currentMapId || null
+      });
       showToast("存档已导入，正在刷新……");
       setTimeout(() => window.location.reload(), 400);
-    } catch {
+    } catch (error) {
+      logWarn("save", "importFailed", { message: String(error && error.message ? error.message : error) });
       showToast("导入失败：不是有效的存档文件");
     }
   };
   reader.readAsText(file);
 }
 
+// 0.8.7 帧计数：慢帧告警与日志上下文（每条日志自动带「第几帧」）都依赖它。
+let frameCount = 0;
+let slowFrameCount = 0;
+
 function frame(timestamp) {
   const dt = Math.min((timestamp - lastTime) / 1000 || 0, 0.05);
   lastTime = timestamp;
+  frameCount += 1;
+  // 单帧超过 100ms（卡顿级）按 1 秒节流记一条 warn，并累计次数；
+  // 排查「越玩越卡」时先看 slowFrame 的分布，再对照 update 内的实体数。
+  if (dt > 0.1) {
+    slowFrameCount += 1;
+    logThrottled("slow-frame", 1000, "warn", "perf", "slowFrame", {
+      dtMs: Math.round(dt * 1000),
+      frame: frameCount,
+      slowTotal: slowFrameCount,
+      entities: state?.entities?.length ?? 0,
+      particles: state?.particles?.length ?? 0,
+      drops: state?.drops?.length ?? 0
+    });
+  }
   update(dt);
   requestAnimationFrame(frame);
 }
@@ -2191,7 +2647,14 @@ if (TEST_MODE) {
               logs: state.logs.slice(-6).map((entry) => entry.message)
             })
           )
-        : null
+        : null,
+    // 0.8.7：e2e / 探针可直接读取结构化诊断日志，失败时不用再靠截图猜现场。
+    logs: (options) => dumpLogs(options),
+    logsText: (options) => logsText(options),
+    logStats: () => logStats(),
+    clearLogs: () => clearLogs(),
+    logConfig: () => loggerConfig(),
+    configureLog: (options) => configureLogger(options)
   };
 }
 setupClasses();
@@ -2199,7 +2662,35 @@ setupInput();
 resizeCanvas();
 // iOS 工具栏收展 / 窗口拖拽会触发 resize 事件风暴，用 rAF 合并到每帧最多一次重建画布。
 window.addEventListener("resize", () => scheduleResize());
+// 0.8.7 日志基础设施收尾：上下文注入 → 异常兜底 → 浏览器调试入口 → 启动横幅。
+// 顺序很重要：上下文先注入，后续所有日志（包括异常与启动横幅）都会自动带地图/关卡/职业/血量。
+setLogContext(() => {
+  if (!state) return { boot: true, frame: frameCount };
+  return {
+    map: state.currentMapId,
+    stage: MAP_CLEAR_RULES[state.currentMapId]?.stageNumber ?? null,
+    cls: state.classId,
+    lv: state.player.level,
+    hp: Math.round(state.player.hp),
+    maxHp: playerMaxHp(),
+    frame: frameCount,
+    abyss: state.abyssFloor || 0,
+    diff: state.difficulty || "normal"
+  };
+});
+installGlobalErrorHooks();
+exposeLogConsole();
+logInfo("boot", "ready", {
+  version: BUILD_VERSION,
+  testMode: TEST_MODE,
+  fastForward: FAST_FORWARD,
+  abilities: ABILITIES_ENABLED,
+  logLevel: loggerConfig().level,
+  logCapacity: loggerConfig().capacity,
+  maps: MAP_ORDER.length
+});
 if (!loadGame()) {
   $("classModal").classList.remove("hidden");
+  logInfo("boot", "chooseClassPrompt");
 }
 requestAnimationFrame(frame);

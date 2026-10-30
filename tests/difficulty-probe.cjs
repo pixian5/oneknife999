@@ -486,8 +486,8 @@ function installSeed(page, seed) {
 
 async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1, arm = "baseline") {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
   try {
-    const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     if (PROBE_SEED !== null) await installSeed(page, PROBE_SEED + run - 1);
@@ -496,6 +496,18 @@ async function runStageInFreshPage(browser, stage, run = 1, runTotal = 1, arm = 
     const result = await probeStage(page, stage, run, runTotal, arm);
     if (errors.length) throw new Error(`第 ${stage.stageNumber} 关(${arm})页面异常：` + errors.join(" | "));
     return result;
+  } catch (error) {
+    // 0.8.7：探针失败时把浏览器内的结构化日志尾部打到终端。
+    // 之前只有一句「击杀超时」或页面异常，必须重跑才能复现；现在现场直接可读。
+    try {
+      const text = await page.evaluate(() =>
+        window.__ONEKNIFE_LOG__ ? window.__ONEKNIFE_LOG__.text({ limit: 120 }) : "（页面没有 __ONEKNIFE_LOG__，可能是启动即崩溃）"
+      );
+      console.error(`\n[探针失败现场] 第 ${stage.stageNumber} 关(${arm}) run ${run}/${runTotal}：\n${text}\n`);
+    } catch (dumpError) {
+      console.error("[探针失败] 浏览器日志 dump 失败：", dumpError.message);
+    }
+    throw error;
   } finally {
     await context.close();
   }

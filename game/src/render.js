@@ -15,6 +15,7 @@ import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
 import { SHOP_GOODS, reforgeQuote } from "./shop.js";
 import { computeDamage } from "./combat.js";
+import { logDebug } from "./logger.js";
 import {
   state,
   moveTarget,
@@ -76,6 +77,12 @@ export function resizeCanvas() {
   canvas.width = Math.floor(rect.width * dpr);
   canvas.height = Math.floor(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  logDebug("hud", "resize", {
+    cssWidth: Math.round(rect.width),
+    cssHeight: Math.round(rect.height),
+    dpr,
+    pixels: `${canvas.width}x${canvas.height}`
+  });
 }
 
 // resize 事件风暴（iOS 工具栏收展、窗口拖拽）合并到每帧最多一次画布重建。

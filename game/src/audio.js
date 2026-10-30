@@ -1,4 +1,5 @@
 import { TEST_MODE } from "./config.js";
+import { logDebug, logInfo, logWarn } from "./logger.js";
 
 // 《一刀999》WebAudio 合成音效引擎：零素材文件，全部用振荡器/噪声合成。
 // 静音状态持久化在 localStorage；E2E 模式完全静默，避免无头环境与确定性干扰。
@@ -13,15 +14,28 @@ export function isMuted() {
 
 export function toggleMute() {
   muted = !muted;
-  if (typeof localStorage !== "undefined") localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+    } catch (error) {
+      logWarn("audio", "muteWriteFailed", { reason: String(error && error.message ? error.message : error) });
+    }
+  }
+  logInfo("audio", "muteToggle", { muted, testMode: TEST_MODE });
   return muted;
 }
 
 // 浏览器自动播放策略：首次用户手势后解锁 AudioContext。
 export function unlockAudio() {
   if (TEST_MODE || muted || typeof AudioContext === "undefined") return;
-  if (!audioContext) audioContext = new AudioContext();
-  if (audioContext.state === "suspended") audioContext.resume();
+  if (!audioContext) {
+    audioContext = new AudioContext();
+    logDebug("audio", "contextCreated", { state: audioContext.state });
+  }
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
+    logDebug("audio", "contextResumed");
+  }
 }
 
 function tone({ frequency, endFrequency, duration = 0.12, type = "sine", gain = 0.12, delay = 0 }) {

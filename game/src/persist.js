@@ -1,5 +1,6 @@
 import { CLASSES, STORAGE_KEY, LEGACY_STORAGE_KEY, LEGACY_STORAGE_KEY_V2, EQUIPMENT_SLOT_KEYS, SKILL_UPGRADE } from "./config.js";
 import { state } from "./runtime.js";
+import { logDebug, logInfo, logWarn, logError } from "./logger.js";
 
 // 《一刀999》存档读写：localStorage 存档落盘、版本迁移表驱动的 schema 升级与清理。
 
@@ -55,9 +56,8 @@ export function migrateSave(saved) {
 
 export function persistGame() {
   if (!state) return false;
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
+  try {
+    const payload = JSON.stringify({
       saveVersion: CURRENT_SAVE_VERSION,
       classId: state.classId,
       currentMapId: state.currentMapId,
@@ -69,9 +69,16 @@ export function persistGame() {
       difficulty: state.difficulty || "normal",
       bestiary: state.bestiary || {},
       abyssBest: state.abyssBest || 0
-    })
-  );
-  return true;
+    });
+    localStorage.setItem(STORAGE_KEY, payload);
+    // 0.8.7：存档字节数进日志——配额不足 / 数据异常膨胀时能直接看到体积变化。
+    logDebug("save", "write", { bytes: payload.length, map: state.currentMapId, level: state.player.level });
+    return true;
+  } catch (error) {
+    // 0.8.7：localStorage 可能因隐私模式 / 配额满而抛错，旧实现会直接把主循环打崩。
+    logError("save", "writeFailed", { message: String(error && error.message ? error.message : error) });
+    return false;
+  }
 }
 
 // 读取存档并升级到当前版本：优先当前 key，再依次回退 v3 / v2 旧 key（不删除旧档）。
@@ -80,13 +87,33 @@ export function readSavedGame() {
   try {
     const raw =
       localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY_V2);
-    if (!raw) return null;
+    if (!raw) {
+      logInfo("save", "readEmpty");
+      return null;
+    }
     const parsed = JSON.parse(raw);
-    if (!parsed || !CLASSES[parsed.classId]) return null;
-    return migrateSave(parsed);
+    if (!parsed || !CLASSES[parsed.classId]) {
+      logWarn("save", "readRejected", { bytes: raw.length, classId: parsed?.classId || null });
+      return null;
+    }
+    const result = migrateSave(parsed);
+    if (!result) {
+      logWarn("save", "migrateFailed", { bytes: raw.length, version: parsed.saveVersion ?? 2 });
+      return null;
+    }
+    // 0.8.7：记录读档来源版本与迁移结果，排查「旧档升级后属性异常」时不用再猜。
+    logInfo("save", "read", {
+      bytes: raw.length,
+      fromVersion: result.fromVersion,
+      migrated: result.migrated,
+      classId: parsed.classId,
+      level: parsed.player?.level ?? null,
+      map: parsed.currentMapId || null
+    });
+    return result;
   } catch (error) {
     // 存档损坏（截断/非法 JSON）按无存档处理，但留下诊断线索而不是静默吞掉。
-    console.warn("[oneknife999] 存档解析失败，按无存档处理：", error);
+    logWarn("save", "readFailed", { message: String(error && error.message ? error.message : error) });
     return null;
   }
 }
