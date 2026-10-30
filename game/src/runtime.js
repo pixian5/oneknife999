@@ -49,6 +49,20 @@ export function activeHero() {
   return CLASSES[state.classId];
 }
 
+// 0.8.6 诊断容器：只服务难度探针 / e2e 归因，不参与任何结算，也不写入存档。
+//   damage / hits：按来源累计承伤与命中次数（monster=普通怪或首领本体、hazard=地面危险区、poison=中毒）；
+//   hazards：按危险区形态（sting / logs / devour / other）分型统计生成数、命中数、伤害；
+//   deaths：每次死亡瞬间的上下文（致死来源、首领血量与阶段、毒层、脚下是否有危险区）。
+// 与 hazardStats 并存：后者是 0.8.4 已对外承诺的旧字段，保留避免破坏既有探针输出。
+export function createDiagnostics() {
+  return {
+    damage: { monster: 0, hazard: 0, poison: 0 },
+    hits: { monster: 0, hazard: 0, poison: 0 },
+    hazards: {},
+    deaths: []
+  };
+}
+
 export function createState(classId) {
   const hero = CLASSES[classId];
   return {
@@ -96,6 +110,8 @@ export function createState(classId) {
     mapProgress: {},
     hazards: [],
     hazardsSpawned: 0,
+    // 0.8.6 承伤来源诊断（见 createDiagnostics）。
+    diagnostics: createDiagnostics(),
     // 生息法阵（0.3.4）：瞬态区域，不写入存档；换图 / 死亡复活时清空。
     healZones: [],
     // 城镇杂货商面板开关（0.3.5）：瞬态 UI 状态，不写入存档；离开城镇时自动关闭。

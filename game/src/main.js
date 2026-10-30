@@ -23,6 +23,7 @@ import {
   state,
   setState,
   createState,
+  createDiagnostics,
   keys,
   joystick,
   pointer,
@@ -143,6 +144,22 @@ function gateAbilities(abilities) {
     passives: PASSIVES_ENABLED ? abilities.passives : [],
     onDeath: DEATH_EFFECTS_ENABLED ? abilities.onDeath : null
   };
+}
+
+// 0.8.6 承伤诊断写入（只读统计，不参与结算）：
+// 按来源累加伤害与命中次数，供探针判定「这一关的痛点是普通怪、红圈还是毒」。
+function recordDamage(source, amount) {
+  if (!state.diagnostics) state.diagnostics = createDiagnostics();
+  const diag = state.diagnostics;
+  diag.damage[source] = (diag.damage[source] || 0) + Math.max(0, Math.round(amount));
+  diag.hits[source] = (diag.hits[source] || 0) + 1;
+}
+
+// 危险区分型统计：spawned 记录生成数，hit / damage 在引爆命中时累加。
+function recordHazard(kind, field, amount = 0) {
+  if (!state.diagnostics) state.diagnostics = createDiagnostics();
+  const bucket = (state.diagnostics.hazards[kind] ||= { spawned: 0, detonated: 0, hit: 0, damage: 0 });
+  bucket[field] += amount;
 }
 
 export function createEntities(map) {
@@ -292,6 +309,8 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   // 0.8.4：危险区引爆 / 命中计数。只在「真正进入新场景」时重置——死亡复活（keepBossHp=true）
   // 会走同一个 loadMap，若一并清零，探针就会把「死亡前的引爆」丢掉，算出 6% 这种假命中率。
   if (!keepBossHp) state.hazardStats = { detonated: 0, hit: 0 };
+  // 0.8.6：承伤来源诊断同样只在「真正进入新场景」时重置；复活保留，否则死亡前的来源占比会被清零。
+  if (!keepBossHp) state.diagnostics = createDiagnostics();
   // 生息法阵属于当前场景的瞬态区域：换图 / 复活时清空，避免在营地继续回血。
   state.healZones = [];
   // 杂货商面板只在城镇内有效，换图 / 复活时收起，避免跨场景残留。
@@ -1110,6 +1129,8 @@ export function playerDamage(dt) {
         // 护盾 / 反伤等防御被动（怪物侧）在玩家攻击时结算，此处只处理控制类。
         if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${total} hits=${hits}`);
         state.player.hp = Math.max(0, state.player.hp - total);
+        // 0.8.6：按来源累计承伤，探针据此给出「普通怪 / 首领本体」的占比。
+        recordDamage("monster", total);
         // 0.7.6 诊断：记录最近一次伤害来源，死亡时它就是「致死怪」。
         // 只服务难度探针的死因统计，不参与结算，也不写入存档。
         state.player.lastKiller = attacker.name;
@@ -1153,10 +1174,16 @@ export function playerDamage(dt) {
       // 只读计数，不参与结算；难度探针据此判断近战的痛点是频率还是走位空间。
       state.hazardStats = state.hazardStats || { detonated: 0, hit: 0 };
       state.hazardStats.detonated += 1;
+      recordHazard(h.kind || "other", "detonated", 1);
       if (!atSanctuary && state.player.invulnerable <= 0 && distance(state.player, h) < h.r) {
         state.hazardStats.hit += 1;
         const amount = computeIncomingDamage({ attack: h.damage, attackerLevel: h.attackerLevel, defense: playerDefense() });
         state.player.hp = Math.max(0, state.player.hp - amount);
+        // 0.8.6：危险区承伤按「来源」与「形态」双记，用于区分 sting（跟脚落地）
+        // 与 logs / devour（随机落点）哪一种才是真正的痛点。
+        recordDamage("hazard", amount);
+        recordHazard(h.kind || "other", "hit", 1);
+        recordHazard(h.kind || "other", "damage", amount);
         if (state.player.hp <= 0) state.player.lastKiller = "地面危险区";
         textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 14);
         spark(state.player.x, state.player.y, "#f16d66", 6);
@@ -1174,6 +1201,7 @@ export function playerDamage(dt) {
       state.player.poisonTimer = 1.2;
       const amount = state.player.poison * 4;
       state.player.hp = Math.max(0, state.player.hp - amount);
+      recordDamage("poison", amount);
       if (state.player.hp <= 0) state.player.lastKiller = "中毒";
       textAt(`-${amount}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 12);
     }
@@ -1198,6 +1226,24 @@ export function die() {
   const town = activeMap().townRect;
   const safeSpawn = { x: town.x + town.w / 2, y: town.y + town.h / 2 };
   state.player.deaths = (state.player.deaths || 0) + 1;
+  // 0.8.6 死亡上下文诊断：只记录「死亡瞬间玩家看到的世界」，用于回答
+  // 「为什么死」——是首领残血阶段的爆发、毒层叠满，还是脚下正好有红圈。
+  state.diagnostics ||= createDiagnostics();
+  const killerBoss = (state.entities || []).find((entity) => entity.boss && entity.alive);
+  const liveHazards = (state.hazards || []).filter((hazard) => !hazard.snap);
+  const underfootHazard = liveHazards.find((hazard) => distance(state.player, hazard) < hazard.r);
+  state.diagnostics.deaths.push({
+    killer: state.player.lastKiller || "未知",
+    maxHp: playerMaxHp(),
+    bossHpPct: killerBoss ? Math.round((killerBoss.hp / Math.max(1, killerBoss.maxHp)) * 100) : null,
+    bossPhase: killerBoss?.phase || null,
+    distanceToBoss: killerBoss ? Math.round(distance(state.player, killerBoss)) : null,
+    poison: state.player.poison || 0,
+    hazardsActive: liveHazards.length,
+    underfoot: underfootHazard?.kind || null,
+    level: state.player.level
+  });
+  if (state.diagnostics.deaths.length > 20) state.diagnostics.deaths.shift();
   sfx.death();
   // 红名死亡爆装（docs/05：掉落是地面实体，保护期后可拾取；单机原型即跑尸拾回）。
   // 0.4.4 修复 P2：此前 push 进 drops 后被下方 loadMap 的场景重置（state.drops = []）清空，
@@ -1459,6 +1505,9 @@ export function updateBoss(boss, dt) {
             ? "水井净化"
             : "狂暴";
     log(`<b>${boss.name}</b> 进入阶段 ${newPhase}：${phaseName}。`, "warn");
+    // 0.8.6 诊断日志：阶段切换是难度突变点（特殊技能从此刻开始），记下触发时的血量比例，
+    // 便于把「死亡集中在二阶段」与「阶段触发太早」区分开。
+    if (TEST_MODE) console.info(`[boss] ${boss.id} phase=${newPhase} hpRatio=${Math.round(hpRatio * 100)}%`);
     showToast(`${boss.name} 阶段 ${newPhase}：${phaseName}`);
     spark(boss.x, boss.y, "#e7b36b", 24);
     // 0.4.6 换阶段震屏 + 红色炸点，增强 Boss 战气势
@@ -1527,8 +1576,11 @@ export function spawnHazard(boss) {
   target.fade = 0.5;
   target.damage = damage;
   target.attackerLevel = boss.level;
+  // 0.8.6：记录形态，引爆时按形态统计命中与伤害。
+  target.kind = def.specialKind || "other";
   state.hazards.push(target);
   state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
+  recordHazard(target.kind, "spawned", 1);
   if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
 }
 
@@ -2121,6 +2173,9 @@ if (TEST_MODE) {
               hazardsSpawned: state.hazardsSpawned || 0,
               // 0.8.4：危险区引爆 / 命中计数（只读诊断）。命中率高说明躲不掉，命中率低说明刷得太勤。
               hazardStats: { ...(state.hazardStats || { detonated: 0, hit: 0 }) },
+              // 0.8.6：承伤来源 / 危险区分型 / 死亡上下文诊断（只读）。
+              // 探针据此输出 sources=怪/区/毒 与 hazardKinds=形态命中率，定位「为什么难」。
+              diagnostics: state.diagnostics ? JSON.parse(JSON.stringify(state.diagnostics)) : null,
               // 0.8.0：危险区的实时位置与半径。探针据此走位躲红圈；
               // 此前只暴露 hazardsSpawned 计数，探针完全看不到脚下正在倒计时的危险区，
               // 导致「脱手伤害」型关卡（如第 75 关）的数字系统性偏悲观。

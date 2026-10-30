@@ -21,6 +21,9 @@
 // 因为 damage100 会被通关效率抵消——攻击变低 → 少撤退喝药 → 战斗变短 → 单位时间承伤不降反平。
 // 输出（0.8.4 起）：追加 hazard=命中/引爆(命中率)。命中率高说明躲不掉（该改半径或引爆时间），
 // 低说明躲得掉但刷得勤（该改 specialInterval）——用于区分不同职业的痛点成因。
+// 输出（0.8.6 起）：追加 sources=怪/区/毒（承伤来源拆分）、hazardKinds=各形态命中率与伤害、
+// deathCtx=每次死亡瞬间的首领血量/阶段/毒层/脚下危险区。总承伤只说「掉了多少血」，
+// 这些字段回答「血是谁打掉的」；汇总行追加「区伤占比中位」。
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
@@ -414,8 +417,33 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
   // 低 → 躲得掉但刷得太勤（该改 specialInterval）。用于区分战士与法师的差异到底出在哪。
   const hazard = snap.hazardStats || { detonated: 0, hit: 0 };
   const hazardRate = hazard.detonated > 0 ? Math.round((hazard.hit / hazard.detonated) * 100) : -1;
+  // 0.8.6：承伤来源拆分。总承伤只说「掉了多少血」，这里回答「血是谁打掉的」：
+  //   sources=怪/区/毒 的绝对值与占比；hazardKinds 按形态给出命中率与伤害；
+  //   deathCtx 给出每次死亡瞬间的首领血量 / 阶段 / 毒层 / 脚下危险区形态。
+  const diag = snap.diagnostics || {};
+  const sources = diag.damage || { monster: 0, hazard: 0, poison: 0 };
+  const sourceTotal = Math.max(1, (sources.monster || 0) + (sources.hazard || 0) + (sources.poison || 0));
+  const sourcePct = {
+    monster: Math.round(((sources.monster || 0) / sourceTotal) * 100),
+    hazard: Math.round(((sources.hazard || 0) / sourceTotal) * 100),
+    poison: Math.round(((sources.poison || 0) / sourceTotal) * 100)
+  };
+  const hazardKinds = Object.entries(diag.hazards || {})
+    .map(([kind, bucket]) => {
+      const rate = bucket.detonated > 0 ? Math.round((bucket.hit / bucket.detonated) * 100) : -1;
+      return `${kind}:${bucket.hit}/${bucket.detonated}(${rate}%)伤${bucket.damage}`;
+    })
+    .join(",");
+  const deathCtx = (diag.deaths || [])
+    .map(
+      (item) =>
+        `${item.killer}@首领${item.bossHpPct === null ? "-" : `${item.bossHpPct}%`}/P${item.bossPhase || "-"}/毒${item.poison}${
+          item.underfoot ? `/踩${item.underfoot}` : ""
+        }`
+    )
+    .join(";");
   process.stdout.write(
-    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} totalDamage=${totalDamage} firstDeath=${firstDeath}s damage100=${damage100} hazard=${hazard.hit}/${hazard.detonated}(${hazardRate}%) killers=${killers || "-"}\n`
+    `PROBE RESULT stage ${stage.stageNumber} ${mapId} run=${run}/${runTotal} arm=${arm} class=${CLASS_ID} Lv.${snap.player.level} deaths=${deaths} seconds=${seconds} totalDamage=${totalDamage} firstDeath=${firstDeath}s damage100=${damage100} hazard=${hazard.hit}/${hazard.detonated}(${hazardRate}%) killers=${killers || "-"} sources=怪${Math.round(sources.monster || 0)}(${sourcePct.monster}%)/区${Math.round(sources.hazard || 0)}(${sourcePct.hazard}%)/毒${Math.round(sources.poison || 0)}(${sourcePct.poison}%) hazardKinds=${hazardKinds || "-"} deathCtx=${deathCtx || "-"}\n`
   );
   if (seconds > MAX_SECONDS) throw new Error(`${mapId} 非快进耗时 ${seconds}s，超过上限 ${MAX_SECONDS}s（关卡可能无法正常推进）`);
   // 死亡闸门交给主流程用「多次中位数」判定：单次死亡数会被「死亡 → 首领回血重置」放大，
@@ -430,6 +458,9 @@ async function probeStage(page, stage, run = 1, runTotal = 1, arm = "baseline") 
     firstDeath,
     damage100,
     killers,
+    sourcePct,
+    hazardKinds,
+    deathCtx,
     deathsOverLimit: deaths > MAX_DEATHS
   };
 }
@@ -508,6 +539,8 @@ function median(values) {
         const damage100 = median(runs.map((item) => item.damage100));
         // 0.7.8：通关总承伤的中位数——判定「关卡变简单」的主指标（damage100 会被通关效率抵消）。
         const totalDamage = median(runs.map((item) => item.totalDamage));
+        // 0.8.6：危险区承伤占比中位数——直接回答「这关是不是被红圈打死的」。
+        const hazardPct = median(runs.map((item) => item.sourcePct?.hazard || 0));
         // 单次超限只告警（可能是操作失误被死亡重置放大）；中位数超限才判定难度回退。
         for (const [index, run] of runs.entries()) {
           if (run.deathsOverLimit) {
@@ -527,6 +560,7 @@ function median(values) {
           totalDamage,
           firstDeath,
           damage100,
+          hazardPct,
           runs
         });
       }
@@ -536,7 +570,7 @@ function median(values) {
       `DIFFICULTY PROBE PASS${PROBE_SEED === null ? "" : ` seeds=${PROBE_SEED}~${PROBE_SEED + PROBE_RUNS - 1}`} runs=${PROBE_RUNS} stages=${results
         .map(
           (item) =>
-            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}] 首死中位=${item.firstDeath}s 总承伤中位=${item.totalDamage} 承伤中位=${item.damage100}/百秒`
+            `${item.stageNumber}${item.arm === "defense" ? "+防" : ""}:${item.deaths}死/${item.seconds}s[${item.runs.map((run) => `${run.deaths}死/${run.seconds}s`).join(",")}] 首死中位=${item.firstDeath}s 总承伤中位=${item.totalDamage} 承伤中位=${item.damage100}/百秒 区伤占比中位=${item.hazardPct}%`
         )
         .join(" ")} totalDeaths(median)=${totalDeaths}\n`
     );

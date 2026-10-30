@@ -3,7 +3,7 @@
 // 玩家一次失误就要把整条首领血条重打一遍，也是难度探针 0/1/5 死波动的来源。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { restoreDamagedBoss } from "../../game/src/runtime.js";
+import { restoreDamagedBoss, createDiagnostics, createState } from "../../game/src/runtime.js";
 
 const boss = (hp, maxHp) => ({ id: "boss-1", boss: true, alive: true, hp, maxHp });
 
@@ -42,4 +42,25 @@ test("restoreDamagedBoss：回填生命被夹在新表上限内，至少保留 1
   const next2 = [boss(500, 500)];
   assert.equal(restoreDamagedBoss(next2, [boss(0.2, 900)]), true);
   assert.equal(next2[0].hp, 1);
+});
+
+// 0.8.6：承伤来源诊断容器必须每次新建——复用一个对象会让「换图 / 重开」后旧数据残留。
+test("createDiagnostics：形状完整且每次返回独立对象", () => {
+  const first = createDiagnostics();
+  assert.deepEqual(first.damage, { monster: 0, hazard: 0, poison: 0 });
+  assert.deepEqual(first.hits, { monster: 0, hazard: 0, poison: 0 });
+  assert.deepEqual(first.hazards, {});
+  assert.deepEqual(first.deaths, []);
+  first.damage.hazard = 999;
+  first.deaths.push({ killer: "地面危险区" });
+  const second = createDiagnostics();
+  assert.equal(second.damage.hazard, 0);
+  assert.equal(second.deaths.length, 0);
+});
+
+test("createState：新档自带诊断容器，且不写入玩家数据", () => {
+  const state = createState("warrior");
+  assert.ok(state.diagnostics, "缺少 diagnostics");
+  assert.equal(state.diagnostics.deaths.length, 0);
+  assert.equal(JSON.stringify(state.player).includes("diagnostics"), false, "诊断不应进入玩家数据（避免写档）");
 });
