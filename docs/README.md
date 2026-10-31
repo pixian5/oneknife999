@@ -401,3 +401,14 @@ QA：成功、边界、异常、性能、灾备
 ### 0.8.6 公网部署加固与两处前端缺陷修复
 
 本轮只做部署验收与缺陷收口。**修 resize 必抛 `ReferenceError: scheduleResize is not defined`**：`render.js` 导出了它、`main.js` 的 import 列表却漏了，导致每次拖窗口/横竖屏都抛异常且画布不重算（实测 900×600 与 1440×900 下 canvas 恒为 444×215），补一行 import 即修好。**修 `chooseClass()` 不落盘**：选完职业立刻刷新会退回职业选择，改为选定即 `persistGame()`。**修 favicon 404**：内联 SVG 图标，首屏不再有非 2xx 请求。部署侧把 `python -m http.server` 换成 `serve.py`（禁目录列表、支持 Range 206、带缓存头），并加 `keepalive.sh` 守护静态服务与隧道。另记录一条硬限制：免费套餐 `autoSuspendAfterSeconds` 恒为 1800 秒，`setAutoSuspend(0)` 返回 `permission_denied`，要真正「不掉线」需升级 Pro。详见 [20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md](20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md)。
+
+### 0.8.5 综合测试方案（只写文档）
+
+把散落在各轮的操作收成一条链路：[20261030-2156-综合测试方案-DeepSeek-V4.1-Flash.md](20261030-2156-综合测试方案-DeepSeek-V4.1-Flash.md)。
+
+- **阶段 A**：补齐道士第 30 / 75 关、三职业第 60 / 90 关（n=8，seed 2000–2007），并把 0.8.0 前的旧探针数据标为「历史参考」——探针不会躲红圈，跨版本不可直接比较。
+- **阶段 B**：A/B 验证三个候选——第 75 关 `specialInterval` 4.63→5.2、第 30 关法师 `attackMult 0.88` 回调、第 60 / 90 关零死亡上调（后者需先扩展修正表 schema 与单测区间）。
+- **阶段 C**：发布前全量回归——`verify`（162 单测）、六项 UI、三职业百图 e2e、perf、balance。
+- **阶段 D**：Instabox 部署验收——公网 HTTPS、标题与素材、桌面 Chromium 进战斗、隧道重启演练。
+
+判读规则写死在文档里：闸门 ≤6 死、难度只看 `totalDamage` 中位、职业同级差 ≤1 死且总承伤差 ≤30%、峰值候选 ≥4 死。同时列出五项待决策（第 75 关是否动、60/90 是否上调、法师 30 关是否回调、阶段 A 是否立即执行、是否要长期域名）。
