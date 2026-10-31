@@ -139,9 +139,28 @@ export function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+// 0.8.8：结构化事件流（仅内存、上限 800 条）。给 e2e 提供可断言的流程时间线，
+// 比逐张截图更可靠；生产环境不写 localStorage、不打印，只占极小的数组。
+const eventTrace = [];
+const TRACE_LIMIT = 800;
+
+export function traceEvents(limit = 300) {
+  return eventTrace.slice(-limit).map((entry) => ({ ...entry }));
+}
+
+export function clearTraceEvents() {
+  eventTrace.length = 0;
+}
+
 export function log(message, type = "") {
   state.logs.push({ message, type });
   state.logs = state.logs.slice(-8);
+  eventTrace.push({
+    t: Math.round(typeof performance !== "undefined" ? performance.now() : 0),
+    type: type || "info",
+    text: String(message).replace(/<[^>]+>/g, "")
+  });
+  if (eventTrace.length > TRACE_LIMIT) eventTrace.splice(0, eventTrace.length - TRACE_LIMIT);
   renderLog();
 }
 

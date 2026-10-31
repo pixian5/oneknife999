@@ -20,7 +20,8 @@
     "test:e2e": "node tests/e2e-ten-clear-runs.cjs",
     "perf": "node tests/perf-probe.cjs",
     "balance": "node tests/balance-sim.mjs",
-    "test:difficulty": "node tests/difficulty-probe.cjs"
+    "test:difficulty": "node tests/difficulty-probe.cjs",
+    "test:ui:timeline": "node tests/ui-flow-timeline.cjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

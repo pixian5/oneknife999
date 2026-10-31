@@ -54,6 +54,8 @@ import {
   showToast,
   log,
   textAt,
+  traceEvents,
+  clearTraceEvents,
   floatYAboveNameplate,
   floatYAbovePlayer,
   spark,
@@ -2025,6 +2027,9 @@ function frame(timestamp) {
 }
 if (TEST_MODE) {
   window.__ONEKNIFE_E2E__ = {
+    // 0.8.8：结构化事件时间线（击杀/掉落/升级/通关/存档等），供流程级断言使用。
+    timeline: (limit = 300) => traceEvents(limit),
+    clearTimeline: () => clearTraceEvents(),
     catalog: () =>
       JSON.parse(
         JSON.stringify(
