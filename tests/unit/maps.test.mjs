@@ -6,6 +6,7 @@ import {
   MAP_ORDER,
   CHAPTERS,
   MAP_DIFFICULTY_OVERRIDES,
+  hexToRgba,
   mapDifficultyOverride,
   campaignGrowth,
   mapsPerLevel,
@@ -250,4 +251,26 @@ test("关卡局部难度修正：只作用于登记过的关卡，且不误伤�
   assert.equal(mapDifficultyOverride(31), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(74), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(76), null, "相邻关不应被修正");
+});
+
+test("0.8.11：hexToRgba 只转换合法 #rrggbb，其余原样返回", () => {
+  assert.equal(hexToRgba("#324b3c", 0.45), "rgba(50, 75, 60, 0.45)");
+  assert.equal(hexToRgba("#000000", 1), "rgba(0, 0, 0, 1)");
+  assert.equal(hexToRgba("  #ffffff ", 0.5), "rgba(255, 255, 255, 0.5)");
+  // 非法输入不能静默变成黑块，原值透传更安全。
+  assert.equal(hexToRgba("rgba(34, 64, 65, .42)", 0.45), "rgba(34, 64, 65, .42)");
+  assert.equal(hexToRgba("#12345", 0.45), "#12345");
+  assert.equal(hexToRgba("#gggggg", 0.45), "#gggggg");
+});
+
+test("0.8.11：100 张地图的首领战区填充必须是半透明，避免整块实色盖住底图", () => {
+  // 4 张手工地图本来就写 rgba；96 张生成地图此前用章节实色 #xxxxxx，截图里像调试色块。
+  ALL_MAPS.forEach((map) => {
+    const fill = map.palette.special;
+    assert.ok(/^rgba\(/.test(fill), `${map.id} 战区填充不是 rgba：${fill}`);
+    const alpha = Number(String(fill).split(",")[3]?.replace(")", "").trim());
+    assert.ok(alpha > 0 && alpha < 1, `${map.id} 战区透明度异常：${fill}`);
+  });
+  // 地标装饰仍保留章节实色（半透明会让地标几乎看不见）。
+  for (const chapter of CHAPTERS) assert.match(chapter.special, /^#[0-9a-f]{6}$/i);
 });

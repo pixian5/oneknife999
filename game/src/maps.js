@@ -11,6 +11,17 @@ function spawnTier(index, stageNumber, slot) {
   return (index + stageNumber) % 6;
 }
 
+// 0.8.11：章节 special 是实色（地标装饰仍用原色），但用它实心填充首领战区会完全盖住底图，
+// 远看就是一块「调试色块」；填充前统一转半透明，与 4 张手工地图的 rgba 战区写法保持一致。
+export function hexToRgba(hex, alpha) {
+  const value = String(hex).trim().replace("#", "");
+  if (value.length !== 6 || /[^0-9a-fA-F]/.test(value)) return hex;
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // 0.7.7 关卡局部难度修正：百图共用同一条成长曲线，个别关卡会因章节档位与装备节奏错位
 // 出现死亡峰值。第 30 关实测（战士 n=8，seed 2000–2007）死亡中位 7、承伤中位 5741/百秒、
 // 首死中位 33s，而第 60 / 75 / 90 关只有 0–2 死；致死来源集中在攻击最高的四只怪与首领上。
@@ -1164,7 +1175,7 @@ export function generatedMap(stageNumber) {
       grid: "rgba(220, 230, 220, .035)",
       town: "rgba(98, 213, 198, .08)",
       townBorder: "rgba(98, 213, 198, .22)",
-      special: chapter.special,
+      special: hexToRgba(chapter.special, 0.45),
       specialBorder: `${chapter.accent}66`,
       water: "rgba(100, 150, 170, .14)"
     },
