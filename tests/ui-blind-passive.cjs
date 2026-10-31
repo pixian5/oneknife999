@@ -100,17 +100,35 @@ function makeSavedRun({ mapId, x, y }) {
       { timeout: 15000 }
     );
 
-    const hpStart = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.hp);
+    // 0.8.10：怪物巡逻与前摇存在时机波动，单轮 30 秒会偶发未命中（实测 3 次中 2 次）。
+    // 改为最多 2 轮：每轮重新载入初始存档恢复满血，再等 25 秒，避免把随机当成回归。
     let blinded = null;
-    let hpEnd = hpStart;
-    for (let i = 0; i < 60; i += 1) {
-      await sleep(500);
-      const player = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player);
-      hpEnd = player.hp;
-      if ((player.blind || 0) > 0) {
-        blinded = player;
-        break;
+    let hpStart = 0;
+    let hpEnd = 0;
+    for (let attempt = 0; attempt < 2 && !blinded; attempt += 1) {
+      if (attempt > 0) {
+        await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: save });
+        await page.goto(`${ROOT}/?e2e=1`, { waitUntil: "load" });
+        await page.waitForFunction(
+          ({ mapId }) => {
+            const snapshot = window.__ONEKNIFE_E2E__?.snapshot();
+            return snapshot && snapshot.currentMapId === mapId && document.querySelector("#classModal").classList.contains("hidden");
+          },
+          { mapId: targetMap.id },
+          { timeout: 15000 }
+        );
       }
+      hpStart = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player.hp);
+      for (let i = 0; i < 50; i += 1) {
+        await sleep(500);
+        const player = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().player);
+        hpEnd = player.hp;
+        if ((player.blind || 0) > 0) {
+          blinded = player;
+          break;
+        }
+      }
+      if (!blinded) process.stdout.write(`BLIND retry ${attempt + 1}（本轮未命中，重新载入）\n`);
     }
 
     assert.ok(blinded, `「${BLIND_MONSTER}」在 30 秒内没有命中玩家（hp ${hpStart} → ${hpEnd}），致盲未写入`);

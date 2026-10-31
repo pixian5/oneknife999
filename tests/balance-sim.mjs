@@ -10,6 +10,7 @@ import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "../game/src/ma
 import { CLASSES, COMMON_DROPS, EQUIPMENT_SLOTS, effectiveItemPower, equipmentHpBonus, equipmentDefenseBonus } from "../game/src/config.js";
 import { computeDamage, computeIncomingDamage } from "../game/src/combat.js";
 import { rollDropItem, rollDropCount } from "../game/src/drops.js";
+import { buyShopItem, reforgeQuote, reforgeAffix } from "../game/src/shop.js";
 import { clamp, distance } from "../game/src/util.js";
 import { writeFileSync } from "node:fs";
 
@@ -61,7 +62,14 @@ function createPlayer(classId) {
     potionUsed: 0,
     itemsPicked: 0,
     itemsEquipped: 0,
-    enhanceCount: 0
+    enhanceCount: 0,
+    reforgeScroll: 0,
+    materials: 0,
+    // 0.8.10：经济链路统计（商店/重铸）
+    goldSpent: 0,
+    shopPurchases: 0,
+    reforgeCount: 0,
+    reforgeCost: 0
   };
   player.hp = maxHp(player);
   return player;
@@ -227,12 +235,55 @@ function maybeEnhance(player, stats) {
         ? { rate: 0.7, cost: 70 * Math.pow(1.5, target) }
         : { rate: 0.4, cost: 70 * Math.pow(1.5, target) };
   if (player.gold < tier.cost) return;
+  // 0.8.10：+8 起强化消耗 1 件黑铁矿石（与游戏内规则一致）。
+  if (target > 8) {
+    if ((player.materials || 0) < 1) return;
+    player.materials -= 1;
+    stats.materialsUsed = (stats.materialsUsed || 0) + 1;
+  }
   player.gold -= Math.round(tier.cost);
+  stats.goldSpent = (stats.goldSpent || 0) + Math.round(tier.cost);
   if (RNG() < tier.rate) {
     weapon.enhance = target;
     stats.enhanceCount += 1;
   }
   // 失败不降级不销毁（祝福值机制对 +6 以上影响后续尝试，此处简化为直接重试成本）
+}
+
+// 0.8.10：商店与重铸经济模型。此前 balance-sim 只统计掉落与强化，没有金币消耗侧，
+// 导致「后期金币无限堆积」无法被模拟发现。策略贴近真实玩家：药水低于 2 瓶补货、
+// 武器词缀不足 2 条时买卷轴并重铸、+8 以上强化补矿石。
+function maybeShop(player, stats) {
+  const weapon = player.equipment.weapon;
+  const buy = (goodId, field, amount = 1) => {
+    const result = buyShopItem(goodId, { gold: player.gold });
+    if (!result.ok) return false;
+    player.gold -= result.price;
+    player[field] = (player[field] || 0) + amount;
+    stats.goldSpent += result.price;
+    stats.shopPurchases += 1;
+    return true;
+  };
+  if ((player.potion || 0) < 2) buy("potion", "potion");
+  if (weapon && (weapon.affixes?.length || 0) < 2 && (player.reforgeScroll || 0) < 1) {
+    const quote = reforgeQuote(weapon, { gold: player.gold - 200, scrolls: 1 });
+    if (player.gold >= 200 + quote.cost) buy("scroll", "reforgeScroll");
+  }
+  if (weapon && (weapon.enhance || 0) >= 8 && (player.materials || 0) < 1) buy("material", "materials");
+}
+
+function maybeReforge(player, stats) {
+  const weapon = player.equipment.weapon;
+  if (!weapon || (weapon.affixes?.length || 0) >= 3) return;
+  const quote = reforgeQuote(weapon, { gold: player.gold, scrolls: player.reforgeScroll || 0 });
+  if (!quote.canReforge) return;
+  player.gold -= quote.cost;
+  player.reforgeScroll -= quote.scrollNeeded;
+  const result = reforgeAffix(weapon, { level: player.level, random: RNG });
+  player.equipment.weapon = result.item;
+  stats.reforgeCount += 1;
+  stats.reforgeCost += quote.cost;
+  stats.goldSpent += quote.cost;
 }
 
 // ---------- 单关模拟 ----------
@@ -495,13 +546,16 @@ function simulateMap(player, map, rule, stats, logLine) {
   }
   // 通关后强化武器。
   if (!NO_ENHANCE) maybeEnhance(player, stats);
+  maybeShop(player, stats);
+  maybeReforge(player, stats);
 
   const weapon = player.equipment.weapon;
   const weaponPower = weapon ? effectiveItemPower(weapon) : 0;
   logLine(
     `${String(player.completedMaps).padStart(3, "0")} ${map.id} Lv.${player.level} 死亡+${stats0.deaths} ` +
       `清${clearTime.toFixed(0)}s Boss${bossTime.toFixed(0)}s 总${elapsed.toFixed(0)}s ` +
-      `药${player.potionUsed} 装${stats.itemsEquipped} 强+${weapon?.enhance || 0} 武${weaponPower} 金${player.gold}`
+      `药${player.potionUsed} 装${stats.itemsEquipped} 强+${weapon?.enhance || 0} 武${weaponPower} ` +
+      `词缀${weapon?.affixes?.length || 0} 重铸${stats.reforgeCount} 金${player.gold}`
   );
   return {
     mapId: map.id,
@@ -574,7 +628,18 @@ function runClass(classId) {
   const seed = 20261022 + (classId === "warrior" ? 1 : classId === "mage" ? 2 : 3);
   RNG = mulberry32(seed);
   const player = createPlayer(classId);
-  const stats = { deaths: 0, itemsPicked: 0, itemsEquipped: 0, enhanceCount: 0, stuckMaps: 0 };
+  const stats = {
+    deaths: 0,
+    itemsPicked: 0,
+    itemsEquipped: 0,
+    enhanceCount: 0,
+    stuckMaps: 0,
+    goldSpent: 0,
+    shopPurchases: 0,
+    reforgeCount: 0,
+    reforgeCost: 0,
+    materialsUsed: 0
+  };
   const rows = [];
   const details = [];
   console.log(`\n===== ${CLASSES[classId].name}（${classId}）真实速度百图模拟 seed=${seed} =====`);
@@ -594,7 +659,8 @@ function runClass(classId) {
   console.log(
     `${CLASSES[classId].name}: 总死亡 ${stats.deaths}，卡关 ${stats.stuckMaps}，` +
       `拾取 ${stats.itemsPicked} 件装备、换装 ${stats.itemsEquipped} 次、强化成功 ${stats.enhanceCount} 次，` +
-      `用药 ${player.potionUsed} 瓶，最终 Lv.${player.level} 金币 ${Math.round(player.gold)}`
+      `用药 ${player.potionUsed} 瓶，买货 ${stats.shopPurchases} 次、重铸 ${stats.reforgeCount} 次，` +
+      `累计金币消耗 ${Math.round(stats.goldSpent)}（强化+商店+重铸），最终 Lv.${player.level} 金币 ${Math.round(player.gold)}`
   );
   return { classId, stats, player, rows, details };
 }
