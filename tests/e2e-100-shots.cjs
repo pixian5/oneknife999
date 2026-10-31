@@ -336,8 +336,8 @@ async function assertAutoSaveCheckpoint(page, mapId) {
 
 async function runJourney(browser, runIndex) {
   const classId = classForRun(runIndex);
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await context.newPage();
+  let context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  let page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
@@ -508,10 +508,39 @@ async function runJourney(browser, runIndex) {
   await advance(page, 200);
   if ((await snapshot(page)).currentMapId !== "ash_outskirts") throw new Error("未通关时前进出口未被拦截");
 
+  const stageStats = [];
   for (let mapIndex = 0; mapIndex < MAP_ORDER.length; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
     await clearMap(page, mapId);
     await assertAutoSaveCheckpoint(page, mapId);
+    // 0.8.8：每关读取结构化事件时间线，用日志核对「击杀 / 掉落 / 死亡 / 存档」是否齐全，
+    // 不再依赖截图判断流程。
+    const stageEvents = await page.evaluate(() => (window.__ONEKNIFE_E2E__?.timeline ? window.__ONEKNIFE_E2E__.timeline(400) : []));
+    const stat = {
+      stage: mapIndex + 1,
+      map: mapId,
+      events: stageEvents.length,
+      kills: stageEvents.filter((entry) => /被击败|首领击破/.test(entry.text)).length,
+      loot: stageEvents.filter((entry) => /掉落|拾取/.test(entry.text)).length,
+      deaths: stageEvents.filter((entry) => /倒下|安全营地复活/.test(entry.text)).length,
+      saves: stageEvents.filter((entry) => /保存/.test(entry.text)).length
+    };
+    stageStats.push(stat);
+    if (stat.stage % 10 === 0) process.stdout.write(`TIMELINE ${JSON.stringify(stat)}\n`);
+    if (!stat.saves) process.stdout.write(`WARN stage ${stat.stage} 缺少保存事件\n`);
+    if (stat.kills < MAP_CLEAR_RULES[mapId].kills + 1) process.stdout.write(`WARN stage ${stat.stage} 击杀事件不足：${stat.kills}\n`);
+
+    // 每 25 关重建 context（保留 storageState），规避 Chromium 长时间虚拟时钟快进后的 renderer 崩溃。
+    if ((mapIndex + 1) % 25 === 0 && mapIndex < MAP_ORDER.length - 1) {
+      const storage = await context.storageState();
+      await context.close();
+      context = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState: storage });
+      page = await context.newPage();
+      await page.clock.install({ time: new Date("2026-08-10T12:00:00Z") });
+      await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+      await advance(page, 200);
+      process.stdout.write(`ROTATE after stage ${mapIndex + 1}\n`);
+    }
     if (mapIndex < MAP_ORDER.length - 1) {
       await page.keyboard.press("t");
       await advance(page, 150);
@@ -534,6 +563,7 @@ async function runJourney(browser, runIndex) {
   if (title !== "百图征途已通关" || state !== "全部完成") throw new Error(`最终结算文案错误：${state}/${title}`);
   if (finalSnap.player.level !== 41 || finalSnap.stageNumber !== 100) throw new Error(`最终成长错误：${JSON.stringify(finalSnap)}`);
   if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
+  process.stdout.write(`STAGE STATS ${JSON.stringify(stageStats)}\n`);
   await context.close();
   return { run: runIndex + 1, classId, level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
 }
