@@ -521,21 +521,11 @@ export function castSkill(index) {
     showToast("生息法阵展开：留在阵中持续回复，离开失效");
     return;
   }
-  if (!target) {
-    showToast("先锁定一个目标");
-    return;
-  }
-  if (distance(state.player, target) > skill.range) {
-    setMoveTarget({ x: target.x, y: target.y });
-    showToast(`正在进入 ${skill.name} 的施法距离`);
-    return;
-  }
-  state.player.resource -= skill.cost;
-  state.player.cooldowns[index] = skill.cd;
-  // 0.6.0 P1：施法动作帧窗口（cast 动作在 render 里按 castTimer > 0 选取）。
-  state.player.castTimer = 0.35;
-  // 召唤骨卫（0.3.4）：生成 12 秒实体，自动跟随并索敌，不再是一次性伤害。
+  // 召唤骨卫（0.8.9）：无需锁定目标，在玩家脚下召唤，与 README「在身边召唤」口径一致。
   if (skill.kind === "召唤") {
+    state.player.resource -= skill.cost;
+    state.player.cooldowns[index] = skill.cd;
+    state.player.castTimer = 0.35;
     const guard = createBoneGuard({
       player: state.player,
       hero,
@@ -552,6 +542,19 @@ export function castSkill(index) {
     renderAll();
     return;
   }
+  if (!target) {
+    showToast("先锁定一个目标");
+    return;
+  }
+  if (distance(state.player, target) > skill.range) {
+    setMoveTarget({ x: target.x, y: target.y });
+    showToast(`正在进入 ${skill.name} 的施法距离`);
+    return;
+  }
+  state.player.resource -= skill.cost;
+  state.player.cooldowns[index] = skill.cd;
+  // 0.6.0 P1：施法动作帧窗口（cast 动作在 render 里按 castTimer > 0 选取）。
+  state.player.castTimer = 0.35;
   // 技能升级（docs/02 原型简化）：每级 +6% 技能倍率。
   const skillLevel = state.player.skillLevels?.[index] || 0;
   const multiplier = skill.damage * (1 + SKILL_UPGRADE.multiplierPerLevel * skillLevel);

@@ -134,6 +134,19 @@ function sanitizeItem(item) {
   return cleaned;
 }
 
+// 0.8.9：导入存档的玩家数值上限。导入是唯一外部入口，此前金币可被写成 123456 并原样生效，
+// 与「服务器权威」叙事不符；这里把可兑换成战力/经济的字段统一钳制。
+const SAVE_LIMITS = {
+  gold: 9999999,
+  level: 60,
+  exp: 9999999,
+  hp: 999999,
+  marks: 999999,
+  potion: 999,
+  reforgeScroll: 999,
+  skillPoints: 99
+};
+
 // 净化整份导入存档：背包过滤非对象项，装备按 12 槽位白名单重建（多余键丢弃），
 // 顶层 equipment 与 player.equipment 同步净化结果（loadGame 优先读顶层）。
 export function sanitizeSavedGame(saved) {
@@ -147,5 +160,24 @@ export function sanitizeSavedGame(saved) {
   // 终局字段净化：防止导入存档把深层层数写成 Infinity / 超大值导致怪物数值溢出。
   cleaned.abyssBest = Math.max(0, Math.min(9999, Math.floor(Number(saved.abyssBest) || 0)));
   cleaned.abyssFloor = Math.max(0, Math.min(cleaned.abyssBest, Math.floor(Number(saved.abyssFloor) || 0)));
+  const clampInt = (value, min, max, fallback = min) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(numeric)));
+  };
+  const player = cleaned.player;
+  const clampField = (key, min, max) => {
+    if (player[key] !== undefined) player[key] = clampInt(player[key], min, max);
+  };
+  clampField("gold", 0, SAVE_LIMITS.gold);
+  clampField("level", 1, SAVE_LIMITS.level);
+  clampField("exp", 0, SAVE_LIMITS.exp);
+  clampField("hp", 0, SAVE_LIMITS.hp);
+  clampField("maxHp", 1, SAVE_LIMITS.hp);
+  clampField("marks", 0, SAVE_LIMITS.marks);
+  clampField("potion", 0, SAVE_LIMITS.potion);
+  clampField("reforgeScroll", 0, SAVE_LIMITS.reforgeScroll);
+  clampField("skillPoints", 0, SAVE_LIMITS.skillPoints);
+  if (Array.isArray(player.skillLevels)) player.skillLevels = player.skillLevels.slice(0, 4).map((level) => clampInt(level, 0, 99));
   return cleaned;
 }

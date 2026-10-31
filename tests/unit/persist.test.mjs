@@ -138,3 +138,39 @@ test("sanitizeSavedGame：缺 id 物品补生成导入 id，词缀超过 4 条�
   assert.ok(cleaned.inventory[0].id.startsWith("imported-"), "缺 id 时补生成导入前缀 id");
   assert.equal(cleaned.inventory[0].affixes.length, 4, "词缀最多保留 4 条");
 });
+
+test("sanitizeSavedGame：导入存档的玩家数值被钳制，超上限金币不会原样生效", () => {
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    player: {
+      gold: 123456789,
+      level: 999,
+      exp: 99999999,
+      hp: 1e9,
+      maxHp: 1e9,
+      marks: 99999999,
+      potion: 100000,
+      reforgeScroll: 100000,
+      skillPoints: 100000,
+      skillLevels: [99, 99, 99, 99, 99]
+    }
+  });
+  assert.ok(cleaned.player.gold <= 9999999, `金币应被钳制，实际 ${cleaned.player.gold}`);
+  assert.ok(cleaned.player.level <= 60, `等级应被钳制，实际 ${cleaned.player.level}`);
+  assert.ok(cleaned.player.exp <= 9999999, `经验应被钳制，实际 ${cleaned.player.exp}`);
+  assert.ok(cleaned.player.hp <= 999999 && cleaned.player.maxHp <= 999999, "生命应被钳制");
+  assert.ok(cleaned.player.marks <= 999999, "印记应被钳制");
+  assert.ok(cleaned.player.potion <= 999, "药水应被钳制");
+  assert.equal(cleaned.player.skillLevels.length, 4, "技能等级数组截断到 4 个");
+  assert.ok(
+    cleaned.player.skillLevels.every((level) => level <= 99),
+    "技能等级应被钳制"
+  );
+});
+
+test("sanitizeSavedGame：未提供的字段不会被凭空补成 0", () => {
+  const cleaned = sanitizeSavedGame({ classId: "mage", player: { gold: 100 } });
+  assert.equal(cleaned.player.gold, 100);
+  assert.equal(cleaned.player.maxHp, undefined, "缺失的 maxHp 不应被写成 0/1");
+  assert.equal(cleaned.player.potion, undefined, "缺失的 potion 不应被补值");
+});

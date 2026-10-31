@@ -131,12 +131,33 @@ export function getCamera(scale = getViewScale()) {
   return { x: clamp(state.player.x - halfW, 0, map.width - halfW * 2), y: clamp(state.player.y - halfH, 0, map.height - halfH * 2) };
 }
 
-export function showToast(message) {
+// 0.8.9：toast 改为队列，避免连续提示互相覆盖（例如购买成功后立刻被「附近没有可攻击目标」顶掉）。
+const toastQueue = [];
+
+function pumpToast() {
   const toast = $("toast");
-  toast.textContent = message;
+  if (!toast) return;
+  if (!toastQueue.length) {
+    toast.classList.remove("show");
+    toastTimer = null;
+    return;
+  }
+  toast.textContent = toastQueue.shift();
   toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove("show");
+    toastTimer = setTimeout(pumpToast, 200);
+  }, 1800);
+}
+
+export function showToast(message) {
+  const text = String(message ?? "");
+  if (!text) return;
+  if (toastQueue[toastQueue.length - 1] === text) return;
+  toastQueue.push(text);
+  if (toastQueue.length > 5) toastQueue.shift();
+  if (!toastTimer) pumpToast();
 }
 
 // 0.8.8：结构化事件流（仅内存、上限 800 条）。给 e2e 提供可断言的流程时间线，
