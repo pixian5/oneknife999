@@ -512,10 +512,10 @@ async function runJourney(browser, runIndex) {
   for (let mapIndex = 0; mapIndex < MAP_ORDER.length; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
     await clearMap(page, mapId);
-    await assertAutoSaveCheckpoint(page, mapId);
-    // 0.8.8：每关读取结构化事件时间线，用日志核对「击杀 / 掉落 / 死亡 / 存档」是否齐全，
-    // 不再依赖截图判断流程。
+    // 0.8.8：在 checkpoint 触发整页 reload 之前读取时间线，否则页面重载会把事件缓冲清空。
     const stageEvents = await page.evaluate(() => (window.__ONEKNIFE_E2E__?.timeline ? window.__ONEKNIFE_E2E__.timeline(400) : []));
+    const needNow = await page.evaluate((id) => window.__ONEKNIFE_E2E__.snapshot().progress[id]?.need || 0, mapId);
+    await assertAutoSaveCheckpoint(page, mapId);
     const stat = {
       stage: mapIndex + 1,
       map: mapId,
@@ -528,7 +528,7 @@ async function runJourney(browser, runIndex) {
     stageStats.push(stat);
     if (stat.stage % 10 === 0) process.stdout.write(`TIMELINE ${JSON.stringify(stat)}\n`);
     if (!stat.saves) process.stdout.write(`WARN stage ${stat.stage} 缺少保存事件\n`);
-    if (stat.kills < MAP_CLEAR_RULES[mapId].kills + 1) process.stdout.write(`WARN stage ${stat.stage} 击杀事件不足：${stat.kills}\n`);
+    if (stat.kills < needNow + 1) process.stdout.write(`WARN stage ${stat.stage} 击杀事件不足：${stat.kills}/${needNow + 1}\n`);
 
     // 每 25 关重建 context（保留 storageState），规避 Chromium 长时间虚拟时钟快进后的 renderer 崩溃。
     if ((mapIndex + 1) % 25 === 0 && mapIndex < MAP_ORDER.length - 1) {
