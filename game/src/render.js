@@ -1796,15 +1796,20 @@ export function renderShopPanel() {
   const scrolls = state.player.reforgeScroll || 0;
   setText($("shopTip"), `金币 ${formatNumber(gold)} · 词缀重铸卷 ×${scrolls}（按 F 关闭）`);
   // 签名包含金币、卷轴与已穿戴装备的词缀状态：任一变化都重建商品 / 重铸列表。
-  // 0.4.0：重铸后的 2 秒高亮也进签名，到期时签名变化触发一次重建以移除动画类。
+  // 0.8.7：重铸后的 2 秒高亮不再进签名——此前它每帧都变，导致高亮期内整个重铸列表每帧重建，
+  // 按钮在 pointerdown 与 pointerup 之间被替换，真实点击与自动化点击都会丢事件。
+  // 高亮只需切 class，所以到期时只在原节点上移除 pulse。
   const pulse = state.reforgePulse && performance.now() < state.reforgePulse.until ? state.reforgePulse.slotKey : "";
+  const reforgeList = $("shopReforge");
+  if (!pulse && reforgeList?.querySelector(".shop-reforge-row.pulse"))
+    reforgeList.querySelectorAll(".shop-reforge-row.pulse").forEach((row) => setClass(row, "pulse", false));
   const equipmentSignature = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
     const item = state.player.equipment?.[slotKey];
     return item ? `${item.id}:${item.enhance || 0}:${(item.affixes || []).map((affix) => `${affix.key}${affix.value}`).join("&")}` : "-";
   }).join("|");
   // 0.4.2：词缀锁定状态也进签名，锁定 / 解锁后面板价格与芯片立即刷新。
   const lockSignature = JSON.stringify(state.reforgeLocks || {});
-  if (!panelChanged($("shopGoods"), `v3|${gold}|${scrolls}|${pulse}|${lockSignature}|${equipmentSignature}`)) return;
+  if (!panelChanged($("shopGoods"), `v3|${gold}|${scrolls}|${lockSignature}|${equipmentSignature}`)) return;
   setHtml(
     $("shopGoods"),
     SHOP_GOODS.map((good) => {

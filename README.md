@@ -4,7 +4,7 @@
 
 - **可玩原型**：十章 100 张连续关卡、三职业、首领阶段战、掉落装备、自动保存；纯前端 Canvas 实现，代码位于 [game/](game/)。
 - **设计文档**：[docs/](docs/) 是设计事实源（产品、战斗、成长、地图、PK、行会、经济、服务器、QA、数值基线），治理规则见 [docs/README.md](docs/README.md)。
-- **当前版本**：0.8.5（见 [VERSION](VERSION)）
+- **当前版本**：0.8.7（见 [VERSION](VERSION)）
 
 ## 快速开始
 
@@ -39,6 +39,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.8.7 **真机全流程测试修复：移动端顶栏溢出 + 重铸面板点击丢事件**：在虚拟机线上部署环境用真实 Chromium、真实鼠标/键盘/触屏跑通首屏、三职业、连续关卡、掉落/穿戴/强化/重铸、商店、技能加点、图鉴、死亡复活、存档导入导出与帧率，并推进百图自动通关到第 56 关。① 390px 视口下顶栏 9 个按钮排成一行宽 444px，「保存」(x=388) 与「重置」(x=439) 完全落在视口外，360px 溢出 122px、768px 溢出 4px；改为移动端 `.top-actions` 换行 + 收紧间距，`761–900px` 区间收紧间距，三视口复测全部按钮在视口内且中心点可命中。② 重铸后 2 秒高亮被放进 HUD 重建签名，`performance.now()` 每帧变化导致整个重铸列表每帧重建，按钮在 pointerdown 与 pointerup 之间被替换、点击丢事件（原生 `click()` 30 秒超时）；把高亮改为只切 class，实测 2 秒内 `#shopReforge` DOM 变更从约 120 次降到 1 次，原生点击恢复，重铸「矿道旧刃 新附 防御 +1」正常。`tests/ui-smoke.cjs` 新增「顶栏按钮不溢出且中心点可命中」「选职业后存档非空」两条断言，三视口执行。验证：`npm run verify` 167 单测全绿、格式检查通过，`test:ui` / `test:ui:regression` / `test:ui:nameplate` / `test:ui:abilities` / `test:ui:levelup` / `test:ui:blind` 全 PASS。详见 [docs/20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md](docs/20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md)。
 
 0.8.6 **公网部署加固 + 两处前端缺陷修复**：① 修 `main.js` 对 `render.js` 的 import 漏项——2167 行 resize 监听调 `scheduleResize()`，但 import 列表只有 `resizeCanvas`，导致**每次窗口 resize 都抛 `ReferenceError: scheduleResize is not defined`、画布不重算**（实测 900×600 与 1440×900 视口下 canvas 恒为 444×215）；补上 import 后 resize 合并到每帧最多一次。② `chooseClass()` 选定职业后立即 `persistGame()`：此前只在升级/通关/拾取等事件落盘，**选完职业立刻刷新会退回职业选择**。③ 内联 SVG favicon，消掉每次冷启动的 `/favicon.ico` 404（此前是首屏唯一非 2xx 请求）。部署侧同步加固：静态服务换成禁目录列表、支持 Range、带缓存头的 `serve.py`（原 `python -m http.server` 会把 `/src/`、`/assets/` 整份列出来）；静态服务与 cloudflared 隧道加守护循环；空闲自动暂停在免费套餐下不可关闭（API 返回 `permission_denied`），已知并记录。验证：冷启动无异常、resize 后画布随视口变化、Range 返回 206、目录访问返回 403。详见 [docs/20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md](docs/20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md)。
 

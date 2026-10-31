@@ -398,6 +398,10 @@ QA：成功、边界、异常、性能、灾备
 
 新增 `game/src/assets.js`，把「地图数据名 → 素材文件名」收敛到一处：剥离章节前缀、40 个旧生成怪别名到 50 个动作帧物种、4 个缺失命名显式映射。第 5/91 关实测资源 404 从 24 个唯一 URL 降到仅 `favicon.ico`；Boss 情报头像改为按章节回退并缓存，消除单会话 5000+ 次 404。同步修复 `resolveLethalSave`（按最大生命 12% 保留、低血不回血）、套装攻击进入角色面板与装备预览、`meleeReflect` 仅近战生效、玩家受击帧、深层 `abyssFloor` 持久化与经验/品质成长、图鉴全集缓存。验证：167 单测全绿；第 5/91 关浏览器 0 资源 404。详见 [20261030-0135-资产解析与终局修复-DeepSeek-V4.1-Flash.md](20261030-0135-资产解析与终局修复-DeepSeek-V4.1-Flash.md)。
 
+### 0.8.7 线上真机全流程测试与两处 P2 修复
+
+在线上部署环境用真实 Chromium、真实鼠标/键盘/触屏跑通首屏、三职业、连续关卡、掉落/穿戴/强化/重铸、商店、技能加点、图鉴、死亡复活、存档导入导出与帧率，并推进百图自动通关到第 56 关（Lv29、金币 112798、死亡 27）。修 **移动端顶栏溢出**：390px 下 9 个按钮排一行宽 444px，「保存/重置」完全出屏（360px 溢出 122px、768px 溢出 4px），改为换行 + 收紧间距，三视口复测全部可命中。修 **重铸高亮期每帧重建**：`pulse` 进 HUD 重建签名导致 2 秒内整列每帧 `innerHTML`，按钮在 pointerdown 与 pointerup 之间被替换、原生点击 30 秒超时；改为只切 class，2 秒内 DOM 变更从约 120 次降到 1 次。`ui-smoke` 补两条断言。另登记 41–46 关死亡激增、购买 toast 被覆盖、导入不校验金币上限、骨卫需先锁目标四项待排期。详见 [20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md](20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md)。
+
 ### 0.8.6 公网部署加固与两处前端缺陷修复
 
 本轮只做部署验收与缺陷收口。**修 resize 必抛 `ReferenceError: scheduleResize is not defined`**：`render.js` 导出了它、`main.js` 的 import 列表却漏了，导致每次拖窗口/横竖屏都抛异常且画布不重算（实测 900×600 与 1440×900 下 canvas 恒为 444×215），补一行 import 即修好。**修 `chooseClass()` 不落盘**：选完职业立刻刷新会退回职业选择，改为选定即 `persistGame()`。**修 favicon 404**：内联 SVG 图标，首屏不再有非 2xx 请求。部署侧把 `python -m http.server` 换成 `serve.py`（禁目录列表、支持 Range 206、带缓存头），并加 `keepalive.sh` 守护静态服务与隧道。另记录一条硬限制：免费套餐 `autoSuspendAfterSeconds` 恒为 1800 秒，`setAutoSuspend(0)` 返回 `permission_denied`，要真正「不掉线」需升级 Pro。详见 [20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md](20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md)。

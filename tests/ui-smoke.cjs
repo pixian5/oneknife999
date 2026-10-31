@@ -35,9 +35,28 @@ async function verifyViewport(browser, viewport) {
       actionBarBottom: actionBar.bottom,
       canvasWidth: canvasRect.width,
       canvasHeight: canvasRect.height,
-      coloredPixels
+      coloredPixels,
+      // 0.8.7：顶栏 9 个按钮在窄屏必须全部落在视口内且中心点可命中（此前 390px 下保存/重置溢出到视口外）。
+      topButtonsOutside: [...document.querySelectorAll(".top-actions .icon-button")]
+        .filter((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.left < -0.5 || rect.right > window.innerWidth + 0.5;
+        })
+        .map((button) => button.textContent.trim()),
+      topButtonsHit: [...document.querySelectorAll(".top-actions .icon-button")].every((button) => {
+        const rect = button.getBoundingClientRect();
+        const el = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return el === button || (el && button.contains(el));
+      })
     };
   });
+
+  assert.deepEqual(layout.topButtonsOutside, [], `${viewport.name} 顶栏按钮溢出视口：${JSON.stringify(layout.topButtonsOutside)}`);
+  assert.ok(layout.topButtonsHit, `${viewport.name} 顶栏按钮中心点不可命中`);
+
+  // 0.8.7：选完职业立即落盘，保证新档不会因为选完就关页面而丢失（0.8.6 已修行为，这里补断言防回归）。
+  const savedBytes = await page.evaluate(() => (localStorage.getItem("oneknife999-prototype-save-v4") || "").length);
+  assert.ok(savedBytes > 0, `${viewport.name} 选择职业后未立即写入存档`);
 
   assert.ok(
     layout.documentScrollHeight <= layout.documentClientHeight,
