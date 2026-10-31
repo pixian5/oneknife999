@@ -402,6 +402,10 @@ QA：成功、边界、异常、性能、灾备
 
 在线上部署环境用真实 Chromium、真实鼠标/键盘/触屏跑通首屏、三职业、连续关卡、掉落/穿戴/强化/重铸、商店、技能加点、图鉴、死亡复活、存档导入导出与帧率，并推进百图自动通关到第 56 关（Lv29、金币 112798、死亡 27）。修 **移动端顶栏溢出**：390px 下 9 个按钮排一行宽 444px，「保存/重置」完全出屏（360px 溢出 122px、768px 溢出 4px），改为换行 + 收紧间距，三视口复测全部可命中。修 **重铸高亮期每帧重建**：`pulse` 进 HUD 重建签名导致 2 秒内整列每帧 `innerHTML`，按钮在 pointerdown 与 pointerup 之间被替换、原生点击 30 秒超时；改为只切 class，2 秒内 DOM 变更从约 120 次降到 1 次。`ui-smoke` 补两条断言。另登记 41–46 关死亡激增、购买 toast 被覆盖、导入不校验金币上限、骨卫需先锁目标四项待排期。详见 [20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md](20261031-1900-移动端顶栏与重铸点击修复-DeepSeek-V4.1-Flash.md)。
 
+### 0.8.7 详细测试计划
+
+112 条用例分 14 组（A 启动/B 落盘/C 操作战斗/D 装备重铸/E 经济/F 关卡首领/G 死亡复活/H 响应式/I 移动端/J 存档迁移/K 终局/L 性能/M 部署/N 兼容），配基线数据表、6 轮时间盒、缺陷分级与准入准出。明确百图需分 4 段执行、每 25 关重建 context。详见 [20261031-2130-详细测试计划-DeepSeek-V4.1-Flash.md](20261031-2130-详细测试计划-DeepSeek-V4.1-Flash.md)。
+
 ### 0.8.6 公网部署加固与两处前端缺陷修复
 
 本轮只做部署验收与缺陷收口。**修 resize 必抛 `ReferenceError: scheduleResize is not defined`**：`render.js` 导出了它、`main.js` 的 import 列表却漏了，导致每次拖窗口/横竖屏都抛异常且画布不重算（实测 900×600 与 1440×900 下 canvas 恒为 444×215），补一行 import 即修好。**修 `chooseClass()` 不落盘**：选完职业立刻刷新会退回职业选择，改为选定即 `persistGame()`。**修 favicon 404**：内联 SVG 图标，首屏不再有非 2xx 请求。部署侧把 `python -m http.server` 换成 `serve.py`（禁目录列表、支持 Range 206、带缓存头），并加 `keepalive.sh` 守护静态服务与隧道。另记录一条硬限制：免费套餐 `autoSuspendAfterSeconds` 恒为 1800 秒，`setAutoSuspend(0)` 返回 `permission_denied`，要真正「不掉线」需升级 Pro。详见 [20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md](20261031-0050-部署加固与resize修复-DeepSeek-V4.1-Flash.md)。
