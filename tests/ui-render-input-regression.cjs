@@ -271,39 +271,48 @@ async function verifyBossRespawnCountdown(page) {
         .sort((a, b) => a.distance - b.distance)[0] || null
     );
   });
-  assert.ok(gearDrop, "首领击杀后应留下可拾取的装备掉落");
-  await walkToward(page, gearDrop, 60);
-  const before = await readPanels();
-  let after = before;
-  let picked = false;
-  for (let i = 0; i < 12 && !picked; i += 1) {
-    await pressKey(page, "f", true);
-    await pressKey(page, "f", false);
-    // 面板走按帧刷新：每按一次 F 都轮询一小段，拾到即退出（不再依赖 Toast 文案判断）。
-    for (let j = 0; j < 20 && !picked; j += 1) {
-      await sleep(100);
-      after = await readPanels();
-      picked =
-        countOf(after.inv) > countOf(before.inv) ||
-        countOf(after.potion) > countOf(before.potion) ||
-        countOf(after.gold) > countOf(before.gold) ||
-        countOf(after.marks) > countOf(before.marks) ||
-        after.log !== before.log;
+  // 0.8.7：首领两件掉落来自权重池（地图装备 62 / 印记 18 / 药水·金币·材料），
+  // 偶发两件都不是装备（约 30%），旧断言会因此假失败（0.8.5 对照同样复现）。
+  // 有装备时保留「走近 85px 按 F」的原路径；无装备时验证击杀确实记录了掉落（自动拾取）。
+  if (gearDrop) {
+    await walkToward(page, gearDrop, 60);
+    const before = await readPanels();
+    let after = before;
+    let picked = false;
+    for (let i = 0; i < 12 && !picked; i += 1) {
+      await pressKey(page, "f", true);
+      await pressKey(page, "f", false);
+      // 面板走按帧刷新：每按一次 F 都轮询一小段，拾到即退出（不再依赖 Toast 文案判断）。
+      for (let j = 0; j < 20 && !picked; j += 1) {
+        await sleep(100);
+        after = await readPanels();
+        picked =
+          countOf(after.inv) > countOf(before.inv) ||
+          countOf(after.potion) > countOf(before.potion) ||
+          countOf(after.gold) > countOf(before.gold) ||
+          countOf(after.marks) > countOf(before.marks) ||
+          after.log !== before.log;
+      }
+      // 被击退或掉落被推到边缘：朝掉落点再走一步后重试。
+      if (!picked) await walkToward(page, gearDrop, 55, 900);
     }
-    // 被击退或掉落被推到边缘：朝掉落点再走一步后重试。
-    if (!picked) await walkToward(page, gearDrop, 55, 900);
+    assert.ok(picked, "按 F 未拾取到任何地面掉落");
+    const gainedAsset =
+      countOf(after.inv) > countOf(before.inv) ||
+      countOf(after.potion) > countOf(before.potion) ||
+      countOf(after.gold) > countOf(before.gold) ||
+      countOf(after.marks) > countOf(before.marks);
+    assert.ok(
+      gainedAsset,
+      `拾取后资产未增加：背包 ${before.inv} → ${after.inv}，药水 ${before.potion} → ${after.potion}，金币 ${before.gold} → ${after.gold}，印记 ${before.marks} → ${after.marks}`
+    );
+  } else {
+    const logText = await page.locator("#eventLog").textContent();
+    assert.match(logText, /掉落|自动拾取/, "首领击杀后未记录任何掉落");
+    process.stdout.write("PICKUP skip: 本次首领掉落均为非装备，已走自动拾取路径\n");
   }
-  assert.ok(picked, "按 F 未拾取到任何地面掉落");
-  const gainedAsset =
-    countOf(after.inv) > countOf(before.inv) ||
-    countOf(after.potion) > countOf(before.potion) ||
-    countOf(after.gold) > countOf(before.gold) ||
-    countOf(after.marks) > countOf(before.marks);
-  assert.ok(
-    gainedAsset,
-    `拾取后资产未增加：背包 ${before.inv} → ${after.inv}，药水 ${before.potion} → ${after.potion}，金币 ${before.gold} → ${after.gold}，印记 ${before.marks} → ${after.marks}`
-  );
-  assert.match(after.objective, /✓/, `首领击破后关卡卡未更新：${after.objective}`);
+  const objectiveText = await page.locator("#mapObjectiveChecks").textContent();
+  assert.match(objectiveText, /✓/, `首领击破后关卡卡未更新：${objectiveText}`);
 }
 
 (async () => {
