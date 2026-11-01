@@ -9,6 +9,7 @@ import {
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
+import { ELITE_AFFIXES } from "./elite.js";
 import { resolveMonsterSpriteName, resolveBossSprite, resolveBossUiPortrait, resolveMapBackgroundName } from "./assets.js";
 import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier, abyssProgress } from "./endgame.js";
 import { routePoint } from "./geometry.js";
@@ -868,6 +869,19 @@ export function drawEntity(entity) {
   ctx.save();
   const selected = entity.id === state.player.targetId;
   const scale = entity.boss ? 1.22 : 1;
+  // 0.8.13 精英光环：脚下旋转的金色虚线弧，远看就能和普通怪区分。
+  if (entity.elite) {
+    const auraT = Date.now() / 1000;
+    ctx.strokeStyle = "#e7b36b";
+    ctx.globalAlpha = 0.6;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.radius + 7, auraT * 0.6, auraT * 0.6 + Math.PI * 1.6);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
   if (selected) {
     ctx.strokeStyle = activeHero().color;
     ctx.globalAlpha = 0.8;
@@ -1064,14 +1078,32 @@ export function drawNameplate(entity, topOverride) {
   ctx.fillStyle = "rgba(9, 16, 19, .82)";
   roundedRect(ctx, left, top, width, NAMEPLATE_HEIGHT, 3);
   ctx.fill();
-  ctx.fillStyle = entity.npc ? "#eef4ef" : entity.boss ? "#f3b1a8" : "#c7d2cb";
+  // 0.8.13 精英：金色描边 + 名字金色 + 上方词缀名（接战前就能读到，满足 04 分卷的「可读提示」）。
+  if (entity.elite) {
+    ctx.strokeStyle = "#e7b36b";
+    ctx.lineWidth = 1;
+    roundedRect(ctx, left + 0.5, top + 0.5, width - 1, NAMEPLATE_HEIGHT - 1, 3);
+    ctx.stroke();
+  }
+  ctx.fillStyle = entity.elite ? "#f0d29a" : entity.npc ? "#eef4ef" : entity.boss ? "#f3b1a8" : "#c7d2cb";
   ctx.font = `${entity.boss || entity.npc ? 11 : 9}px sans-serif`;
   ctx.textAlign = "center";
   ctx.fillText(
-    `Lv.${entity.level} ${entity.name}${entity.npc ? " · 玩家" : ""}${entity.boss ? ` · P${entity.phase}` : ""}`,
+    `Lv.${entity.level} ${entity.elite ? "◆ " : ""}${entity.name}${entity.npc ? " · 玩家" : ""}${entity.boss ? ` · P${entity.phase}` : ""}`,
     entity.x,
     top + 11
   );
+  if (entity.elite) {
+    const label = (entity.elite.affixes || [])
+      .map((id) => ELITE_AFFIXES[id]?.name)
+      .filter(Boolean)
+      .join(" · ");
+    if (label) {
+      ctx.fillStyle = "#e7b36b";
+      ctx.font = "9px sans-serif";
+      ctx.fillText(label, entity.x, top - 4);
+    }
+  }
   ctx.fillStyle = "#8d9ca0";
   ctx.font = "8px sans-serif";
   ctx.fillText(`${Math.ceil(entity.hp)} / ${entity.maxHp}`, entity.x, top + 21);

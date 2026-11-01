@@ -127,6 +127,19 @@ import {
   resolveOnDeath,
   PASSIVE_PARAMS
 } from "./monster-abilities.js";
+import {
+  ELITE_TUNING,
+  GUARDIAN_RANGE,
+  GUARDIAN_RATIO,
+  SPLIT_TUNING,
+  echoDamageMult,
+  enrageGateMult,
+  hasAffix,
+  hoardDamageMult,
+  huntSpeedMult,
+  rollElite,
+  seededRandom
+} from "./elite.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -157,15 +170,54 @@ export function createEntities(map) {
   // 无尽深层（abyssFloor > 0）在难度倍率之上再叠一层层数成长。
   const difficulty = resolveDifficulty(state?.difficulty, MAP_ORDER.filter((id) => state?.mapProgress?.[id]?.completed).length);
   const abyss = state?.abyssFloor > 0 ? abyssMultipliers(state.abyssFloor) : { hp: 1, attack: 1, exp: 1 };
+  // 0.8.13 精英：每张图最多 3 只，位置与词缀由「地图 id + 刷怪点序号」确定性生成，
+  // 玩家重进关卡不会看到精英换位（e2e / 探针也能复现）。
+  const order = MAP_ORDER.indexOf(map.id) + 1;
+  // 先一次性算出所有刷怪点是否精英：概率刷不出来时补一只（每图至少 1 只，最多 3 只），
+  // 否则 12% 概率下一张图完全没精英，玩家感知不到这套系统存在。
+  const eliteFlags = map.monsterSpawns.map((_, index) =>
+    rollElite({
+      mapId: map.id,
+      index,
+      monsterCount: map.monsterSpawns.length,
+      order,
+      random: seededRandom(`${map.id}:${index}`)
+    })
+  );
+  if (map.monsterSpawns.length >= ELITE_TUNING.minMonsters && !eliteFlags.some(Boolean)) {
+    const forced = Math.floor(map.monsterSpawns.length / 2);
+    eliteFlags[forced] = rollElite({
+      mapId: map.id,
+      index: forced,
+      monsterCount: map.monsterSpawns.length,
+      order,
+      random: seededRandom(`${map.id}:${forced}:force`),
+      force: true
+    });
+  }
+  let eliteCount = 0;
+  eliteFlags.forEach((flag, index) => {
+    if (!flag) return;
+    eliteCount += 1;
+    if (eliteCount > ELITE_TUNING.maxPerMap) eliteFlags[index] = null;
+  });
   map.monsterSpawns.forEach((spawn, index) => {
     const baseType = map.monsterTypes[spawn[2]];
     const scaled = scaleForDifficulty({ hp: baseType.hp * abyss.hp, attack: baseType.attack * abyss.attack }, difficulty);
     const type = { ...baseType, hp: scaled.hp, attack: scaled.attack };
     const level = clamp(map.levelMin + spawn[2] * 2 + (index % 3), map.levelMin, map.levelMax);
+    const elite = eliteFlags[index] || null;
+    if (elite) {
+      type.hp = Math.round(type.hp * ELITE_TUNING.hpMult);
+      type.attack = Math.round(type.attack * ELITE_TUNING.attackMult);
+    }
     result.push({
       id: `mob-${index}`,
       ...type,
       level,
+      elite,
+      exp: elite ? Math.round((type.exp || 0) * ELITE_TUNING.expMult) : type.exp,
+      gold: elite ? Math.round((type.gold || 0) * ELITE_TUNING.goldMult) : type.gold,
       x: spawn[0],
       y: spawn[1],
       maxHp: type.hp,
@@ -407,6 +459,33 @@ export function resolveDamage(target, multiplier, skillName, kind) {
     ctx: { hpRatio: hpRatioBefore, firstHit: !target.tookFirstHit, melee: kind === "普通" || kind === "破甲" }
   });
   let damage = defended.damage;
+  // 0.8.13 守财词缀：离刷新点 140px 之外受伤 -40%，逼玩家在怪的领地里打完。
+  if (target.elite && damage > 0) {
+    const away = Math.hypot(target.x - (target.spawnX ?? target.x), target.y - (target.spawnY ?? target.y));
+    const mult = hoardDamageMult(target, away);
+    if (mult < 1) {
+      damage = Math.max(1, Math.round(damage * mult));
+      if (!target.hoardShown) {
+        target.hoardShown = true;
+        textAt("守财：离开地盘后减伤", target.x, floatYAboveNameplate(target, 30), "#e7c66b", 10);
+      }
+    }
+  }
+  // 0.8.13 护卫词缀：首领挨打时，附近护卫精英代为承受 30%——护卫会掉血、会死，
+  // 死亡时它自己的分裂 / 毒爆词缀照常触发（先杀护卫是设计给玩家的反制）。
+  if (target.boss && damage > 0) {
+    const guardian = state.entities.find(
+      (e) => e.alive && !e.friendly && !e.boss && hasAffix(e, "guardian") && distance(e, target) <= GUARDIAN_RANGE
+    );
+    if (guardian) {
+      const shared = Math.min(damage, Math.max(1, Math.round(damage * GUARDIAN_RATIO)));
+      guardian.hp = Math.max(0, guardian.hp - shared);
+      guardian.hitFlash = 0.12;
+      damage -= shared;
+      textAt(`护卫 -${shared}`, guardian.x, floatYAboveNameplate(guardian, 20), "#78b6ec", 11);
+      if (guardian.hp <= 0) defeat(guardian);
+    }
+  }
   // 0.6.0 P0 吸收盾：先扣盾，溢出部分才扣血（寒甲 / 协议护盾 / 堕神甲）。
   if ((target.shieldValue || 0) > 0) {
     const absorbed = Math.min(target.shieldValue, damage);
@@ -501,6 +580,8 @@ export function castSkill(index) {
     return;
   }
   const target = findTarget();
+  // 0.8.13 回响词缀的触发源：记录最近一次施法的游戏内时刻（秒计，由 tick 累加）。
+  state.player.lastSkillAge = 0;
   // 生息法阵（0.3.4）：在脚下展开 4 秒持续回复区，每秒回 8% 最大生命，离开立即失效。
   if (skill.kind === "治疗") {
     state.player.resource -= skill.cost;
@@ -676,6 +757,69 @@ function gainExperience(amount) {
 }
 
 // 击杀结算：收益数值来自 combat.js，这里负责写回进度、日志与掉落触发。
+// 0.8.13 精英死亡词缀：毒爆留毒区、分裂出两只弱体。
+// 分裂体继承本体名字与行为被动（便于玩家识别来源），但清空亡语与精英词缀，避免无限分裂。
+function handleEliteDeath(target) {
+  if (!target?.elite) return;
+  if (hasAffix(target, "toxic")) {
+    state.hazards.push({
+      x: target.x,
+      y: target.y,
+      r: 80,
+      damage: Math.max(6, Math.round(target.attack * 0.35)),
+      life: 1.2,
+      snap: false,
+      fade: 0.5,
+      attackerLevel: target.level
+    });
+    state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
+    textAt("毒爆", target.x, floatYAboveNameplate(target, 20), "#8fc7a2", 12);
+  }
+  if (hasAffix(target, "split") && !target.splitling) {
+    const map = activeMap();
+    for (let i = 0; i < SPLIT_TUNING.count; i += 1) {
+      const angle = (Math.PI * 2 * i) / SPLIT_TUNING.count + rand(-0.3, 0.3);
+      const maxHp = Math.max(1, Math.round(target.maxHp * SPLIT_TUNING.hpRatio));
+      state.entities.push({
+        id: `${target.id}-split-${i}`,
+        name: target.name,
+        level: target.level,
+        color: target.color,
+        hp: maxHp,
+        maxHp,
+        attack: Math.max(1, Math.round(target.attack * SPLIT_TUNING.attackRatio)),
+        defense: target.defense,
+        exp: Math.round((target.exp || 0) * 0.4),
+        gold: Math.round((target.gold || 0) * 0.4),
+        radius: Math.max(10, Math.round(target.radius * 0.75)),
+        x: clamp(target.x + Math.cos(angle) * 46, 55, map.width - 55),
+        y: clamp(target.y + Math.sin(angle) * 46, 55, map.height - 55),
+        alive: true,
+        friendly: false,
+        splitling: true,
+        elite: null,
+        hitFlash: 0,
+        wander: Math.random() * 6,
+        poisonTimer: 0,
+        morph: 0,
+        spawnX: target.x,
+        spawnY: target.y,
+        patrolRadius: 40,
+        aggro: true,
+        abilities: { ...target.abilities, onDeath: null },
+        usedLethalSave: false,
+        shieldValue: 0,
+        rageStacks: 0,
+        attackCooldown: rand(0.8, 1.6),
+        windup: 0,
+        windupTotal: MONSTER_ATTACK_RULES.normal.windup,
+        armorBreakTimer: 0
+      });
+    }
+    textAt("分裂", target.x, floatYAboveNameplate(target, 28), "#e7b36b", 12);
+  }
+}
+
 export function defeat(target) {
   // 0.6.0 P0 亡语：残星复起（死亡后短暂复原一次，一次副本内只触发一次）。
   const onDeath = resolveOnDeath(target.abilities?.onDeath, { entity: target });
@@ -695,6 +839,9 @@ export function defeat(target) {
   target.alive = false;
   target.respawn = target.boss ? 42 : target.npc ? 90 : rand(11, 20);
   target.hp = target.maxHp;
+  // 0.8.13 精英死亡词缀：毒爆 / 分裂。必须在 alive=false 之后跑，
+  // 否则分裂体可能在目标还没判死时就被同一发伤害波及。
+  handleEliteDeath(target);
   if (target.npc) {
     // 击杀白名武者：罪恶值 +100，红名阈值 300（docs/05）；不影响关卡进度与掉落。
     state.player.sin = (state.player.sin || 0) + PK_RULES.sinPerKill;
@@ -1102,6 +1249,8 @@ export function playerDamage(dt) {
       hpRatio: attacker.hp / Math.max(1, attacker.maxHp),
       rageStacks: attacker.rageStacks || 0
     });
+    // 0.8.13 狂怒词缀：生命 20% 以下时出手更密（闸门 ×0.75）。
+    shape.gateMult *= enrageGateMult(attacker);
     const reach = (attacker.radius + 70) * shape.rangeMult;
     const inRange = !atSanctuary && distance(state.player, attacker) <= reach;
     // 只有已进入战斗的敌人才会抬手（首领视为始终接战）：避免路过时被一圈未反应过来的巡逻怪同时围攻。
@@ -1127,6 +1276,9 @@ export function playerDamage(dt) {
         attackPower *= packHuntMultiplier(attacker.abilities?.passives, allyCount);
         attackPower *= lowHpDamageMultiplier(attacker.abilities?.passives, attacker.hp / attacker.maxHp);
         attackPower *= enrageMultiplier(attacker.abilities?.passives, playerHpRatio);
+        // 0.8.13 回响词缀：玩家 3 秒内放过技能，这次命中附带余波伤害。
+        const echoMult = echoDamageMult(attacker, state.player.lastSkillAge ?? 99);
+        attackPower *= echoMult;
         // 多段连击：按段数均分攻击力，逐段独立结算（可被护盾 / 无敌分段吃掉）。
         const hits = Math.max(1, shape.multiHit);
         let total = 0;
@@ -1144,6 +1296,15 @@ export function playerDamage(dt) {
         // 只服务难度探针的死因统计，不参与结算，也不写入存档。
         state.player.lastKiller = attacker.name;
         spark(state.player.x, state.player.y, "#f16d66", 4);
+        // 0.8.13 回响提示：只在真的吃到余波时冒字，避免铭牌信息过载。
+        if (echoMult > 1) textAt("回响", state.player.x, floatYAbovePlayer(34), "#c79bf0", 12);
+        // 0.8.13 净化词缀：命中时驱散破势并延后技能冷却，6 秒一次（不是每次普攻都净化）。
+        if (hasAffix(attacker, "purge") && (attacker.purgeCooldown || 0) <= 0) {
+          attacker.purgeCooldown = 6;
+          state.player.charge = 0;
+          state.player.cooldowns = state.player.cooldowns.map((cd) => (cd > 0 ? Math.min(cd + 1.5, 20) : cd));
+          textAt("净化", state.player.x, floatYAbovePlayer(46), "#dff3ff", 12);
+        }
         applyOnHitPassives(attacker, total);
         // 冲锋 / 击退形态：把玩家推开，制造位移压力。
         if (shape.knockback > 0) pushPlayerAway(attacker, shape.knockback);
@@ -1418,6 +1579,8 @@ export function updateSummon(guard, dt) {
 export function updateMonsterAI(entity, dt) {
   const player = state.player;
   entity.wander += dt;
+  // 0.8.13 净化词缀的内置冷却（6 秒一次，避免每次普攻都驱散玩家的破势）。
+  if ((entity.purgeCooldown || 0) > 0) entity.purgeCooldown = Math.max(0, entity.purgeCooldown - dt);
   // 0.6.0 P0 周期护盾（寒甲 / 协议护盾 / 堕神甲）：冷却回满时挂一层吸收盾，
   // 盾值按 maxHp 比例；受击时先扣盾再扣血（见 resolveDamage）。
   const shieldPassive = (entity.abilities?.passives || []).find((p) => p.id === "shieldCycle");
@@ -1448,10 +1611,13 @@ export function updateMonsterAI(entity, dt) {
     targetX = entity.x + (dx / length) * stopAt;
     targetY = entity.y + (dy / length) * stopAt;
     speed = 132;
-    // 0.8.12 嗜血追击（enrageLowHp.speedBonus）：玩家残血时这类怪移速上调。
-    // 先判被动再算 playerMaxHp()，避免给全场每只怪每帧都跑一遍装备加成。
-    if ((entity.abilities?.passives || []).some((passive) => passive.id === "enrageLowHp")) {
-      speed *= enrageSpeedMultiplier(entity.abilities.passives, player.hp / Math.max(1, playerMaxHp()));
+    // 0.8.12 / 0.8.13 追击提速：嗜血被动（玩家残血 +20%）与追猎词缀（常驻 +15%，玩家半血 +30%）。
+    // 只有确实带其一时才计算 playerMaxHp()，避免给全场每只怪每帧都跑一遍装备加成。
+    const chasePassives = entity.abilities?.passives || [];
+    if (chasePassives.some((passive) => passive.id === "enrageLowHp") || hasAffix(entity, "hunt")) {
+      const playerHpRatio = player.hp / Math.max(1, playerMaxHp());
+      if (chasePassives.some((passive) => passive.id === "enrageLowHp")) speed *= enrageSpeedMultiplier(chasePassives, playerHpRatio);
+      speed *= huntSpeedMult(entity, playerHpRatio);
     }
   } else {
     targetX = entity.spawnX + Math.cos(entity.wander * 0.7) * entity.patrolRadius;
@@ -1611,6 +1777,8 @@ export function update(dt) {
   state.player.potionLock = Math.max(0, (state.player.potionLock || 0) - dt);
   state.player.skillLock = Math.max(0, (state.player.skillLock || 0) - dt);
   state.player.blindTimer = Math.max(0, (state.player.blindTimer || 0) - dt);
+  // 0.8.13 回响：距离上次施法的秒数只增不减，上限 99 表示「很久以前」。
+  state.player.lastSkillAge = Math.min(99, (state.player.lastSkillAge ?? 99) + dt);
   if (state.player.slowTimer <= 0) state.player.slowFactor = 1;
   if (state.player.blindTimer <= 0) state.player.blindMissChance = 0;
   // 全局出手闸门（0.3.4）：任意怪物出手后需等 gate 秒，任何怪才能再次抬手。
@@ -2041,6 +2209,15 @@ if (TEST_MODE) {
     // 0.8.8：结构化事件时间线（击杀/掉落/升级/通关/存档等），供流程级断言使用。
     timeline: (limit = 300) => traceEvents(limit),
     clearTimeline: () => clearTraceEvents(),
+    // 0.8.13：仅 e2e 使用——对指定实体直接扣血，用于验证精英死亡词缀（分裂 / 毒爆）。
+    // 走 defeat() 的完整死亡流程，但不经过玩家伤害公式，测试才能精确控制击杀时机。
+    strike: (id, damage = 99999) => {
+      const target = state.entities.find((entity) => entity.id === id);
+      if (!target || !target.alive) return false;
+      target.hp = Math.max(0, target.hp - Math.max(1, Number(damage) || 1));
+      if (target.hp <= 0) defeat(target);
+      return true;
+    },
     catalog: () =>
       JSON.parse(
         JSON.stringify(
@@ -2143,6 +2320,8 @@ if (TEST_MODE) {
                 .filter((entity) => !entity.friendly)
                 .map((entity) => ({
                   id: entity.id,
+                  // 0.8.13：精英 e2e 需要按名字找同类型的普通怪做生命倍率对照。
+                  name: entity.name,
                   x: entity.x,
                   y: entity.y,
                   hp: entity.hp,
@@ -2157,6 +2336,9 @@ if (TEST_MODE) {
                   passives: (entity.abilities?.passives || []).map((passive) => passive.id),
                   // 0.7.3：亡语也要能被 e2e 观察到，否则 noabideath 的消融没有断言入口。
                   onDeath: entity.abilities?.onDeath || null,
+                  // 0.8.13：精英词缀与裂生体标记，供精英 e2e 断言（普通怪为 null / false）。
+                  elite: entity.elite ? { affixes: [...entity.elite.affixes], reward: entity.elite.reward } : null,
+                  splitling: Boolean(entity.splitling),
                   shield: entity.shieldValue || 0
                 })),
               hazardsSpawned: state.hazardsSpawned || 0,
