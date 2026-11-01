@@ -120,8 +120,10 @@ import {
   reflectDamage,
   resolveLethalSave,
   packHuntMultiplier,
+  packHuntRange,
   lowHpDamageMultiplier,
   enrageMultiplier,
+  enrageSpeedMultiplier,
   resolveOnDeath,
   PASSIVE_PARAMS
 } from "./monster-abilities.js";
@@ -184,7 +186,6 @@ export function createEntities(map) {
       abilities: gateAbilities(resolveAbilities(type.name)),
       usedLethalSave: false,
       shieldValue: 0,
-      shieldTimer: 0,
       rageStacks: 0,
       // 0.3.4 攻击前摇：初始冷却按一个完整周期随机错开，避免玩家一进圈就被整群怪同时抬手。
       attackCooldown: rand(1.2, 2.9),
@@ -1117,8 +1118,10 @@ export function playerDamage(dt) {
         // 承伤公式与 docs/11 基线一致：减伤随攻击者等级衰减，后期不再恒定封顶。
         // 防御取「职业基础 + 装备防御词缀」（0.3.7 起装备防御真正参与结算）。
         // 0.6.0：叠加怪物行为修正——同类增伤 / 自身残血增伤 / 玩家残血增伤 / 多段分摊。
+        // 0.8.12：同类搜索半径改为读 packHunt.range（此前硬编码 260，配置不可覆盖）。
+        const packRange = packHuntRange(attacker.abilities?.passives);
         const allyCount = state.entities.filter(
-          (e) => e.alive && !e.friendly && !e.boss && e.name === attacker.name && e.id !== attacker.id && distance(attacker, e) <= 260
+          (e) => e.alive && !e.friendly && !e.boss && e.name === attacker.name && e.id !== attacker.id && distance(attacker, e) <= packRange
         ).length;
         let attackPower = attacker.attack * shape.damageMult;
         attackPower *= packHuntMultiplier(attacker.abilities?.passives, allyCount);
@@ -1445,6 +1448,11 @@ export function updateMonsterAI(entity, dt) {
     targetX = entity.x + (dx / length) * stopAt;
     targetY = entity.y + (dy / length) * stopAt;
     speed = 132;
+    // 0.8.12 嗜血追击（enrageLowHp.speedBonus）：玩家残血时这类怪移速上调。
+    // 先判被动再算 playerMaxHp()，避免给全场每只怪每帧都跑一遍装备加成。
+    if ((entity.abilities?.passives || []).some((passive) => passive.id === "enrageLowHp")) {
+      speed *= enrageSpeedMultiplier(entity.abilities.passives, player.hp / Math.max(1, playerMaxHp()));
+    }
   } else {
     targetX = entity.spawnX + Math.cos(entity.wander * 0.7) * entity.patrolRadius;
     targetY = entity.spawnY + Math.sin(entity.wander * 0.55) * entity.patrolRadius;

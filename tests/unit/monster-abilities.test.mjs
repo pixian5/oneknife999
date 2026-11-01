@@ -14,8 +14,10 @@ import {
   reflectDamage,
   resolveLethalSave,
   packHuntMultiplier,
+  packHuntRange,
   lowHpDamageMultiplier,
   enrageMultiplier,
+  enrageSpeedMultiplier,
   resolveOnDeath
 } from "../../game/src/monster-abilities.js";
 import { MAPS } from "../../game/src/maps.js";
@@ -109,11 +111,28 @@ test("ATTACK_SHAPES：放大系数有上限，防止难度再次失控", () => {
   assert.equal(attackShapeConfig("multi3").gateMult, 1, "三段连击不加后摇");
 });
 
-test("attackShapeConfig：攻速叠加提升伤害倍率", () => {
+test("attackShapeConfig：修罗怒层数同时提高伤害与出手速度", () => {
   const base = attackShapeConfig("normal", { rageStacks: 0 });
   const stacked = attackShapeConfig("normal", { rageStacks: 5 });
-  assert.ok(stacked.damageMult > base.damageMult, "5 层修罗怒应提高倍率");
-  assert.ok(Math.abs(stacked.damageMult - (1 + 5 * PASSIVE_PARAMS.rageStack.attackSpeedPerStack)) < 1e-9);
+  const rage = PASSIVE_PARAMS.rageStack;
+  assert.ok(Math.abs(stacked.damageMult - (1 + 5 * rage.damagePerStack)) < 1e-9, "5 层伤害按 damagePerStack 叠加");
+  assert.ok(Math.abs(stacked.windupMult - (1 - 5 * rage.speedPerStack)) < 1e-9, "5 层前摇按 speedPerStack 缩短");
+  assert.ok(stacked.windupMult < base.windupMult, "层数越高抬手越快");
+  assert.equal(attackShapeConfig("normal", { rageStacks: 99 }).damageMult, 1 + rage.max * rage.damagePerStack, "层数封顶");
+  assert.ok(attackShapeConfig("heavy", { rageStacks: 99 }).windupMult >= 1.45 * 0.5 - 1e-9, "前摇最多缩短一半，保留反应窗口");
+});
+
+test("enrageSpeedMultiplier：只在玩家残血时提速，阈值与嗜血增伤同源", () => {
+  const passives = [{ id: "enrageLowHp", params: { threshold: 0.35, speedBonus: 0.2 } }];
+  assert.equal(enrageSpeedMultiplier(passives, 0.8), 1, "玩家健康时不提速");
+  assert.equal(enrageSpeedMultiplier(passives, 0.35), 1.2, "进入阈值立刻提速");
+  assert.equal(enrageSpeedMultiplier([{ id: "poison", params: {} }], 0.1), 1, "无该被动不生效");
+});
+
+test("packHuntRange：同类搜索半径可被配置覆盖", () => {
+  assert.equal(packHuntRange([]), 260, "缺省 260");
+  assert.equal(packHuntRange([{ id: "packHunt", params: { range: 320 } }]), 320);
+  assert.equal(packHuntRange([{ id: "packHunt", params: {} }]), 260);
 });
 
 test("rollPassive：概率被动按注入随机数判定，无概率字段视为必触发", () => {

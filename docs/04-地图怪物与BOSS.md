@@ -928,17 +928,17 @@ protection 和 owner，确保客户端光柱不是资产凭证。
 
 | 类别 | 原语 | 语义 |
 |---|---|---|
-| 攻击形态 | `normal` | 基础近战：单段、标准射程 |
-| | `multi` / `multi3` | 多段连击：2 / 3 段，伤害按段均分逐段结算 |
-| | `heavy` | 蓄力重击：伤害 ×1.35、击退 30px、前摇 ×1.6 |
-| | `ranged` | 远程投掷：射程 ×1.9、伤害 ×0.85 |
-| | `charge` | 冲锋：射程 ×1.45、伤害 ×1.2、击退 36px |
-| | `sweep` | 范围横扫：射程 ×1.7、伤害 ×1.1 |
-| | `pull` | 锁链拖拽：射程 ×2.2、命中后把玩家拉近至 40px |
-| 被动（19 种） | 状态 | `poison` 中毒叠加 / `slow` 减速 / `stun` 打断 / `blind` 干扰 / `resourceDrain` 资源压制 / `potionLock` 药水封锁 / `skillLock` 技能封锁 |
+| 攻击形态 | `normal` | 基础近战：单段、射程 ×1、伤害 ×1 |
+| | `multi` / `multi3` | 多段连击：2 / 3 段，伤害 ×0.92 / ×0.8 后按段均分逐段结算 |
+| | `heavy` | 蓄力重击：伤害 ×1.15、击退 20px、前摇 ×1.45、闸门 ×1.35 |
+| | `ranged` | 远程投掷：射程 ×1.6、伤害 ×0.85、闸门 ×1.15 |
+| | `charge` | 冲锋：射程 ×1.35、伤害 ×1.1、击退 24px、突进 64px、闸门 ×1.2 |
+| | `sweep` | 范围横扫：射程 ×1.5、伤害 ×1.05、闸门 ×1.1 |
+| | `pull` | 锁链拖拽：射程 ×2.0、伤害 ×0.75、命中后把玩家拉近至 40px、闸门 ×1.15 |
+| 被动（16 种） | 状态 | `poison` 中毒叠加 / `slow` 减速 / `stun` 打断 / `blind` 干扰 / `resourceDrain` 资源压制 / `potionLock` 药水封锁 / `skillLock` 技能封锁 |
 | | 防御 | `shieldCycle` 周期护盾 / `firstHitReduce` 首击减伤 / `lowHpReduce` 残血减伤 / `meleeReflect` 近战反伤 / `lethalSave` 致命保留 |
-| | 成长 | `enrageLowHp` 玩家残血增伤 / `packHunt` 同类增伤 / `rageStack` 攻速叠加 / `lowHpDamageUp` 自身残血增伤 |
-| 亡语 | `deathPoison` | 死亡时留下毒区 |
+| | 成长 | `enrageLowHp` 玩家残血时增伤并提速 / `packHunt` 同类增伤 / `rageStack` 越打越快且越重 / `lowHpDamageUp` 自身残血增伤 |
+| 亡语（2 种） | `deathPoison` | 死亡时留下毒区（1.2 秒预警后引爆） |
 | | `deathRevive` | 死亡后复原一次（残星复起） |
 
 ### 数值（原型基线，可被 11 号分卷覆盖）

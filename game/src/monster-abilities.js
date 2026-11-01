@@ -46,7 +46,7 @@ export const PASSIVE_IDS = {
   // ---- 成长类 ----
   enrageLowHp: "玩家低血时增伤 / 加速（嗜血追踪 / 血腥嗅觉 / 处决）",
   packHunt: "附近同类越多伤害越高（雪线围猎 / 群猎撕咬 / 战忆 / 死者护佑）",
-  rageStack: "命中后叠加攻速（修罗怒）",
+  rageStack: "命中后越打越快、越打越重（修罗怒）",
   lowHpDamageUp: "自身生命越低伤害越高（不灭斩）",
   // ---- 亡语类 ----
   deathPoison: "死亡时留下毒区（孢子爆裂）",
@@ -221,12 +221,15 @@ export const PASSIVE_PARAMS = {
   lethalSave: { hpRatio: 0.12 },
   enrageLowHp: { threshold: 0.35, damageBonus: 0.2, speedBonus: 0.2 },
   packHunt: { perAlly: 0.08, max: 0.35, range: 260 },
-  rageStack: { attackSpeedPerStack: 0.08, max: 5 },
+  // 0.8.12 修正：原实现把「攻速」参数乘到伤害上，描述与结算长期不一致。
+  // 现在拆成两个独立字段：damagePerStack 走伤害倍率，speedPerStack 走前摇缩短，
+  // 两处都在 attackShapeConfig 里按同一份层数结算（分层数上限 max）。
+  rageStack: { damagePerStack: 0.05, speedPerStack: 0.06, max: 5 },
   lowHpDamageUp: { maxBonus: 1.0 },
-  deathPoison: { radius: 90, damage: 8, duration: 4 },
+  deathPoison: { radius: 90, damage: 8, delay: 1.2 },
   deathRevive: { hpRatio: 0.3 },
   blind: { duration: 2, missChance: 0.3 },
-  resourceDrain: { ratio: 0.4, duration: 3 },
+  resourceDrain: { ratio: 0.4 },
   potionLock: { duration: 3 },
   skillLock: { duration: 2 }
 };
@@ -251,13 +254,16 @@ export function resolveAbilities(monsterName, library = MONSTER_ABILITIES, param
 // 返回 { multiHit, rangeMult, damageMult, knockback, dash, windupMult, pulls }。
 export function attackShapeConfig(shapeId, { hpRatio = 1, rageStacks = 0 } = {}) {
   const shape = ATTACK_SHAPES[shapeId] || ATTACK_SHAPES.normal;
+  // 0.8.12 修罗怒：层数同时抬高伤害并缩短前摇。下限 0.5 保证再快也留出反应窗口。
+  const rage = PASSIVE_PARAMS.rageStack;
+  const stacks = Math.max(0, Math.min(rage.max, Math.floor(Number(rageStacks) || 0)));
   return {
     multiHit: Math.max(1, Math.floor(shape.multiHit || 1)),
     rangeMult: Number(shape.rangeMult) || 1,
-    damageMult: (Number(shape.damageMult) || 1) * (1 + rageStacks * PASSIVE_PARAMS.rageStack.attackSpeedPerStack),
+    damageMult: (Number(shape.damageMult) || 1) * (1 + stacks * rage.damagePerStack),
     knockback: Number(shape.knockback) || 0,
     dash: Number(shape.dash) || 0,
-    windupMult: Number(shape.windupMult) || 1,
+    windupMult: (Number(shape.windupMult) || 1) * Math.max(0.5, 1 - stacks * rage.speedPerStack),
     // 0.7.5：出手后全局闸门的放大系数（1 = 与普通怪一致）。
     gateMult: Number(shape.gateMult) || 1,
     pulls: shapeId === "pull",
@@ -321,6 +327,13 @@ export function resolveLethalSave({ passives, hp, maxHp = 100, damage, usedLetha
   return { hp: floor, saved: true };
 }
 
+// 同类增伤的搜索半径（packHunt.range）：main.js 统计「附近同类数量」时用它，
+// 0.8.12 前这里是硬编码 260，配置字段读不到，改参数不会生效。
+export function packHuntRange(passives) {
+  const entry = (passives || []).find((passive) => passive.id === "packHunt");
+  return entry?.params?.range ?? 260;
+}
+
 // 同类增伤：附近同类怪物数量 → 伤害倍率（packHunt）。
 export function packHuntMultiplier(passives, allyCount) {
   const entry = (passives || []).find((passive) => passive.id === "packHunt");
@@ -347,13 +360,32 @@ export function enrageMultiplier(passives, playerHpRatio) {
   return 1 + (entry.params?.damageBonus ?? 0.3);
 }
 
+// 玩家低血时怪物追击提速（enrageLowHp.speedBonus）：与 enrageMultiplier 同阈值、同触发条件，
+// 只是作用在移速而不是伤害。0.8.12 前 speedBonus 只是配置里的死字段，从未被读取。
+export function enrageSpeedMultiplier(passives, playerHpRatio) {
+  const entry = (passives || []).find((passive) => passive.id === "enrageLowHp");
+  if (!entry) return 1;
+  const threshold = entry.params?.threshold ?? 0.4;
+  if (playerHpRatio > threshold) return 1;
+  return 1 + (entry.params?.speedBonus ?? 0.2);
+}
+
 // 亡语效果：把死亡事件转成场景效果（毒区 / 复原 / 无事发生）。
 // 返回 { hazard?, revive? }，由 main.js 写回 state。
 export function resolveOnDeath(onDeathId, { entity, params = PASSIVE_PARAMS }) {
   if (onDeathId === "deathPoison") {
     const p = params.deathPoison;
     return {
-      hazard: { x: entity.x, y: entity.y, r: p.radius, damage: p.damage, life: 1.2, snap: false, fade: 0.5, attackerLevel: entity.level }
+      hazard: {
+        x: entity.x,
+        y: entity.y,
+        r: p.radius,
+        damage: p.damage,
+        life: p.delay ?? 1.2,
+        snap: false,
+        fade: 0.5,
+        attackerLevel: entity.level
+      }
     };
   }
   if (onDeathId === "deathRevive") {
