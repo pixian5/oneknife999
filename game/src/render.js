@@ -1993,7 +1993,6 @@ export function renderQuestChain() {
   const chapterName = map.story.chapterTitle;
   setText($("questChainTitle"), `${chapterName} · 任务链`);
   setText($("questChainTip"), `${stats.done}/${stats.total} 完成`);
-  const bossMark = progress.bossDefeated ? "首领已破" : progress.kills >= progress.need ? "前往首领" : "首领未破";
   const expText = `经验 ${state.player.exp}/${state.player.nextExp}（击杀可升级，本关上限 Lv.${Math.min(41, campaignGrowth(MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length).level + 1)}）`;
   const rewardText = progress.rewardClaimed
     ? `通关奖励已领：${QUEST_REWARD.gold} 金币 + ${QUEST_REWARD.marks} 首领印记`
@@ -2010,20 +2009,14 @@ export function renderQuestChain() {
     .join("");
   setHtml(
     $("questChainList"),
+    // 0.8.14：「当前任务 · 关卡名」「击败 N 只 · 首领未破」与右侧「当前关卡」卡完全重复，
+    // 这里只留任务链独有的奖励与经验行，把 80px 高度还给装备与背包。
     `<div class="quest-current">
-       <div class="qc-title">${view.complete ? "本关已完成" : `当前任务 · ${entryTitle()}`}</div>
-       <div class="qc-goal">${view.complete ? "前往出口进入下一关" : `${view.text} · ${bossMark}`}</div>
-       <div class="qc-reward">${rewardText} · ${expText}</div>
+       <div class="qc-reward">${view.complete ? "本关已完成 · " : ""}${rewardText} · ${expText}</div>
      </div>
      <div class="quest-chain-list">${nodes}</div>
      ${nextChapter ? `<div class="qc-chapter-done">${nextChapter}</div>` : ""}`
   );
-}
-
-// 当前关剧情节点标题（任务卡标题用，beatTitle 已含关号：如「001 · 异兆 · 灰烬村外」）。
-function entryTitle() {
-  const map = activeMap();
-  return `${map.story.beatTitle} · ${map.name}`;
 }
 
 // 低等级进图确认弹层（替代 window.confirm；传 null / 空对象隐藏）。
@@ -2087,9 +2080,13 @@ export function renderAll() {
   renderBestiary();
   setText($("coords"), `坐标 ${Math.round(state.player.x)}, ${Math.round(state.player.y)}`);
   // 操作提示与弹窗说明跟随自定义键位，避免玩家改键后看到旧按键。
+  // 0.8.14：≤760px 只留一行能放下的操作，WASD 在触屏上没有意义。
+  const compactHint = window.innerWidth <= 760;
   setText(
     $("combatHint"),
-    `WASD / 摇杆移动 · ${keyLabel("attack")} 普攻 · ${keyLabel("skill1")}-${keyLabel("skill4")} 技能 · ${keyLabel("pickup")} 拾取 · ${keyLabel("travel")} 前往目标出口 · 前进出口需完成当前关卡`
+    compactHint
+      ? `摇杆移动 · ${keyLabel("attack")} 普攻 · ${keyLabel("skill1")}-${keyLabel("skill4")} 技能 · ${keyLabel("pickup")} 拾取`
+      : `WASD / 摇杆移动 · ${keyLabel("attack")} 普攻 · ${keyLabel("skill1")}-${keyLabel("skill4")} 技能 · ${keyLabel("pickup")} 拾取 · ${keyLabel("travel")} 前往目标出口 · 前进出口需完成当前关卡`
   );
   setText(
     $("skillModalTip"),

@@ -228,6 +228,14 @@ export function setupInput() {
     if (file) importSave(file);
     event.target.value = "";
   });
+  // 0.8.14：窄屏顶栏只留高频按钮，导出/导入/保存/重置移入设置面板。
+  // 这里做点击代理而不是复制逻辑，保证两条入口永远走同一段代码。
+  document.querySelectorAll("[data-save-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const source = { export: "exportBtn", import: "importBtn", save: "saveBtn", reset: "resetBtn" }[button.dataset.saveAction];
+      if (source) $(source).click();
+    });
+  });
   $("skillBtn").addEventListener("click", () => {
     $("skillModal").classList.toggle("hidden");
     renderAll();

@@ -32,8 +32,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .server-status { color: var(--muted); font-size: 12px; letter-spacing: .04em; }
 .status-dot, .world-event i, .live-label i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 4px rgba(98, 213, 198, .1); margin-right: 7px; }
 .status-divider { display: inline-block; height: 12px; margin: 0 10px; border-left: 1px solid var(--line); vertical-align: middle; }
-.top-actions { margin-left: auto; display: flex; gap: 8px; }
-.icon-button, .link-button { border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; padding: 7px 10px; transition: .2s ease; }
+.top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: nowrap; min-width: 0; }
+.icon-button, .link-button { border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; padding: 7px 10px; transition: .2s ease; white-space: nowrap; flex: 0 0 auto; }
 .icon-button:hover, .link-button:hover { border-color: var(--teal); color: var(--ink); background: rgba(98, 213, 198, .07); }
 .game-layout { display: grid; grid-template-columns: minmax(0, 1fr) 328px; gap: 16px; max-width: 1540px; margin: 0 auto; padding: 20px 24px 96px; }
 .world-panel, .side-panel { min-width: 0; }
@@ -95,7 +95,7 @@ h1, h2, p { margin: 0; }
 .log-card { min-height: 128px; }.live-label { color: var(--red); font-size: 10px; letter-spacing: .12em; }.live-label i { width: 5px; height: 5px; background: var(--red); box-shadow: none; }.event-log { display: flex; flex-direction: column-reverse; gap: 6px; max-height: 77px; overflow: hidden; margin-top: 12px; color: var(--muted); font-size: 10px; line-height: 1.35; }.event-entry { animation: log-in .25s ease; }.event-entry b { color: var(--teal); font-weight: 500; }.event-entry.loot b { color: var(--amber); }.event-entry.warn b { color: #ee9b91; }
 .inventory-card { padding-bottom: 14px; }.inventory-tip { color: var(--muted-2); font-size: 10px; }.inventory-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 12px; }.inventory-slot { aspect-ratio: 1; font-size: 10px; }.inventory-slot.empty { cursor: default; }.inventory-slot .quality-line { position: absolute; right: 3px; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }.inventory-slot .slot-glyph { font-size: 15px; }.inventory-slot .enhance { position: absolute; right: 3px; bottom: 2px; color: var(--ink); font-size: 8px; }
 .region-card { padding: 13px 14px; }.region-tip { color: var(--muted-2); font-size: 10px; }.region-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 11px; }.region-node { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border: 1px solid var(--line); background: #101b20; color: var(--muted-2); cursor: pointer; transition: .18s ease; text-align: left; }.region-node.accessible { color: var(--muted); }.region-node.visited { border-color: rgba(98, 213, 198, .22); }.region-node.current { border-color: var(--amber); background: rgba(231, 179, 107, .08); }.region-node:hover { border-color: var(--teal); background: rgba(98, 213, 198, .07); }.region-node .region-name { font-size: 11px; font-weight: 600; color: inherit; }.region-node.current .region-name { color: var(--amber); }.region-node.visited .region-name { color: var(--ink); }.region-node .region-level { font-size: 10px; color: var(--muted-2); }.region-node .region-danger { font-size: 10px; color: var(--muted-2); }.region-node .region-danger.safe { color: var(--teal); }.region-node .region-danger.danger { color: #ee9b91; }.region-node .region-progress { margin-top: 2px; color: var(--muted-2); font-size: 10px; }.region-node .region-progress.done { color: var(--teal); }.region-node.current .region-progress { color: var(--amber); }
-.action-bar { position: fixed; right: 0; bottom: 0; left: 0; z-index: 5; display: flex; align-items: center; gap: 18px; min-height: 84px; padding: 12px max(24px, calc((100vw - 1540px) / 2 + 24px)); padding-bottom: max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(13, 22, 27, .96); backdrop-filter: blur(15px); }.movement-controls { width: 90px; flex: 0 0 90px; text-align: center; }.joystick { position: relative; width: 84px; height: 84px; margin: 0 auto; border: 1px solid var(--line); border-radius: 50%; background: radial-gradient(circle at 50% 45%, rgba(98, 213, 198, .12), rgba(14, 24, 29, .92)); box-shadow: inset 0 2px 16px rgba(0, 0, 0, .5); cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }.joystick.active { border-color: var(--teal); cursor: grabbing; }.joystick-knob { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border: 1px solid rgba(98, 213, 198, .45); border-radius: 50%; background: #24424a; box-shadow: 0 3px 10px rgba(0, 0, 0, .45); transition: transform .06s linear; pointer-events: none; }.joystick.active .joystick-knob { border-color: var(--teal); background: #2c5460; }.target-block { width: 150px; flex: 0 0 150px; min-width: 0; }.target-block strong { display: block; overflow: hidden; margin-top: 4px; color: var(--amber); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }.target-block span:last-child { display: block; overflow: hidden; margin-top: 3px; color: var(--muted-2); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }.skill-bar { display: flex; gap: 8px; flex: 1; justify-content: center; }.skill-button { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; width: 62px; height: 56px; padding: 30px 6px 7px; overflow: hidden; border: 1px solid var(--line); background: #17272d; text-align: left; cursor: pointer; }.skill-button:hover { border-color: var(--teal); }.skill-button:disabled { cursor: not-allowed; filter: grayscale(.65); opacity: .55; }.skill-button .skill-icon { position: absolute; top: 3px; left: 4px; width: 23px; height: 23px; border-radius: 4px; object-fit: cover; border: 1px solid rgba(231, 179, 107, .3); box-shadow: 0 0 8px rgba(0, 0, 0, .55); }.skill-button .skill-key { position: absolute; top: 5px; right: 6px; color: var(--muted-2); font-size: 10px; }.skill-button strong { max-width: 100%; overflow: hidden; color: var(--ink); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }.skill-button small { margin-top: 2px; color: var(--muted); font-size: 10px; }.skill-button .cooldown { position: absolute; inset: 0; display: none; place-items: center; background: rgba(9, 14, 17, .73); color: var(--amber); font-size: 17px; font-weight: 700; }.potion-button { display: flex; align-items: center; gap: 7px; width: 82px; height: 50px; justify-content: center; border: 1px solid rgba(241, 109, 102, .35); background: rgba(241, 109, 102, .08); color: #f3b1a8; cursor: pointer; font-size: 11px; }.potion-button .potion-icon { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; box-shadow: 0 0 8px rgba(241, 109, 102, .35); }.potion-button span { color: var(--muted); font-size: 10px; }.potion-button b { color: var(--ink); font-size: 12px; }
+.action-bar { position: fixed; right: 0; bottom: 0; left: 0; z-index: 5; display: flex; align-items: center; gap: 18px; min-height: 84px; padding: 12px max(24px, calc((100vw - 1540px) / 2 + 24px)); padding-bottom: max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(13, 22, 27, .96); backdrop-filter: blur(15px); }.movement-controls { width: 90px; flex: 0 0 90px; text-align: center; }.joystick { position: relative; width: 84px; height: 84px; margin: 0 auto; border: 1px solid var(--line); border-radius: 50%; background: radial-gradient(circle at 50% 45%, rgba(98, 213, 198, .12), rgba(14, 24, 29, .92)); box-shadow: inset 0 2px 16px rgba(0, 0, 0, .5); cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }.joystick.active { border-color: var(--teal); cursor: grabbing; }.joystick-knob { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border: 1px solid rgba(98, 213, 198, .45); border-radius: 50%; background: #24424a; box-shadow: 0 3px 10px rgba(0, 0, 0, .45); transition: transform .06s linear; pointer-events: none; }.joystick.active .joystick-knob { border-color: var(--teal); background: #2c5460; }.target-block { width: 150px; flex: 0 0 150px; min-width: 0; }.target-block strong { display: block; overflow: hidden; margin-top: 4px; color: var(--amber); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }.target-block span:last-child { display: block; overflow: hidden; margin-top: 3px; color: var(--muted-2); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }.skill-bar { display: flex; gap: 8px; flex: 1; justify-content: center; }.skill-button { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; width: 62px; height: 56px; padding: 30px 6px 7px; overflow: hidden; border: 1px solid var(--line); background: #17272d; text-align: left; cursor: pointer; }.skill-button:hover { border-color: var(--teal); }.skill-button:disabled { cursor: not-allowed; filter: grayscale(.65); opacity: .55; }.skill-button .skill-icon { position: absolute; top: 3px; left: 4px; width: 23px; height: 23px; border-radius: 4px; object-fit: cover; border: 1px solid rgba(231, 179, 107, .3); box-shadow: 0 0 8px rgba(0, 0, 0, .55); }.skill-button .skill-key { position: absolute; top: 5px; right: 6px; color: var(--muted-2); font-size: 10px; }.skill-button strong { max-width: 100%; overflow: hidden; color: var(--ink); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }.skill-button small { margin-top: 2px; color: var(--muted); font-size: 10px; }.skill-button .cooldown { position: absolute; inset: 0; display: none; place-items: center; background: rgba(9, 14, 17, .73); color: var(--amber); font-size: 17px; font-weight: 700; }.potion-button { display: flex; align-items: center; gap: 7px; width: 82px; height: 50px; justify-content: center; border: 1px solid rgba(241, 109, 102, .35); background: rgba(241, 109, 102, .08); color: #f3b1a8; cursor: pointer; font-size: 11px; white-space: nowrap; overflow: hidden; }.potion-button .potion-icon { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; box-shadow: 0 0 8px rgba(241, 109, 102, .35); }.potion-button span { color: var(--muted); font-size: 10px; }.potion-button b { color: var(--ink); font-size: 12px; }
 .action-bar { align-items: flex-end; min-height: 108px; }
 .normal-attack-button { position: relative; display: flex; flex: 0 0 74px; flex-direction: column; align-items: flex-start; justify-content: flex-end; width: 74px; height: 56px; padding: 30px 7px 7px; border: 1px solid rgba(231, 179, 107, .46); background: rgba(231, 179, 107, .09); color: var(--ink); text-align: left; cursor: pointer; }
 .normal-attack-button .attack-icon { position: absolute; top: 3px; left: 5px; width: 23px; height: 23px; border-radius: 4px; object-fit: cover; border: 1px solid rgba(231, 179, 107, .35); box-shadow: 0 0 8px rgba(231, 179, 107, .2); }
@@ -170,9 +170,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 .quest-chain-node.current { border-color: var(--amber); color: var(--amber); }
 /* ============ 0.2.9 新增：任务链状态机任务卡（当前任务 / 奖励 / 经验进度 / 章末承接） ============ */
 .quest-current { margin: 6px 0 2px; padding: 6px 8px; border: 1px solid rgba(98, 213, 198, .22); background: rgba(98, 213, 198, .05); }
-.quest-current .qc-title { color: var(--teal); font-size: 10px; font-weight: 700; }
-.quest-current .qc-goal { color: var(--ink); font-size: 10px; margin-top: 2px; }
-.quest-current .qc-reward { color: var(--muted-2); font-size: 10px; margin-top: 2px; }
+.quest-current .qc-reward { color: var(--muted-2); font-size: 10px; }
 .qc-chapter-done { margin-top: 5px; color: var(--amber); font-size: 10px; font-weight: 700; }
 .travel-confirm { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; padding: 20px; background: rgba(6, 11, 14, .72); backdrop-filter: blur(8px); }
 .travel-confirm-box { width: min(420px, 100%); padding: 18px; border: 1px solid rgba(231, 179, 107, .4); background: linear-gradient(180deg, rgba(10, 16, 20, .9), rgba(14, 24, 29, .97)), var(--travel-bg, none) center/cover no-repeat; background-blend-mode: normal; }
@@ -210,6 +208,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 .keybind-key.capturing { border-color: var(--teal); color: var(--teal); animation: keybind-pulse 1s ease-in-out infinite; }
 @keyframes keybind-pulse { 0%, 100% { background: rgba(98, 213, 198, .06); } 50% { background: rgba(98, 213, 198, .2); } }
 .keybind-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 0.8.14：存档操作行只在窄屏出现（桌面顶栏已有同样的四个入口）。 */
+.settings-save-row { display: none; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.settings-save-label { margin-right: auto; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
 
 /* 0.3.3 技能资源不足提示 + 长按普攻按下态 */
 .skill-button.no-resource { opacity: .5; }
@@ -265,3 +266,100 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 @media (max-width: 760px) and (max-height: 760px) { .topbar { min-height: 52px; padding: 5px 10px; row-gap: 3px; } .brand-mark { width: 30px; height: 30px; font-size: 10px; } .brand-lockup strong { font-size: 14px; } .brand-lockup span:last-child { display: none; } .top-actions { gap: 3px; } .top-actions .icon-button { padding: 3px 5px; font-size: 11px; } .world-footer { display: none; } .action-bar { flex-wrap: nowrap; min-height: 84px; gap: 6px; padding: 5px 8px; padding-bottom: max(5px, env(safe-area-inset-bottom)); } .movement-controls { width: 68px; flex-basis: 68px; } .joystick { width: 62px; height: 62px; } .joystick-knob { width: 26px; height: 26px; margin: -13px 0 0 -13px; } .target-block { width: 92px; flex-basis: 92px; } .skill-button, .normal-attack-button { width: 52px; height: 42px; padding-top: 22px; } .action-resource { width: min(240px, 100%); } .potion-button { position: static; width: 58px; height: 34px; } .game-layout { display: grid; grid-template-rows: auto auto; padding-bottom: 96px; } .side-panel { display: flex; flex-direction: row; height: 96px; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; } .side-panel > section { flex: 0 0 210px; width: 210px; height: 96px; overflow: hidden; scroll-snap-align: start; } .canvas-wrap { min-height: max(200px, 42dvh); } }
 @media (max-height: 620px) and (max-width: 760px) { .map-pills { display: none; } }
 @media (max-height: 480px) { .topbar { padding-top: 4px; padding-bottom: 4px; } .app-shell { padding-bottom: 0; } .map-header { padding-bottom: 2px; } .map-header .eyebrow { display: none; } .map-header h1 { margin-top: 0; font-size: 16px; } .world-footer { display: none; } .side-panel { height: 80px; } .side-panel > section { flex: 0 0 180px; width: 180px; height: 80px; } .canvas-wrap { min-height: max(150px, 34dvh); } .action-bar { flex-wrap: nowrap; min-height: 84px; gap: 10px; padding-top: 6px; padding-bottom: max(6px, env(safe-area-inset-bottom)); } .movement-controls { width: 68px; flex-basis: 68px; } .joystick { width: 62px; height: 62px; } .joystick-knob { width: 26px; height: 26px; margin: -13px 0 0 -13px; } .skill-button, .normal-attack-button { width: 58px; height: 46px; padding-top: 24px; } .skill-button .skill-icon, .normal-attack-button .attack-icon { width: 19px; height: 19px; } .action-resource { width: min(300px, 100%); } .skill-stack { min-width: 0; } .potion-button { position: static; width: 62px; height: 34px; } .game-layout { padding-bottom: 96px; } }
+
+/* ============ 0.8.14 响应式与侧栏信息分级 ============ */
+/* 侧栏过去用 grid-template-rows + overflow:hidden 把 7 个面板硬塞进固定高度，
+   桌面端就有 6 个面板的 scrollHeight 大于 clientHeight，等于静默裁切（装备格只露一条边）。
+   改为纵向 flex + 侧栏自身滚动，日志单独限高滚动，面板永不被裁。 */
+.side-panel { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(188, 214, 214, .2) transparent; }
+.side-panel > section { flex: 0 0 auto; }
+.event-log { max-height: 168px; overflow-y: auto; }
+.side-panel::-webkit-scrollbar { width: 6px; }
+.side-panel::-webkit-scrollbar-thumb { border-radius: 3px; background: rgba(188, 214, 214, .18); }
+
+/* 761-1120：顶栏 9 个按钮加上品牌与状态区在 1024/900 视口溢出视口外（保存、重置直接不可见）。
+   状态区是装饰信息，优先让位；品牌区不再强制 220px 宽。 */
+@media (max-width: 1120px) { .server-status { display: none; }.brand-lockup { min-width: 0; } }
+@media (min-width: 761px) and (max-width: 900px) { .potion-button span { display: none; }.topbar { gap: 14px; padding: 0 14px; }.brand-lockup span:last-child { display: none; }.brand-lockup strong { font-size: 16px; }.map-header h1 { font-size: 19px; }.map-pills { flex-direction: column; gap: 4px; } }
+
+/* 手机统一形态（0.8.14）：过去紧凑分级绑在 max-height:760px 上，390×844 / 430×932 这类
+   最常见手机反而走堆叠布局——顶栏占 125px、侧栏被动作条压住、画布只剩 360px。
+   现在所有 ≤760px 宽度都进「顶栏一行 + 画布撑满 + 侧栏横滑 + 动作条贴底」形态。 */
+@media (max-width: 760px) {
+  .app-shell { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+  .topbar { flex: 0 0 auto; height: auto; min-height: 0; padding: 5px 8px; gap: 8px; row-gap: 4px; flex-wrap: wrap; }
+  .brand-lockup { flex: 0 1 auto; min-width: 0; }
+  .brand-mark { width: 32px; height: 32px; font-size: 10px; }
+  .brand-lockup strong { font-size: 14px; }
+  .brand-lockup span:last-child { display: none; }
+  .top-actions { flex-wrap: nowrap; gap: 3px; }
+  .top-actions .icon-button { padding: 4px 6px; font-size: 11px; }
+  .top-actions .top-archive { display: none; }
+  .settings-save-row { display: flex; }
+  .game-layout { flex: 1 1 auto; min-height: 0; height: auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 96px; gap: 5px; padding: 5px 8px; overflow: hidden; }
+  .world-panel { display: flex; flex-direction: column; height: auto; min-height: 0; }
+  .map-header { padding-bottom: 4px; }
+  .map-header > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .map-header h1 { overflow: hidden; margin-top: 2px; font-size: 16px; white-space: nowrap; text-overflow: ellipsis; }
+  .map-header .eyebrow { font-size: 9px; }
+  .map-pills { flex-direction: column; flex: 0 0 auto; gap: 3px; }
+  .pill { padding: 4px 7px; font-size: 10px; }
+  .canvas-wrap { flex: 1 1 auto; min-height: 0; }
+  .world-footer { display: none; }
+  .side-panel { flex-direction: row; height: 96px; min-height: 0; margin: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-snap-type: x proximity; }
+  .side-panel::-webkit-scrollbar { display: none; }
+  .side-panel > section { flex: 0 0 214px; width: 214px; height: 96px; overflow: hidden; scroll-snap-align: start; }
+  /* 动作条两行网格：上排 摇杆 / 目标 / 普攻 / 药水，下排 怒气条 + 四个技能。
+     原先一行 flex 在 390px 下把普攻压到 36px 并与技能条重叠。 */
+  .action-bar { position: static; flex: 0 0 auto; display: grid; grid-template-columns: 64px minmax(0, 1fr) 54px 54px; grid-template-rows: auto auto; gap: 4px 5px; align-items: end; min-height: 122px; padding: 5px 8px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+  .movement-controls { grid-area: 1 / 1; width: 64px; }
+  .joystick { width: 62px; height: 62px; }
+  .joystick-knob { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
+  .target-block { grid-area: 1 / 2; width: auto; min-width: 0; }
+  .target-block strong { font-size: 11px; }
+  .normal-attack-button { grid-area: 1 / 3; width: 54px; height: 62px; padding: 32px 6px 6px; }
+  .potion-button { grid-area: 1 / 4; position: static; width: 54px; height: 34px; gap: 4px; overflow: hidden; white-space: nowrap; }
+  .potion-button .potion-icon { width: 16px; height: 16px; }
+  .potion-button b { font-size: 11px; }
+  .potion-button span { display: none; }
+  .skill-stack { grid-area: 2 / 1 / 3 / -1; width: 100%; min-width: 0; gap: 4px; }
+  .skill-stack .skill-bar { width: 100%; gap: 4px; }
+  .skill-button { flex: 1 1 auto; width: auto; max-width: 74px; height: 46px; padding: 26px 5px 5px; }
+  .skill-button .skill-icon { width: 18px; height: 18px; }
+  .skill-button strong, .skill-button small { font-size: 9px; }
+  .action-resource { width: 100%; }
+  .map-objective { top: 8px; right: 8px; width: min(208px, calc(100% - 16px)); padding: 7px 8px; }
+  .map-objective .objective-step { font-size: 9px; }
+  .map-objective strong { margin-top: 2px; font-size: 12px; }
+  .map-objective #mapObjectiveText { display: none; }
+  .objective-checks { gap: 2px 8px; margin-top: 5px; font-size: 9px; }
+  /* 手机画布只有 300-370px 宽，首领卡与步骤卡并排会互相遮挡：首领卡压成左下角一行。 */
+  .boss-alert { top: auto; bottom: 32px; left: 8px; min-width: 0; padding: 4px 8px; gap: 5px; }
+  .boss-alert .boss-portrait { display: none; }
+  .boss-alert small { display: none; }
+  .boss-alert b { font-size: 10px; }
+  .boss-pulse { width: 6px; height: 6px; }
+  .combat-hint { bottom: 6px; padding: 4px 8px; font-size: 10px; }
+}
+@media (max-width: 400px) { .top-actions .icon-button { padding: 4px 5px; font-size: 10px; }.brand-lockup strong { font-size: 13px; } }
+/* ≤360：品牌文字让位给按钮行，顶栏必须保持一行，否则 320×568 的画布只剩 190px。 */
+@media (max-width: 360px) {
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-lockup strong { font-size: 13px; }
+  .top-actions .btn-ico { display: none; }
+  .top-actions .icon-button { padding: 6px 6px; }
+  .game-layout { grid-template-rows: minmax(0, 1fr) 88px; }
+  .side-panel { height: 88px; }
+  .side-panel > section { height: 88px; flex-basis: 198px; width: 198px; }
+  .map-objective { padding: 7px 8px; }
+  .map-objective p { font-size: 10px; }
+}
+/* 区域导航占掉侧栏 1/3 高度（8 个节点 4 行），把装备和背包挤到滚动区外。
+   改成单行横滑：一屏能看到当前与相邻关卡，其余滑动查看，为装备/背包腾出约 150px。 */
+.side-panel .region-list { display: flex; gap: 5px; margin-top: 6px; padding-bottom: 3px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.side-panel .region-node { flex: 0 0 104px; width: 104px; }
+.side-panel .region-node .region-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 760px) { .side-panel .region-list { gap: 4px; } .side-panel .region-node { flex: 0 0 92px; width: 92px; } }
+
+/* 761-1000：世界页脚 8 段小字挤成一排无法阅读，而首领/出口/篝火信息在画布与侧栏都有等价展示。 */
+@media (min-width: 761px) and (max-width: 1000px) { .world-footer { display: none; } }

@@ -24,11 +24,11 @@
           <button class="icon-button" id="bestiaryBtn" title="怪物图鉴（收集度）"><img class="btn-ico" src="assets/btn-skill.png" alt="">图鉴</button>
           <button class="icon-button" id="settingsBtn" title="键位设置"><img class="btn-ico" src="assets/btn-settings.png" alt="">设置</button>
           <button class="icon-button" id="muteBtn" title="开关音效"><img class="btn-ico" src="assets/btn-sound.png" alt="">音效</button>
-          <button class="icon-button" id="exportBtn" title="导出存档为 JSON 文件"><img class="btn-ico" src="assets/btn-export.png" alt="">导出</button>
-          <button class="icon-button" id="importBtn" title="从 JSON 文件导入存档"><img class="btn-ico" src="assets/btn-import.png" alt="">导入</button>
+          <button class="icon-button top-archive" id="exportBtn" title="导出存档为 JSON 文件"><img class="btn-ico" src="assets/btn-export.png" alt="">导出</button>
+          <button class="icon-button top-archive" id="importBtn" title="从 JSON 文件导入存档"><img class="btn-ico" src="assets/btn-import.png" alt="">导入</button>
           <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
-          <button class="icon-button" id="saveBtn" title="保存当前进度"><img class="btn-ico" src="assets/btn-save.png" alt="">保存</button>
-          <button class="icon-button" id="resetBtn" title="重新开始本次体验"><img class="btn-ico" src="assets/btn-reset.png" alt="">重置</button>
+          <button class="icon-button top-archive" id="saveBtn" title="保存当前进度"><img class="btn-ico" src="assets/btn-save.png" alt="">保存</button>
+          <button class="icon-button top-archive" id="resetBtn" title="重新开始本次体验"><img class="btn-ico" src="assets/btn-reset.png" alt="">重置</button>
         </div>
       </header>
 
@@ -99,14 +99,14 @@
             <div class="region-list" id="regionList"></div>
           </section>
 
-          <section class="quest-chain-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-chain.png" alt=""> <span id="questChainTitle">任务链</span></span><span class="quest-chain-tip" id="questChainTip">本章进度</span></div>
-            <div class="quest-chain-list" id="questChainList"></div>
-          </section>
 
           <section class="equipment-card panel-block">
             <div class="section-heading"><span><img class="section-icon" src="assets/panel-equip.png" alt=""> 装备</span><button class="link-button" id="inventoryHint">背包 <b id="inventoryCount">0/12</b></button></div>
             <div class="equipment-grid" id="equipmentGrid"></div>
+          </section>
+          <section class="quest-chain-card panel-block">
+            <div class="section-heading"><span><img class="section-icon" src="assets/panel-chain.png" alt=""> <span id="questChainTitle">任务链</span></span><span class="quest-chain-tip" id="questChainTip">本章进度</span></div>
+            <div class="quest-chain-list" id="questChainList"></div>
           </section>
 
           <section class="log-card panel-block">
@@ -197,6 +197,13 @@
         <div class="section-heading"><span><img class="section-icon" src="assets/panel-key.png" alt=""> 键位设置</span><b id="settingsHint">点击右侧按键后再按新键</b></div>
         <p class="skill-modal-tip">普攻默认 X，紧邻技能键 1-4。移动固定为 WASD / 方向键；键位单独保存，重置游戏不会清除。</p>
         <div class="skill-modal-list" id="keybindList"></div>
+        <div class="settings-save-row">
+          <span class="settings-save-label">存档操作</span>
+          <button class="icon-button" data-save-action="export">导出</button>
+          <button class="icon-button" data-save-action="import">导入</button>
+          <button class="icon-button" data-save-action="save">保存</button>
+          <button class="icon-button" data-save-action="reset">重置</button>
+        </div>
         <div class="keybind-actions">
           <button class="icon-button" id="keybindReset">恢复默认</button>
           <button class="icon-button" data-close-settings>关闭</button>

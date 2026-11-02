@@ -36,23 +36,46 @@ async function verifyViewport(browser, viewport) {
       canvasWidth: canvasRect.width,
       canvasHeight: canvasRect.height,
       coloredPixels,
-      // 0.8.7：顶栏 9 个按钮在窄屏必须全部落在视口内且中心点可命中（此前 390px 下保存/重置溢出到视口外）。
+      // 0.8.7：顶栏按钮在窄屏必须全部落在视口内且中心点可命中（此前 390px 下保存/重置溢出到视口外）。
+      // 0.8.14：≤760px 把导出/导入/保存/重置收进设置面板，顶栏只留 5 个高频按钮，这里只校验可见按钮。
       topButtonsOutside: [...document.querySelectorAll(".top-actions .icon-button")]
+        .filter((button) => button.getBoundingClientRect().width > 0)
         .filter((button) => {
           const rect = button.getBoundingClientRect();
           return rect.left < -0.5 || rect.right > window.innerWidth + 0.5;
         })
         .map((button) => button.textContent.trim()),
-      topButtonsHit: [...document.querySelectorAll(".top-actions .icon-button")].every((button) => {
-        const rect = button.getBoundingClientRect();
-        const el = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        return el === button || (el && button.contains(el));
-      })
+      topButtonsHit: [...document.querySelectorAll(".top-actions .icon-button")]
+        .filter((button) => button.getBoundingClientRect().width > 0)
+        .every((button) => {
+          const rect = button.getBoundingClientRect();
+          const el = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return el === button || (el && button.contains(el));
+        }),
+      // 顶栏按钮文字一律单行：过去 761-900px 区间被压成「技/能」竖排单字。
+      topButtonsSingleLine: [...document.querySelectorAll(".top-actions .icon-button")]
+        .filter((button) => button.getBoundingClientRect().width > 0)
+        .every((button) => button.getBoundingClientRect().height <= 40)
     };
   });
 
   assert.deepEqual(layout.topButtonsOutside, [], `${viewport.name} 顶栏按钮溢出视口：${JSON.stringify(layout.topButtonsOutside)}`);
   assert.ok(layout.topButtonsHit, `${viewport.name} 顶栏按钮中心点不可命中`);
+  assert.ok(layout.topButtonsSingleLine, `${viewport.name} 顶栏按钮被压成多行`);
+
+  // 0.8.14：窄屏把存档入口移进设置面板，入口必须真的可点开、四个操作都在。
+  const archiveInTopbar = await page.evaluate(
+    () => document.querySelector(".top-actions .icon-button.top-archive").getBoundingClientRect().width > 0
+  );
+  await page.locator("#settingsBtn").click();
+  const archiveRowVisible = await page.locator(".settings-save-row").isVisible();
+  if (!archiveInTopbar) {
+    assert.ok(archiveRowVisible, `${viewport.name} 顶栏隐藏了存档按钮，设置面板也没有存档入口`);
+    for (const action of ["export", "import", "save", "reset"]) {
+      assert.ok(await page.locator(`[data-save-action="${action}"]`).isVisible(), `${viewport.name} 设置面板缺少存档操作 ${action}`);
+    }
+  }
+  await page.locator("[data-close-settings]").click();
 
   // 0.8.7：选完职业立即落盘，保证新档不会因为选完就关页面而丢失（0.8.6 已修行为，这里补断言防回归）。
   const savedBytes = await page.evaluate(() => (localStorage.getItem("oneknife999-prototype-save-v4") || "").length);
