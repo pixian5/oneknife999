@@ -32,24 +32,25 @@ const CLASS_SEQUENCE = requestedClasses.length ? requestedClasses : DEFAULT_CLAS
 // ONEKNIFE_RESUME=1 时读取 checkpoint（storageState + 已完成关数），跳过已完成关卡继续；通关后清档。
 const RESUME = process.env.ONEKNIFE_RESUME === "1";
 const STATE_DIR = process.env.ONEKNIFE_STATE_DIR || "/tmp/oneknife-e2e-state";
-const STATE_FILE = `${STATE_DIR}/journey-${process.env.ONEKNIFE_RUN_INDEX || 0}.json`;
+// 并发多职业跑（ONEKNIFE_CONCURRENCY>1）时每轮独立 checkpoint，避免互相覆盖。
+const stateFile = (runIndex) => `${STATE_DIR}/journey-${runIndex}.json`;
 const nodeFs = require("node:fs");
-function writeCheckpoint(mapIndex, storage, extra) {
+function writeCheckpoint(runIndex, mapIndex, storage, extra) {
   nodeFs.mkdirSync(STATE_DIR, { recursive: true });
-  nodeFs.writeFileSync(STATE_FILE, JSON.stringify({ mapIndex, storage, ...extra }));
+  nodeFs.writeFileSync(stateFile(runIndex), JSON.stringify({ mapIndex, storage, ...extra }));
 }
-function readCheckpoint() {
+function readCheckpoint(runIndex) {
   try {
-    const parsed = JSON.parse(nodeFs.readFileSync(STATE_FILE, "utf8"));
+    const parsed = JSON.parse(nodeFs.readFileSync(stateFile(runIndex), "utf8"));
     if (typeof parsed.mapIndex === "number" && parsed.storage) return parsed;
   } catch {
     // 无 checkpoint 视为全新开跑
   }
   return null;
 }
-function clearCheckpoint() {
+function clearCheckpoint(runIndex) {
   try {
-    nodeFs.unlinkSync(STATE_FILE);
+    nodeFs.unlinkSync(stateFile(runIndex));
   } catch {
     // 本就不存在时无需处理
   }
@@ -370,7 +371,7 @@ async function assertAutoSaveCheckpoint(page, mapId) {
 
 async function runJourney(browser, runIndex) {
   const classId = classForRun(runIndex);
-  const checkpoint = RESUME ? readCheckpoint() : null;
+  const checkpoint = RESUME ? readCheckpoint(runIndex) : null;
   // 恢复起点不信任 checkpoint 里的 mapIndex（过图不立即落盘，hint 可能比实际快一关），
   // 一律以存档快照的 currentMapId + completed 标志推导。
   let startMapIndex = 0;
@@ -627,7 +628,7 @@ async function runJourney(browser, runIndex) {
       const next = await snapshot(page);
       if (next.currentMapId !== MAP_ORDER[mapIndex + 1]) throw new Error(`${mapId} 通关后未进入下一地图`);
       // 进入下一关已确认（存档 currentMapId 已指向下一图），此处落盘断点；进程被杀后可从此继续。
-      writeCheckpoint(mapIndex + 1, await context.storageState(), { stage: mapIndex + 1, classId });
+      writeCheckpoint(runIndex, mapIndex + 1, await context.storageState(), { stage: mapIndex + 1, classId });
     }
   }
 
@@ -637,7 +638,7 @@ async function runJourney(browser, runIndex) {
   if (title !== "百图征途已通关" || state !== "全部完成") throw new Error(`最终结算文案错误：${state}/${title}`);
   if (finalSnap.player.level !== 41 || finalSnap.stageNumber !== 100) throw new Error(`最终成长错误：${JSON.stringify(finalSnap)}`);
   if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
-  clearCheckpoint();
+  clearCheckpoint(runIndex);
   process.stdout.write(`STAGE STATS ${JSON.stringify(stageStats)}\n`);
   await context.close();
   return { run: runIndex + 1, classId, level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
