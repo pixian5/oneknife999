@@ -1477,7 +1477,9 @@ export function renderPlayer() {
   setText($("potionKey"), keyLabel("potion"));
   // 0.4.8 金币/首领印记前加货币美术图标
   setHtml($("goldText"), `<img class="currency-ico" src="assets/currency-gold.png" alt=""> ${formatNumber(state.player.gold)}`);
-  setHtml($("markText"), `<img class="currency-ico" src="assets/currency-mark.png" alt=""> ${state.player.marks} / 800`);
+  // 0.8.16：去掉「/ 800」分母——全工程已无任何消费 800 印记的门槛，通关后段显示
+  // 「2189 / 800」属误导；口径与金币一致，只显示持有量。
+  setHtml($("markText"), `<img class="currency-ico" src="assets/currency-mark.png" alt=""> ${state.player.marks}`);
   setText($("potionCount"), state.player.potion);
   // 战斗统计与罪恶值：PK 状态一眼可见（红名用红色胶囊）。
   const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
@@ -1827,7 +1829,9 @@ export function renderInventory() {
   }).join("|");
   const signature = `${equippedSignature}||${inventory.map((item) => `${item.id}:${item.count || 1}:${item.enhance || 0}`).join(",")}`;
   if (!panelChanged($("inventoryGrid"), signature)) return;
-  setText($("inventoryCount"), `${inventory.length}/12`);
+  // 0.8.16：材料自动拾取可越过 12 格上限，而下方网格只渲染前 12 件——超出部分
+  // 真实存在却不可见。计数改为「12/12 +N」，如实暴露溢出件数。
+  setText($("inventoryCount"), inventory.length > 12 ? `12/12 +${inventory.length - 12}` : `${inventory.length}/12`);
   setHtml(
     $("inventoryGrid"),
     Array.from({ length: 12 }, (_, index) => {
