@@ -247,6 +247,11 @@ test("关卡局部难度修正：只作用于登记过的关卡，且不误伤�
   // 第 75 关只降危险区：本体输出必须与第 74 / 76 关同曲线（不能被 attackMult 牵连）。
   assert.equal(MAPS.stage_075.difficulty.attackMult, 1, "第 75 关不应改本体输出");
   assert.ok(MAPS.stage_075.difficulty.hazardMult < 1, "第 75 关应降低危险区伤害");
+  // 0.8.20：第 41 关（烬火章入口峰）登记 attackMult 后，输出必须低于相邻的第 42 关。
+  assert.ok(maxAttack(MAPS.stage_041) < maxAttack(MAPS.stage_042), "第 41 关最强普通怪应低于第 42 关");
+  assert.ok(MAPS.stage_041.boss.attack < MAPS.stage_042.boss.attack, "第 41 关首领攻击应低于第 42 关");
+  assert.equal(mapDifficultyOverride(40), null, "相邻关不应被修正");
+  assert.equal(mapDifficultyOverride(42), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(29), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(31), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(74), null, "相邻关不应被修正");
