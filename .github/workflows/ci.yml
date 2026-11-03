@@ -1,0 +1,58 @@
+# 《一刀999》CI：push / PR 自动回归。
+# 两段式——verify（语法 + prettier + 200 单测，无浏览器）与 ui（7 项浏览器回归矩阵）。
+# 浏览器统一用 playwright 自带 chromium（ONEKNIFE_CHANNEL=chromium），
+# 避免宿主 Chrome 版本漂移；静态服务按 tests/ 默认约定起在 4174 端口。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: 静态检查与单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 安装依赖
+        run: npm ci
+      - name: 语法 / 格式 / 单测
+        run: npm run verify
+
+  ui:
+    name: 浏览器回归 ${{ matrix.test }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        # 冒烟 / 布局 / 升级 / 渲染输入回归 / 铭牌 / 行为旗标 / 精英
+        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 安装依赖与浏览器
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      - name: 启动静态服务（4174）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 2
+          curl -sf http://127.0.0.1:4174/ -o /dev/null
+      - name: 运行 test:${{ matrix.test }}
+        env:
+          ONEKNIFE_CHANNEL: chromium
+        run: npm run test:${{ matrix.test }}
