@@ -454,3 +454,7 @@ blind 测试两轮重试消除随机假失败；balance-sim 接入商店/重铸/
 ### 0.8.17 CI 流水线落地
 
 0.8.8 规划的最高优先项（A1）补课：新增 GitHub Actions 两段式流水线——verify（语法/格式/200 单测）+ 7 项浏览器回归矩阵（chromium 固定、4174 静态服务、fail-fast:false）。边界：GitCode 不跑 GHA；百图 e2e 与探针不进 CI；workflow 推送需 workflow 权限令牌。详见 [20261103-1513-CI流水线落地-GLM-5.3.md](20261103-1513-CI流水线落地-GLM-5.3.md)。
+
+### 0.8.18 素材瘦身
+
+tools/optimize-assets.mjs（sharp 调色板量化，离线工具不进依赖）对 41 个 >1MB 的 PNG 重编码 39 个：102.5MB→34.4MB（-66%），总量 172MB→104MB。验证：尺寸自检、flatten 后像素差 0.5%、线上分发字节一致、Chromium 解码 39/39。详见 [20261103-1537-素材瘦身-GLM-5.3.md](20261103-1537-素材瘦身-GLM-5.3.md)。
