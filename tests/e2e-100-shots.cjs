@@ -27,6 +27,33 @@ if (!Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 3)
 if (requestedClasses.some((classId) => !VALID_CLASSES.includes(classId)))
   throw new Error(`ONEKNIFE_CLASSES 包含未知职业：${requestedClasses.join(",")}`);
 const CLASS_SEQUENCE = requestedClasses.length ? requestedClasses : DEFAULT_CLASS_SEQUENCE;
+
+// P0-2 断点续跑：云沙箱会被平台反复挂起，e2e 进程死了只能从第 1 关重来（实测两次分别死于 18/45 关）。
+// ONEKNIFE_RESUME=1 时读取 checkpoint（storageState + 已完成关数），跳过已完成关卡继续；通关后清档。
+const RESUME = process.env.ONEKNIFE_RESUME === "1";
+const STATE_DIR = process.env.ONEKNIFE_STATE_DIR || "/tmp/oneknife-e2e-state";
+const STATE_FILE = `${STATE_DIR}/journey-${process.env.ONEKNIFE_RUN_INDEX || 0}.json`;
+const nodeFs = require("node:fs");
+function writeCheckpoint(mapIndex, storage, extra) {
+  nodeFs.mkdirSync(STATE_DIR, { recursive: true });
+  nodeFs.writeFileSync(STATE_FILE, JSON.stringify({ mapIndex, storage, ...extra }));
+}
+function readCheckpoint() {
+  try {
+    const parsed = JSON.parse(nodeFs.readFileSync(STATE_FILE, "utf8"));
+    if (typeof parsed.mapIndex === "number" && parsed.storage) return parsed;
+  } catch {
+    // 无 checkpoint 视为全新开跑
+  }
+  return null;
+}
+function clearCheckpoint() {
+  try {
+    nodeFs.unlinkSync(STATE_FILE);
+  } catch {
+    // 本就不存在时无需处理
+  }
+}
 const SHOT_STAGES = new Set([1, 10, 20, 30, 40, 50, 60, 70, 75, 80, 90, 99, 100]);
 
 function classForRun(runIndex) {
@@ -88,7 +115,14 @@ async function advance(page, milliseconds) {
 
 async function canvasGeometry(page, worldPoint) {
   const snap = await snapshot(page);
-  const rect = await page.locator("#gameCanvas").boundingBox();
+  // 0.8.14 响应式改造后，换图瞬间画布会短暂隐藏/重建，boundingBox() 可能返回 null；
+  // 等它重新可见再取几何（最多约 2 秒虚拟时间），仍不可见才判失败（stage_005 曾因此崩）。
+  let rect = null;
+  for (let attempt = 0; attempt < 20 && !rect; attempt += 1) {
+    rect = await page.locator("#gameCanvas").boundingBox();
+    if (!rect) await advance(page, 100);
+  }
+  if (!rect) throw new Error("gameCanvas 长时间不可见，无法换算点击坐标");
   const scale = Math.min(rect.width / 940, rect.height / 590);
   const halfW = rect.width / scale / 2;
   const halfH = rect.height / scale / 2;
@@ -336,7 +370,14 @@ async function assertAutoSaveCheckpoint(page, mapId) {
 
 async function runJourney(browser, runIndex) {
   const classId = classForRun(runIndex);
-  let context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const checkpoint = RESUME ? readCheckpoint() : null;
+  // 恢复起点不信任 checkpoint 里的 mapIndex（过图不立即落盘，hint 可能比实际快一关），
+  // 一律以存档快照的 currentMapId + completed 标志推导。
+  let startMapIndex = 0;
+  let context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    ...(checkpoint ? { storageState: checkpoint.storage } : {})
+  });
   let page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -472,45 +513,76 @@ async function runJourney(browser, runIndex) {
   SITE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.sitePoint]));
   RESOURCE_POINTS = Object.fromEntries(catalog.map((entry) => [entry.id, entry.tacticalPoints.find((point) => point.kind === "resource")]));
   MAP_BOSS_PHASES = Object.fromEntries(catalog.map((entry) => [entry.id, entry.bossPhases]));
-  await page.locator(`[data-class="${classId}"]`).click();
-  await advance(page, 200);
-  const dynamicsText = await page.locator("#mapDynamics").textContent();
-  if (!dynamicsText.includes("首领入口缓冲") || !dynamicsText.includes("主路"))
-    throw new Error(`地图路线 HUD 未显示可读摘要：${dynamicsText}`);
+  // 断点续跑时跳过选职业与首图预检（秘藏补给箱/场景节点/出口拦截），直接从 checkpoint 关卡继续。
+  if (!checkpoint) {
+    await page.locator(`[data-class="${classId}"]`).click();
+    await advance(page, 200);
+    const dynamicsText = await page.locator("#mapDynamics").textContent();
+    if (!dynamicsText.includes("首领入口缓冲") || !dynamicsText.includes("主路"))
+      throw new Error(`地图路线 HUD 未显示可读摘要：${dynamicsText}`);
 
-  const firstMap = catalog.find((entry) => entry.id === MAP_ORDER[0]);
-  const cache = firstMap.tacticalPoints.find((point) => point.kind === "resource");
-  if (!(await moveToPoint(page, cache, MAP_ORDER[0], 48))) throw new Error("无法抵达首张地图秘藏补给箱");
-  await page.keyboard.press("f");
-  await advance(page, 160);
-  const cacheSnapshot = await snapshot(page);
-  if (!cacheSnapshot.progress[MAP_ORDER[0]]?.resourceClaimed)
-    throw new Error(`秘藏补给箱未完成一次性搜索：${JSON.stringify(cacheSnapshot)}`);
-  const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
-  if (!cacheSave?.mapProgress?.[MAP_ORDER[0]]?.resourceClaimed) throw new Error("秘藏搜索结果未自动保存");
-  const site = firstMap.tacticalPoints.find((point) => point.kind === "site");
-  if (!(await moveToPoint(page, site, MAP_ORDER[0], 48))) throw new Error("无法抵达首张地图场景交互节点");
-  await page.keyboard.press("f");
-  await advance(page, 160);
-  const siteSnapshot = await snapshot(page);
-  if (!siteSnapshot.progress[MAP_ORDER[0]]?.siteClaimed || !siteSnapshot.logs.some((message) => message.includes("已激活")))
-    throw new Error("场景交互节点未生效：" + JSON.stringify(siteSnapshot));
-  const siteSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
-  if (!siteSave?.mapProgress?.[MAP_ORDER[0]]?.siteClaimed) throw new Error("场景交互节点未自动保存");
-  const claimedCharge = siteSnapshot.player.charge;
-  await page.keyboard.press("f");
-  await advance(page, 160);
-  const repeatedSiteSnapshot = await snapshot(page);
-  if (repeatedSiteSnapshot.player.charge !== claimedCharge || !repeatedSiteSnapshot.logs.some((message) => message.includes("已经激活过")))
-    throw new Error("重复激活场景节点发生重复结算：" + JSON.stringify(repeatedSiteSnapshot));
+    const firstMap = catalog.find((entry) => entry.id === MAP_ORDER[0]);
+    const cache = firstMap.tacticalPoints.find((point) => point.kind === "resource");
+    if (!(await moveToPoint(page, cache, MAP_ORDER[0], 48))) throw new Error("无法抵达首张地图秘藏补给箱");
+    await page.keyboard.press("f");
+    await advance(page, 160);
+    const cacheSnapshot = await snapshot(page);
+    if (!cacheSnapshot.progress[MAP_ORDER[0]]?.resourceClaimed)
+      throw new Error(`秘藏补给箱未完成一次性搜索：${JSON.stringify(cacheSnapshot)}`);
+    const cacheSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
+    if (!cacheSave?.mapProgress?.[MAP_ORDER[0]]?.resourceClaimed) throw new Error("秘藏搜索结果未自动保存");
+    const site = firstMap.tacticalPoints.find((point) => point.kind === "site");
+    if (!(await moveToPoint(page, site, MAP_ORDER[0], 48))) throw new Error("无法抵达首张地图场景交互节点");
+    await page.keyboard.press("f");
+    await advance(page, 160);
+    const siteSnapshot = await snapshot(page);
+    if (!siteSnapshot.progress[MAP_ORDER[0]]?.siteClaimed || !siteSnapshot.logs.some((message) => message.includes("已激活")))
+      throw new Error("场景交互节点未生效：" + JSON.stringify(siteSnapshot));
+    const siteSave = await page.evaluate(() => JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4") || "null"));
+    if (!siteSave?.mapProgress?.[MAP_ORDER[0]]?.siteClaimed) throw new Error("场景交互节点未自动保存");
+    const claimedCharge = siteSnapshot.player.charge;
+    await page.keyboard.press("f");
+    await advance(page, 160);
+    const repeatedSiteSnapshot = await snapshot(page);
+    if (
+      repeatedSiteSnapshot.player.charge !== claimedCharge ||
+      !repeatedSiteSnapshot.logs.some((message) => message.includes("已经激活过"))
+    )
+      throw new Error("重复激活场景节点发生重复结算：" + JSON.stringify(repeatedSiteSnapshot));
 
-  await page.keyboard.press("t");
-  await advance(page, 200);
-  if ((await snapshot(page)).currentMapId !== "ash_outskirts") throw new Error("未通关时前进出口未被拦截");
+    await page.keyboard.press("t");
+    await advance(page, 200);
+    if ((await snapshot(page)).currentMapId !== "ash_outskirts") throw new Error("未通关时前进出口未被拦截");
+  }
+  if (checkpoint) {
+    const resumed = await snapshot(page);
+    if (!resumed) throw new Error("断点恢复失败：无游戏状态（存档可能已损坏）");
+    let resumeIdx = MAP_ORDER.indexOf(resumed.currentMapId);
+    if (resumeIdx < 0) throw new Error(`断点存档指向未知地图：${resumed.currentMapId}`);
+    if (resumed.progress?.[resumed.currentMapId]?.completed && resumeIdx < MAP_ORDER.length - 1) {
+      // 落在「已通关、尚未过图」的地图：先走到下一图再进循环
+      await page.keyboard.press("t");
+      await advance(page, 150);
+      const confirmVisible = await page.evaluate(() => !document.querySelector("#travelConfirm").classList.contains("hidden"));
+      if (confirmVisible) {
+        await page.locator("[data-travel-ok]").click();
+        await advance(page, 200);
+      } else {
+        await advance(page, 100);
+      }
+      const after = await snapshot(page);
+      const nextIdx = MAP_ORDER.indexOf(after.currentMapId);
+      if (nextIdx !== resumeIdx + 1) throw new Error(`断点过图失败：${resumed.currentMapId} -> ${after.currentMapId}`);
+      resumeIdx = nextIdx;
+    }
+    startMapIndex = resumeIdx;
+    process.stdout.write(`RESUME at stage ${startMapIndex + 1}/100 (${MAP_ORDER[startMapIndex]})\n`);
+  }
 
   const stageStats = [];
   for (let mapIndex = 0; mapIndex < MAP_ORDER.length; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
+    if (mapIndex < startMapIndex) continue;
     await clearMap(page, mapId);
     // 0.8.8：在 checkpoint 触发整页 reload 之前读取时间线，否则页面重载会把事件缓冲清空。
     const stageEvents = await page.evaluate(() => (window.__ONEKNIFE_E2E__?.timeline ? window.__ONEKNIFE_E2E__.timeline(400) : []));
@@ -554,6 +626,8 @@ async function runJourney(browser, runIndex) {
       }
       const next = await snapshot(page);
       if (next.currentMapId !== MAP_ORDER[mapIndex + 1]) throw new Error(`${mapId} 通关后未进入下一地图`);
+      // 进入下一关已确认（存档 currentMapId 已指向下一图），此处落盘断点；进程被杀后可从此继续。
+      writeCheckpoint(mapIndex + 1, await context.storageState(), { stage: mapIndex + 1, classId });
     }
   }
 
@@ -563,6 +637,7 @@ async function runJourney(browser, runIndex) {
   if (title !== "百图征途已通关" || state !== "全部完成") throw new Error(`最终结算文案错误：${state}/${title}`);
   if (finalSnap.player.level !== 41 || finalSnap.stageNumber !== 100) throw new Error(`最终成长错误：${JSON.stringify(finalSnap)}`);
   if (errors.length) throw new Error(`页面异常：${errors.join(" | ")}`);
+  clearCheckpoint();
   process.stdout.write(`STAGE STATS ${JSON.stringify(stageStats)}\n`);
   await context.close();
   return { run: runIndex + 1, classId, level: finalSnap.player.level, maps: MAP_ORDER.length, result: "PASS" };
@@ -715,8 +790,13 @@ async function assertCorruptedSaveFallback(browser) {
   if (snap) throw new Error(`损坏存档不应恢复出游戏状态：${JSON.stringify(snap)}`);
   const modalVisible = await page.evaluate(() => !document.querySelector("#classModal").classList.contains("hidden"));
   if (!modalVisible) throw new Error("损坏存档后未回退到职业选择弹窗");
-  if (!consoleWarnings.some((text) => /存档(解析|读取)失败/.test(text)))
-    throw new Error(`损坏存档应留下 console.warn 诊断：${JSON.stringify(consoleWarnings)}`);
+  // 0.8.15 起告警走结构化 logger（e2e 模式不镜像 console.warn），改从日志缓冲断言；
+  // 无 logger 的旧时代回退 console.warn，两个时代都能跑。
+  const logged = await page.evaluate(() => window.__ONEKNIFE_E2E__?.logs?.({ limit: 200 }) || []);
+  const loggedTexts = logged.map((entry) => `${entry.category}:${entry.event}:${entry.message || ""}`);
+  const warnTexts = consoleWarnings.concat(loggedTexts);
+  if (!warnTexts.some((text) => /存档(解析|读取)失败|read(Failed|Rejected)/.test(text)))
+    throw new Error(`损坏存档应留下诊断日志：${JSON.stringify({ consoleWarnings, logged: loggedTexts.slice(0, 5) })}`);
   process.stdout.write("CORRUPT SAVE FALLBACK WARN+MODAL PASS\n");
   await context.close();
 }
@@ -725,9 +805,13 @@ async function assertCorruptedSaveFallback(browser) {
   const browser = await chromium.launch(browserLaunchOptions());
   const results = [];
   try {
-    await assertLegacyMigration(browser);
-    await assertAssetAutosave(browser);
-    await assertCorruptedSaveFallback(browser);
+    if (!RESUME) {
+      await assertLegacyMigration(browser);
+      await assertAssetAutosave(browser);
+      await assertCorruptedSaveFallback(browser);
+    } else {
+      process.stdout.write("RESUME mode：跳过迁移/资产/损坏存档预检\n");
+    }
     for (let offset = 0; offset < TOTAL_RUNS; offset += CONCURRENCY) {
       const batch = Array.from({ length: Math.min(CONCURRENCY, TOTAL_RUNS - offset) }, (_, index) => runJourney(browser, offset + index));
       const batchResults = await Promise.all(batch);
