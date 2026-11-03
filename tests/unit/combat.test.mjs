@@ -1,0 +1,187 @@
+// 纯函数单元测试：战斗结算（combat.js）。运行方式：npm run test:unit
+import test from "node:test";
+import assert from "node:assert/strict";
+import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience } from "../../game/src/combat.js";
+
+// 队列式假随机：按给定顺序返回随机值，用尽后回退为 0，保证结果完全可复现。
+const queueRandom = (values) => {
+  const queue = [...values];
+  return () => (queue.length ? queue.shift() : 0);
+};
+
+const HERO = { attack: 33 };
+const MOB = { defense: 3, maxHp: 84, boss: false };
+const BOSS = { defense: 18, maxHp: 900, boss: true };
+const playerOf = (overrides = {}) => ({ level: 1, charge: 0, equipment: { weapon: null, neck: null, boots: null }, ...overrides });
+
+test("computeDamage：无装备时的基础伤害 = 攻击 + 等级 ×4 后的方差与减伤结算", () => {
+  // base = 33 + 1*4 = 37；random .5 → variance 1.0；reduction = 3/108
+  const result = computeDamage({ target: MOB, hero: HERO, player: playerOf(), multiplier: 1, kind: "普通", random: queueRandom([0.5]) });
+  assert.equal(result.damage, Math.round(37 * (1 - 3 / 108)));
+  assert.equal(result.critical, false);
+  assert.equal(result.chargeGain, 10, "普通怪每次受击积累 10 点破势");
+});
+
+test("computeDamage：装备战力按 90% 计入基础攻击", () => {
+  const equipment = { weapon: { power: 20 }, neck: null, boots: { power: 10 } };
+  const withGear = computeDamage({
+    target: MOB,
+    hero: HERO,
+    player: playerOf({ level: 3, equipment }),
+    multiplier: 1,
+    kind: "普通",
+    random: queueRandom([0.5])
+  });
+  // base = 33 + 3*4 + 30*.9 = 72；reduction = 3/(3+100+15)
+  assert.equal(withGear.damage, Math.round(72 * (1 - 3 / 118)));
+});
+
+test("computeDamage：满破势时爆发技能获得 1.55 倍结算", () => {
+  const normal = computeDamage({
+    target: MOB,
+    hero: HERO,
+    player: playerOf({ charge: 100 }),
+    multiplier: 2,
+    kind: "普通",
+    random: queueRandom([0.5])
+  });
+  const burst = computeDamage({
+    target: MOB,
+    hero: HERO,
+    player: playerOf({ charge: 100 }),
+    multiplier: 2,
+    kind: "爆发",
+    random: queueRandom([0.5])
+  });
+  assert.equal(burst.critical, true);
+  assert.equal(burst.damage, Math.round(normal.damage * 1.55));
+  const lowCharge = computeDamage({
+    target: MOB,
+    hero: HERO,
+    player: playerOf({ charge: 99 }),
+    multiplier: 2,
+    kind: "爆发",
+    random: queueRandom([0.5])
+  });
+  assert.equal(lowCharge.critical, false);
+  assert.equal(lowCharge.damage, normal.damage);
+});
+
+test("computeDamage：快进模式放大 25 倍并把首领单次上限提高到 18%", () => {
+  const fast = computeDamage({
+    target: MOB,
+    hero: HERO,
+    player: playerOf(),
+    multiplier: 1,
+    kind: "普通",
+    fastForward: true,
+    random: queueRandom([0.5])
+  });
+  const normal = computeDamage({ target: MOB, hero: HERO, player: playerOf(), multiplier: 1, kind: "普通", random: queueRandom([0.5]) });
+  assert.equal(fast.damage, normal.damage * 25);
+  const bossFast = computeDamage({
+    target: BOSS,
+    hero: HERO,
+    player: playerOf(),
+    multiplier: 3.2,
+    kind: "爆发",
+    fastForward: true,
+    random: queueRandom([0.5])
+  });
+  assert.equal(bossFast.damage, Math.ceil(900 * 0.18), "首领快进上限 = maxHp 的 18%");
+});
+
+test("computeDamage：首领单次受击不超过 3.5% 最大生命且破势只加 7", () => {
+  const result = computeDamage({ target: BOSS, hero: HERO, player: playerOf(), multiplier: 3.2, kind: "爆发", random: queueRandom([0.5]) });
+  assert.equal(result.damage, Math.ceil(900 * 0.035));
+  assert.equal(result.chargeGain, 7);
+});
+
+test("computeDamage：伤害下限为 1，随机数由调用方注入", () => {
+  const result = computeDamage({
+    target: { defense: 999, maxHp: 10 },
+    hero: { attack: 1 },
+    player: playerOf({ level: 1 }),
+    multiplier: 1,
+    kind: "普通",
+    random: queueRandom([0])
+  });
+  assert.equal(result.damage, 1);
+});
+
+test("computeKillReward：普通怪首次进度击杀给满额经验，清完目标后继续刷怪给 50% 经验（0.3.2）", () => {
+  const rule = { kills: 8, mapsPerLevel: 1 };
+  const first = computeKillReward({ target: MOB, quest: { kills: 0, need: 8, bossDefeated: false }, rule });
+  assert.deepEqual(first, {
+    firstProgressKill: true,
+    expGain: Math.max(1, Math.ceil(100 / rule.mapsPerLevel / rule.kills)),
+    marksGain: 0,
+    chargeGain: 12,
+    resourceGainRatio: 0.08
+  });
+  // 首关 8 只进度怪 + 首领经验 ≥ 100，正常通关必能触发一次升级。
+  assert.ok(first.expGain * rule.kills + Math.round(30 / rule.mapsPerLevel) >= 100, "首关击杀经验合计应足够升 1 级");
+  const repeat = computeKillReward({ target: MOB, quest: { kills: 8, need: 8, bossDefeated: false }, rule });
+  assert.equal(repeat.firstProgressKill, false);
+  assert.equal(repeat.expGain, Math.max(1, Math.round(first.expGain * 0.5)), "清完目标后仍给一半经验，避免打怪毫无反馈");
+  assert.equal(repeat.marksGain, 0);
+});
+
+test("computeKillReward：首领首次击杀给 35 印记、32 破势与按地图数折算的经验", () => {
+  const reward = computeKillReward({
+    target: BOSS,
+    quest: { kills: 8, need: 8, bossDefeated: false },
+    rule: { kills: 8, mapsPerLevel: 4 }
+  });
+  assert.equal(reward.firstProgressKill, true);
+  assert.equal(reward.expGain, Math.round(30 / 4));
+  assert.equal(reward.marksGain, 35);
+  assert.equal(reward.chargeGain, 32);
+  const again = computeKillReward({ target: BOSS, quest: { kills: 8, need: 8, bossDefeated: true }, rule: { kills: 8, mapsPerLevel: 4 } });
+  assert.equal(again.firstProgressKill, false);
+  assert.equal(again.expGain, Math.max(1, Math.round(reward.expGain * 0.5)), "重复击杀首领同样给一半经验");
+  assert.equal(again.marksGain, 35, "重复击杀首领仍给印记（刷新后击杀）");
+});
+
+test("applyExperience：经验可连续升级，并在本关等级上限处封顶", () => {
+  const single = applyExperience({ level: 1, exp: 90, nextExp: 100, expGain: 10, levelCap: 2 });
+  assert.deepEqual(single, { level: 2, exp: 0, nextExp: 100, levelsGained: 1 });
+  const multi = applyExperience({ level: 1, exp: 0, nextExp: 100, expGain: 250, levelCap: 4 });
+  assert.equal(multi.level, 3);
+  assert.equal(multi.exp, 50);
+  assert.equal(multi.levelsGained, 2);
+  const capped = applyExperience({ level: 2, exp: 0, nextExp: 100, expGain: 500, levelCap: 2 });
+  assert.equal(capped.level, 2, "达到本关上限后不再升级");
+  assert.equal(capped.exp, 100, "封顶时经验停在满格，进度条不溢出");
+  assert.equal(capped.levelsGained, 0);
+});
+
+test("applyExperience：非法输入被夹到安全范围", () => {
+  // nextExp 为 0 / 缺失时回退到默认 100，避免出现「需要 0 经验」的非法状态。
+  assert.deepEqual(applyExperience({ level: 1, exp: 0, nextExp: 0, expGain: 0, levelCap: 2 }), {
+    level: 1,
+    exp: 0,
+    nextExp: 100,
+    levelsGained: 0
+  });
+  assert.equal(applyExperience({ level: 1, exp: 0, nextExp: 100, expGain: -20, levelCap: 2 }).exp, 0);
+});
+
+test("computeIncomingDamage：与 docs/11 基线公式一致（减伤随攻击者等级衰减）", () => {
+  // 基线：减免 = 防御 / (防御 + 100 + 攻击者等级 × 5)
+  const baseline = (attack, attackerLevel, defense) =>
+    Math.max(1, Math.round(attack * (1 - defense / (defense + 100 + attackerLevel * 5))));
+  assert.equal(computeIncomingDamage({ attack: 100, attackerLevel: 40, defense: 22 }), baseline(100, 40, 22));
+  assert.equal(computeIncomingDamage({ attack: 112, attackerLevel: 6, defense: 22 }), baseline(112, 6, 22));
+  assert.equal(computeIncomingDamage({ attack: 152, attackerLevel: 102, defense: 22 }), baseline(152, 102, 22));
+  // 攻击者等级越高，同一目标受到的伤害越大（衰减项生效）。
+  const low = computeIncomingDamage({ attack: 100, attackerLevel: 1, defense: 50 });
+  const high = computeIncomingDamage({ attack: 100, attackerLevel: 50, defense: 50 });
+  assert.ok(high > low, `高等级攻击者应造成更高伤害：${high} > ${low}`);
+});
+
+test("computeIncomingDamage：attackerLevel 缺省为 1、伤害下限为 1、非法等级按 0 处理", () => {
+  assert.equal(computeIncomingDamage({ attack: 10, defense: 0 }), 10, "零防御时全额伤害");
+  assert.equal(computeIncomingDamage({ attack: 1, defense: 9999 }), 1, "伤害下限为 1");
+  assert.equal(computeIncomingDamage({ attack: 30, defense: 10, attackerLevel: -5 }), Math.max(1, Math.round(30 * (1 - 10 / 110))));
+});
