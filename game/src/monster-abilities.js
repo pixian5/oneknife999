@@ -309,7 +309,11 @@ export function applyDefensePassives({ passives, damage, ctx = {}, random = Math
 }
 
 // 反伤数值（近战命中带 meleeReflect 的怪物时，玩家受到的反伤）。
-export function reflectDamage(passives, damage) {
+export function reflectDamage(passives, damage, { invulnerable = 0 } = {}) {
+  // 0.8.23：入场无敌期间不结算反伤——进图保护窗口的语义就是「这段时间不掉血」。
+  // 此前反伤绕过 invulnerable，配合探针的 25 倍伤害放大，出现「无敌期一巴掌
+  // 拍死自己」且不记击杀者（探针里表现为大量「未知」致死）。
+  if (invulnerable > 0) return 0;
   const entry = (passives || []).find((passive) => passive.id === "meleeReflect");
   if (!entry) return 0;
   return Math.max(0, Math.round(damage * (entry.params.ratio ?? 0.25)));

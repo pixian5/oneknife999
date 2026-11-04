@@ -592,9 +592,13 @@ export function resolveDamage(target, multiplier, skillName, kind) {
   state.player.charge = clamp(state.player.charge + chargeGain, 0, 100);
   // 近战反伤：只有普通 / 破甲 / 冲锋等近战命中才反噬，远程与范围技能不触发。
   const meleeHit = kind === "普通" || kind === "破甲" || kind === "冲锋";
-  const reflected = meleeHit ? reflectDamage(target.abilities?.passives, damage) : 0;
+  const reflected = meleeHit ? reflectDamage(target.abilities?.passives, damage, { invulnerable: state.player.invulnerable }) : 0;
   if (reflected > 0) {
     state.player.hp = Math.max(0, state.player.hp - reflected);
+    // 0.8.23：反伤单独记账并写击杀者——此前该路径既不进承伤来源也不记 lastKiller，
+    // 探针里表现为「未知」致死，0.8.22 轮为此多花了一整轮归因才定位到反伤。
+    recordDamage("反伤", reflected);
+    if (state.player.hp <= 0) state.player.lastKiller = `${target.name}·反伤`;
     textAt(`-${reflected}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 11);
   }
   // 0.3.3 打击感：满破势爆发（含一刀时刻）触发短促震屏，让高倍率结算有重量感。

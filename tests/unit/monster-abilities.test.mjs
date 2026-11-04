@@ -167,6 +167,9 @@ test("reflectDamage 与 resolveLethalSave：反伤按比例、致命保留一次
   ];
   assert.equal(reflectDamage(passives, 200), 50);
   assert.equal(reflectDamage([], 200), 0);
+  // 0.8.23：入场无敌窗口内不结算反伤（进图保护的语义就是这段时间不掉血）。
+  assert.equal(reflectDamage(passives, 200, { invulnerable: 3 }), 0, "无敌期不反伤");
+  assert.equal(reflectDamage(passives, 200, { invulnerable: 0 }), 50, "无敌结束后正常反伤");
   // 伤害不足以致死：不减伤、不触发保留。
   const survived = resolveLethalSave({ passives, hp: 500, maxHp: 500, damage: 100, usedLethalSave: false });
   assert.deepEqual(survived, { hp: 400, saved: false });
