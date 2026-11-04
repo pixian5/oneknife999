@@ -2,7 +2,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AFFIX_POOL } from "../../game/src/config.js";
-import { SHOP_GOODS, REFORGE_RULES, buyShopItem, reforgeQuote, reforgeAffix } from "../../game/src/shop.js";
+import {
+  SHOP_GOODS,
+  REFORGE_RULES,
+  buyShopItem,
+  reforgeQuote,
+  reforgeAffix,
+  MARKS_SET_ID,
+  marksSetItem,
+  buyMarksSetItem
+} from "../../game/src/shop.js";
+import { MARKS_SET, MARKS_SET_PRICE } from "../../game/src/config.js";
 
 // 队列式假随机：按顺序返回随机值，用尽后回退 0，保证重铸结果可复现。
 const queueRandom = (values) => {
@@ -158,4 +168,32 @@ test("reforgeAffix：锁定词缀不被重掷，非锁定槽位在剩余词缀�
   // 不传锁定：行为与旧版一致（下标从全部词缀里抽）
   const unlocked = reforgeAffix(item, { level: 20, random: queueRandom([0, 0, 0.5]) });
   assert.equal(unlocked.index, 0);
+});
+
+// 0.8.25 印记兑换（docs/07）：八件绑定过渡橙装。
+test("buyMarksSetItem：印记门槛、每部位限兑一次与物品契约", () => {
+  // 八件套必须覆盖八个不同槽位，否则「八件」名不副实。
+  assert.equal(MARKS_SET.length, 8);
+  assert.equal(new Set(MARKS_SET.map((entry) => entry.slot)).size, 8);
+
+  const poor = buyMarksSetItem("weapon", { marks: MARKS_SET_PRICE - 1, owned: [] });
+  assert.equal(poor.ok, false, "印记不足应拒绝");
+  assert.ok(poor.reason.includes("首领印记不足"), poor.reason);
+
+  const dup = buyMarksSetItem("weapon", { marks: MARKS_SET_PRICE * 10, owned: ["weapon"] });
+  assert.equal(dup.ok, false, "已兑换部位应拒绝");
+  assert.ok(dup.reason.includes("已兑换"), dup.reason);
+
+  const ok = buyMarksSetItem("weapon", { marks: MARKS_SET_PRICE, owned: [] });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.price, MARKS_SET_PRICE);
+  assert.equal(ok.item.slot, "weapon");
+  assert.equal(ok.item.quality, "orange", "过渡套必须是橙装");
+  assert.equal(ok.item.setId, MARKS_SET_ID);
+  assert.equal(ok.item.bound, true, "绑定装备标记必须存在");
+  assert.ok(ok.item.affixes.length >= 2, "过渡套至少两条固定词缀");
+
+  // 未知槽位与空物品契约
+  assert.equal(marksSetItem("nope"), null);
+  assert.equal(buyMarksSetItem("nope", { marks: 1e6 }).ok, false);
 });

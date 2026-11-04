@@ -464,6 +464,87 @@ export const AFFIX_POOL = [
   { group: "资源", key: "regen", label: "恢复", base: 1, perStage: 0.06, percent: true }
 ];
 
+// 0.8.25 首领印记出口（docs/07「首领印记 → 消耗：绑定过渡橙装」）：八件过渡套。
+// 定价 800/件——百图通关实测约 4300 印记 ≈ 5 件、两轮集齐，对应设计文档
+// 「30 天约 810 印记、约 37 天集齐八件」在原型回合粒度上的取整（800 也是旧 HUD 的遗留阈值）。
+// 八件取八个不重复类别槽（武器/头盔/衣服/项链/腰带/靴子/勋章/玉佩）；左右成对槽不进套装，
+// 避免「同款两件」稀释收集感。词缀手写固定值（兑换是确定收益，不做随机开箱）。
+export const MARKS_SET_PRICE = 800;
+export const MARKS_SET = [
+  {
+    slot: "weapon",
+    name: "烬誓·过渡长锋",
+    power: 210,
+    affixes: [
+      { group: "主属性", key: "attack", label: "攻击", value: 28 },
+      { group: "生存", key: "hp", label: "生命", value: 80 }
+    ]
+  },
+  {
+    slot: "armor",
+    name: "烬誓·过渡胸甲",
+    power: 170,
+    affixes: [
+      { group: "生存", key: "hp", label: "生命", value: 120 },
+      { group: "生存", key: "defense", label: "防御", value: 6 }
+    ]
+  },
+  {
+    slot: "helmet",
+    name: "烬誓·过渡面甲",
+    power: 140,
+    affixes: [
+      { group: "生存", key: "hp", label: "生命", value: 90 },
+      { group: "生存", key: "defense", label: "防御", value: 4 }
+    ]
+  },
+  {
+    slot: "neck",
+    name: "烬誓·过渡颈环",
+    power: 120,
+    affixes: [
+      { group: "主属性", key: "attack", label: "攻击", value: 16 },
+      { group: "生存", key: "hp", label: "生命", value: 70 }
+    ]
+  },
+  {
+    slot: "boots",
+    name: "烬誓·过渡战靴",
+    power: 110,
+    affixes: [
+      { group: "生存", key: "hp", label: "生命", value: 60 },
+      { group: "资源", key: "regen", label: "恢复", value: 2, percent: true }
+    ]
+  },
+  {
+    slot: "belt",
+    name: "烬誓·过渡束带",
+    power: 105,
+    affixes: [
+      { group: "生存", key: "hp", label: "生命", value: 70 },
+      { group: "生存", key: "defense", label: "防御", value: 3 }
+    ]
+  },
+  {
+    slot: "medal",
+    name: "烬誓·过渡勋章",
+    power: 95,
+    affixes: [
+      { group: "主属性", key: "attack", label: "攻击", value: 12 },
+      { group: "生存", key: "defense", label: "防御", value: 3 }
+    ]
+  },
+  {
+    slot: "talisman",
+    name: "烬誓·过渡玉佩",
+    power: 95,
+    affixes: [
+      { group: "主属性", key: "attack", label: "攻击", value: 10 },
+      { group: "生存", key: "hp", label: "生命", value: 50 }
+    ]
+  }
+];
+
 // 技能升级（docs/02「每级提高倍率」的原型简化：每级 +6% 技能倍率，上限 10 级）。
 export const SKILL_UPGRADE = { maxLevel: 10, multiplierPerLevel: 0.06, pointsPerLevel: 1 };
 
