@@ -27,7 +27,8 @@ import {
   saveGame,
   resetGame,
   exportSave,
-  importSave
+  importSave,
+  buyMarksGood
 } from "./main.js";
 
 // 《一刀999》输入层：键盘 / 鼠标 / 触屏（虚拟摇杆）与所有 HUD 按钮的事件绑定。
@@ -327,6 +328,12 @@ export function setupInput() {
     const buyButton = event.target.closest("[data-buy]");
     if (buyButton) {
       buyGoods(buyButton.dataset.buy);
+      return;
+    }
+    // 0.8.25：印记兑换（data-buy-marks="slot"）。
+    const marksButton = event.target.closest("[data-buy-marks]");
+    if (marksButton) {
+      buyMarksGood(marksButton.dataset.buyMarks);
       return;
     }
     const reforgeButton = event.target.closest("[data-reforge]");

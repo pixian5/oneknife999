@@ -5,7 +5,9 @@ import {
   effectiveItemPower,
   SKILL_UPGRADE,
   PK_RULES,
-  QUEST_REWARD
+  QUEST_REWARD,
+  MARKS_SET,
+  MARKS_SET_PRICE
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
@@ -15,7 +17,7 @@ import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTie
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
-import { SHOP_GOODS, reforgeQuote } from "./shop.js";
+import { SHOP_GOODS, reforgeQuote, MARKS_SET_ID } from "./shop.js";
 import { computeDamage } from "./combat.js";
 import { logDebug } from "./logger.js";
 import {
@@ -1877,7 +1879,8 @@ export function renderShopPanel() {
   if (!state.shopOpen) return;
   const gold = state.player.gold;
   const scrolls = state.player.reforgeScroll || 0;
-  setText($("shopTip"), `金币 ${formatNumber(gold)} · 词缀重铸卷 ×${scrolls}（按 F 关闭）`);
+  const marks = state.player.marks || 0;
+  setText($("shopTip"), `金币 ${formatNumber(gold)} · 词缀重铸卷 ×${scrolls} · 首领印记 ${formatNumber(marks)}（按 F 关闭）`);
   // 签名包含金币、卷轴与已穿戴装备的词缀状态：任一变化都重建商品 / 重铸列表。
   // 0.8.7：重铸后的 2 秒高亮不再进签名——此前它每帧都变，导致高亮期内整个重铸列表每帧重建，
   // 按钮在 pointerdown 与 pointerup 之间被替换，真实点击与自动化点击都会丢事件。
@@ -1892,15 +1895,28 @@ export function renderShopPanel() {
   }).join("|");
   // 0.4.2：词缀锁定状态也进签名，锁定 / 解锁后面板价格与芯片立即刷新。
   const lockSignature = JSON.stringify(state.reforgeLocks || {});
-  if (!panelChanged($("shopGoods"), `v3|${gold}|${scrolls}|${lockSignature}|${equipmentSignature}`)) return;
+  // 0.8.25 印记兑换行：已兑换部位从背包 + 穿戴按 setId 派生；签名带上印记余额与已兑集合。
+  const ownedMarksSlots = [...Object.values(state.player.equipment || {}), ...(state.inventory || [])]
+    .filter((item) => item && item.setId === MARKS_SET_ID)
+    .map((item) => item.slot);
+  const marksRows = MARKS_SET.map((def) => {
+    const owned = ownedMarksSlots.includes(def.slot);
+    const affordable = !owned && marks >= MARKS_SET_PRICE;
+    return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/equip-${def.slot}.png" alt=""><div class="shop-good-info"><strong>${def.name}</strong><small>绑定过渡橙装 · ${EQUIPMENT_SLOTS[def.slot].label} · 战力 ${def.power}</small></div><button class="link-button" data-buy-marks="${def.slot}" ${affordable ? "" : "disabled"}>${owned ? "已兑换" : `${MARKS_SET_PRICE} 印记`}</button></div>`;
+  }).join("");
+  if (!panelChanged($("shopGoods"), `v4|${gold}|${scrolls}|${marks}|${ownedMarksSlots.join(",")}|${lockSignature}|${equipmentSignature}`))
+    return;
   setHtml(
     $("shopGoods"),
-    SHOP_GOODS.map((good) => {
-      const affordable = gold >= good.price;
-      // 0.4.8 商品用美术图标（material 商品对应黑铁矿石图）
-      const icon = good.id === "material" ? "ore" : good.id;
-      return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/goods-${icon}.png" alt=""><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
-    }).join("")
+    [
+      ...SHOP_GOODS.map((good) => {
+        const affordable = gold >= good.price;
+        // 0.4.8 商品用美术图标（material 商品对应黑铁矿石图）
+        const icon = good.id === "material" ? "ore" : good.id;
+        return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/goods-${icon}.png" alt=""><div class="shop-good-info"><strong>${good.name}</strong><small>${good.desc}</small></div><button class="link-button" data-buy="${good.id}" ${affordable ? "" : "disabled"}>${good.price} 金币</button></div>`;
+      }),
+      marksRows
+    ].join("")
   );
   const rows = EQUIPMENT_SLOT_KEYS.map((slotKey) => {
     const item = state.player.equipment?.[slotKey];

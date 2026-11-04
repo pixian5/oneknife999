@@ -1,4 +1,4 @@
-import { AFFIX_POOL } from "./config.js";
+import { AFFIX_POOL, EQUIPMENT_SLOTS, MARKS_SET, MARKS_SET_PRICE } from "./config.js";
 
 // 《一刀999》城镇杂货商与词缀重铸纯逻辑（0.3.5）。
 // 只描述价格、能否购买 / 重铸与重掷结果，不依赖 DOM 与游戏全局状态；
@@ -44,6 +44,38 @@ export const REFORGE_RULES = {
   perAffix: 60,
   scrollPerReforge: 1
 };
+
+// 0.8.25 印记兑换（docs/07）：首领印记 → 绑定过渡橙装。纯逻辑，扣印记与入包由 main.js 写回。
+// setId 供「每部位限兑一次」判定（从背包/穿戴里派生，不新增存档字段）。
+export const MARKS_SET_ID = "marks-transition";
+
+export function marksSetItem(slotKey) {
+  const def = MARKS_SET.find((entry) => entry.slot === slotKey);
+  if (!def) return null;
+  return {
+    id: `marks-${slotKey}`,
+    name: def.name,
+    slot: def.slot,
+    quality: "orange",
+    glyph: EQUIPMENT_SLOTS[def.slot]?.glyph || "装",
+    power: def.power,
+    value: Math.round(def.power * 1.6),
+    color: "#e7b36b",
+    desc: `绑定 · 首领印记兑换（${MARKS_SET_PRICE} 印记）`,
+    setId: MARKS_SET_ID,
+    bound: true,
+    affixes: (def.affixes || []).map((affix) => ({ ...affix }))
+  };
+}
+
+export function buyMarksSetItem(slotKey, { marks = 0, owned = [] } = {}) {
+  const item = marksSetItem(slotKey);
+  if (!item) return { ok: false, item: null, price: 0, reason: "杂货商没有这件过渡装备" };
+  if (owned.includes(slotKey)) return { ok: false, item, price: MARKS_SET_PRICE, reason: "该部位已兑换过（绑定装备不可重复购买）" };
+  if (marks < MARKS_SET_PRICE)
+    return { ok: false, item, price: MARKS_SET_PRICE, reason: `首领印记不足（需要 ${MARKS_SET_PRICE}，当前 ${marks}）` };
+  return { ok: true, item, price: MARKS_SET_PRICE, reason: "" };
+}
 
 // 单件商品购买结算：返回 { ok, good, price, reason }。
 // 只做资格判断，不修改任何状态（写回由 main.js 完成）。

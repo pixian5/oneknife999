@@ -100,7 +100,7 @@ import {
   isEquipmentDrop,
   pickRedNameDrop
 } from "./drops.js";
-import { buyShopItem, reforgeQuote, reforgeAffix } from "./shop.js";
+import { buyShopItem, reforgeQuote, reforgeAffix, buyMarksSetItem, MARKS_SET_ID } from "./shop.js";
 import {
   resolveDifficulty,
   scaleForDifficulty,
@@ -2490,6 +2490,40 @@ export function closeShop() {
   if (!state?.shopOpen) return;
   state.shopOpen = false;
   logDebug("shop", "close");
+  renderAll();
+}
+
+// 0.8.25：首领印记兑换（docs/07）——绑定过渡橙装，扣印记并入背包，与杂货商共用入城守卫。
+// 「每部位限兑一次」从背包 + 穿戴里按 setId 派生，不新增存档字段（存档净化会保留 setId）。
+export function buyMarksGood(slotKey) {
+  if (!state) return;
+  if (!nearTown()) {
+    state.shopOpen = false;
+    logDebug("shop", "marksBlocked", { reason: "notInTown", slotKey });
+    showToast("离开城镇后杂货商不再营业");
+    renderAll();
+    return;
+  }
+  const ownedSlots = [...Object.values(state.player.equipment || {}), ...(state.inventory || [])]
+    .filter((item) => item && item.setId === MARKS_SET_ID)
+    .map((item) => item.slot);
+  const purchase = buyMarksSetItem(slotKey, { marks: state.player.marks || 0, owned: ownedSlots });
+  if (!purchase.ok) {
+    logInfo("shop", "marksBlocked", { reason: purchase.reason, slotKey, marks: state.player.marks || 0 });
+    showToast(purchase.reason);
+    return;
+  }
+  if ((state.inventory || []).length >= 12) {
+    logInfo("shop", "marksBlocked", { reason: "inventoryFull", slotKey });
+    showToast("背包已满，无法兑换（先整理或拆解）");
+    return;
+  }
+  state.player.marks = Math.max(0, (state.player.marks || 0) - purchase.price);
+  state.inventory = [...(state.inventory || []), purchase.item];
+  logInfo("shop", "marksExchange", { slot: slotKey, item: purchase.item.name, price: purchase.price, marksLeft: state.player.marks });
+  log(`<b>首领印记兑换</b>：${purchase.item.name} 已入背包（-${purchase.price} 印记）。`, "loot");
+  showToast(`已兑换 ${purchase.item.name}`);
+  persistGame();
   renderAll();
 }
 
