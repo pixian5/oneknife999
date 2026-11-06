@@ -13,7 +13,15 @@ import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
 import { ELITE_AFFIXES } from "./elite.js";
 import { resolveMonsterSpriteName, resolveBossSprite, resolveBossUiPortrait, resolveMapBackgroundName } from "./assets.js";
-import { resolveDifficulty, bestiaryStats, setBonusTotals, setCounts, nextSetTier, abyssProgress } from "./endgame.js";
+import {
+  resolveDifficulty,
+  bestiaryStats,
+  setBonusTotals,
+  setCounts,
+  nextSetTier,
+  abyssProgress,
+  bestiaryChapterProgress
+} from "./endgame.js";
 import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
@@ -1533,6 +1541,13 @@ export function renderPlayer() {
   setStyle($("questBar"), "width", `${questProgress}%`);
   setText($("questText"), `${state.quest.kills} / ${state.quest.need} 普通怪 · Boss ${state.quest.bossDefeated ? "已击败" : "未击败"}`);
   renderEndgameLine(clearedMaps);
+  // 0.8.27 图鉴称号徽章：零数值收集反馈，集齐章节授予（见 endgame.bestiaryChapterProgress）。
+  const progress = bestiaryChapterProgress(collectChapterGroups(), state.bestiary || {});
+  const badge = $("bestiaryBadge");
+  if (badge) {
+    setClass(badge, "hidden", !progress.title);
+    setText(badge, progress.title);
+  }
 }
 
 // 0.6.0 P2 终局信息条：难度档 + 怪物图鉴完成度 + 当前套装进度。
@@ -2150,12 +2165,8 @@ export function renderKeybindPanel() {
 
 // 0.6.0 P2 怪物图鉴面板：按章节分组列出全部怪物，未击败的置灰。
 // 只在弹窗打开时重建（同 renderSkillModal 的惰性策略），静止帧零成本。
-export function renderBestiary() {
-  const modal = $("bestiaryModal");
-  if (!modal || modal.classList.contains("hidden")) return;
-  const bestiary = state.bestiary || {};
-  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
-  const allNames = [];
+// 0.8.27：按章节分组全部怪物名（图鉴面板与称号共用）。
+function collectChapterGroups() {
   const byChapter = new Map();
   for (const id of MAP_ORDER) {
     const map = MAPS[id];
@@ -2163,17 +2174,27 @@ export function renderBestiary() {
     for (const type of map.monsterTypes) {
       if (byChapter.get(map.chapter).names.includes(type.name)) continue;
       byChapter.get(map.chapter).names.push(type.name);
-      allNames.push(type.name);
     }
   }
+  return [...byChapter.entries()].map(([chapter, group]) => ({ chapter, ...group }));
+}
+
+export function renderBestiary() {
+  const modal = $("bestiaryModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  const bestiary = state.bestiary || {};
+  const cleared = MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length;
+  const chapterGroups = collectChapterGroups();
+  const allNames = chapterGroups.flatMap((g) => g.names);
+  const progress = bestiaryChapterProgress(chapterGroups, bestiary);
   const stats = bestiaryStats(bestiary, allNames);
   setText($("bestiaryStats"), `${stats.seen} / ${stats.total}（${Math.round(stats.ratio * 100)}%）`);
-  const signature = `${stats.seen}|${stats.total}|${Object.values(bestiary).reduce((a, b) => a + b, 0)}`;
+  const signature = `${stats.seen}|${stats.total}|${progress.title}|${Object.values(bestiary).reduce((a, b) => a + b, 0)}`;
   if (!panelChanged($("bestiaryList"), signature)) return;
   setHtml(
     $("bestiaryList"),
-    [...byChapter.entries()]
-      .map(([chapter, group]) => {
+    chapterGroups
+      .map((group) => {
         const entries = group.names
           .map((name) => {
             const count = bestiary[name] || 0;
@@ -2182,7 +2203,8 @@ export function renderBestiary() {
               : `<div class="bestiary-entry unknown">???（未收集）</div>`;
           })
           .join("");
-        return `<div class="bestiary-chapter"><strong>${group.name}</strong><div class="bestiary-grid">${entries}</div></div>`;
+        const per = progress.perChapter.find((p) => p.name === group.name) || { seen: 0, total: group.names.length, done: false };
+        return `<div class="bestiary-chapter${per.done ? " done" : ""}"><strong>${group.name}<span class="chapter-count">${per.seen}/${per.total}${per.done ? " ✓" : ""}</span></strong><div class="bestiary-grid">${entries}</div></div>`;
       })
       .join("")
   );

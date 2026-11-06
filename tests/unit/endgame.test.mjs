@@ -194,3 +194,50 @@ test("DIFFICULTY_TIERS：等级递进且常规档倍率恒为 1", () => {
   }
   assert.equal(ABYSS_RULES.bossEvery, 10);
 });
+
+// ============ 0.8.27 图鉴称号（零数值收集反馈） ============
+import { BESTIARY_TITLE_TIERS, bestiaryChapterProgress } from "../../game/src/endgame.js";
+
+test("bestiaryChapterProgress：按章统计完成度并授予称号", () => {
+  const groups = [
+    { name: "第 1 章", names: ["甲", "乙"] },
+    { name: "第 2 章", names: ["丙", "丁", "戊"] }
+  ];
+  // 空图鉴：0 章完成、无称号
+  const empty = bestiaryChapterProgress(groups, {});
+  assert.equal(empty.doneChapters, 0);
+  assert.equal(empty.title, "");
+  assert.equal(empty.perChapter[0].seen, 0);
+  // 集齐第 1 章：1 章完成 → 「见闻者」
+  const one = bestiaryChapterProgress(groups, { 甲: 1, 乙: 3 });
+  assert.equal(one.doneChapters, 1);
+  assert.equal(one.title, "见闻者");
+  assert.equal(one.perChapter[0].done, true);
+  assert.equal(one.perChapter[1].done, false);
+  // 集齐两章：仍只到「见闻者」（2 < 3 章门槛）
+  const two = bestiaryChapterProgress(groups, { 甲: 1, 乙: 1, 丙: 1, 丁: 1, 戊: 1 });
+  assert.equal(two.doneChapters, 2);
+  assert.equal(two.title, "见闻者");
+});
+
+test("bestiaryChapterProgress：称号按最高档授予，10 章全齐为百图全鉴", () => {
+  const tiers = BESTIARY_TITLE_TIERS.map((t) => t.chapters);
+  assert.deepEqual(tiers, [1, 3, 6, 10]);
+  const groups = Array.from({ length: 10 }, (_, i) => ({ name: `第 ${i + 1} 章`, names: ["怪"] }));
+  const all = bestiaryChapterProgress(groups, Object.fromEntries(groups.flatMap((g) => g.names.map((n) => [n, 1]))));
+  assert.equal(all.doneChapters, 10);
+  assert.equal(all.title, "百图全鉴");
+  // 6 章档：怪物学者
+  const six = bestiaryChapterProgress(
+    groups.slice(0, 6).map((g) => ({ name: g.name, names: g.names })),
+    Object.fromEntries(groups.slice(0, 6).flatMap((g) => g.names.map((n) => [n, 1])))
+  );
+  assert.equal(six.doneChapters, 6);
+  assert.equal(six.title, "怪物学者");
+});
+
+test("bestiaryChapterProgress：空章组与空图鉴安全", () => {
+  assert.deepEqual(bestiaryChapterProgress([], {}), { perChapter: [], doneChapters: 0, totalChapters: 0, title: "" });
+  const weird = bestiaryChapterProgress([{ name: "空章", names: [] }], {});
+  assert.equal(weird.perChapter[0].done, false, "空章节不算完成");
+});
