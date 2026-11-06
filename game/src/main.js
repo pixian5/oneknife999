@@ -1003,6 +1003,8 @@ export function defeat(target) {
     textAt("孢子爆裂", target.x, floatYAboveNameplate(target, 20), "#8fc7a2", 12);
   }
   target.alive = false;
+  // 0.8.26 击败 Boss 后给主角 3 秒胜利动作帧窗口（victory）。
+  if (target.boss) state.player.victoryTimer = 3;
   target.respawn = target.boss ? 42 : target.npc ? 90 : rand(11, 20);
   target.hp = target.maxHp;
   // 0.8.13 精英死亡词缀：毒爆 / 分裂。必须在 alive=false 之后跑，
@@ -1523,6 +1525,8 @@ export function playerDamage(dt) {
         if (TEST_MODE) console.info(`[dmg] ${attacker.id} ${total} hits=${hits}`);
         state.player.hp = Math.max(0, state.player.hp - total);
         state.player.hitFlash = 0.2;
+        // 0.8.26 受击瞬间叠加短促格挡姿态（guard），与 hitFlash 叠加但不覆盖其优先级。
+        state.player.guardTimer = 0.35;
         // 0.8.6：按来源累计承伤，探针据此给出「普通怪 / 首领本体」的占比。
         recordDamage("monster", total);
         // 0.8.7：每 5 次怪物命中采样一条，带形态 / 段数 / 承伤前后血量，定位「为什么突然暴毙」。
@@ -2113,6 +2117,10 @@ export function update(dt) {
   }
   state.player.attackTimer = Math.max(0, state.player.attackTimer - dt);
   state.player.invulnerable = Math.max(0, state.player.invulnerable - dt);
+  // 0.8.26 主角动作帧状态同步：缓存 maxHp（供 lowhp 判定），并递减格挡/胜利计时。
+  state.player.maxHp = Math.max(1, playerMaxHp());
+  state.player.guardTimer = Math.max(0, (state.player.guardTimer || 0) - dt);
+  state.player.victoryTimer = Math.max(0, (state.player.victoryTimer || 0) - dt);
   // 0.6.0 P0：怪物行为施加的负面状态倒计时（减速 / 药水封锁 / 技能封锁）。
   state.player.castTimer = Math.max(0, (state.player.castTimer || 0) - dt);
   state.player.hitFlash = Math.max(0, (state.player.hitFlash || 0) - dt);

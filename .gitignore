@@ -57,3 +57,9 @@ htmlcov/
 
 # 设计 Brief 等中间产物不入库
 .creative-design/
+
+# 抠图中间产物不入库
+game/assets/_cutout_report.json
+
+# 临时备份文件不入库
+*.bak
