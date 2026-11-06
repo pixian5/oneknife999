@@ -172,6 +172,36 @@ export const CHAPTER_TINTS = ["#b06a3a", "#3a7ab0", "#7a6a3a", "#6aa0c0", "#c04a
 
 const MONSTER_ACTIONS = new Set(["idle", "walk", "attack", "hit"]);
 
+// 0.8.27：已补齐 walk/attack/hit 动作帧的专属 Boss（素材名，含 liebei 英文名版）。
+export const BOSS_ACTION_FRAMES = new Set([
+  "裂碑领主",
+  "沧海妖皇",
+  "地宫龙君",
+  "玄冰魔王",
+  "焚天魔尊",
+  "幽冥鬼帝",
+  "天穹圣主",
+  "星陨邪神",
+  "神魔战皇",
+  "玄烬帝尊",
+  "灰烬霸主",
+  "liebei"
+]);
+
+// 0.8.27：已补齐 walk/attack/hit 动作帧的 10 个精英（通用领主立绘也会复用）。
+export const ELITE_ACTION_FRAMES = new Set([
+  "冰霜巨人",
+  "地宫龙卫",
+  "幽冥鬼将",
+  "沙暴巨蝎",
+  "烈焰魔君",
+  "烬火屠夫",
+  "苍月海王",
+  "边境铁骑",
+  "雾林巨狼",
+  "黑岩魔像"
+]);
+
 export function stripChapterPrefix(name, chapter = 1) {
   if (!name) return "";
   const short = CHAPTER_SHORTS[(Math.max(1, chapter || 1) - 1) % CHAPTER_SHORTS.length];
@@ -191,22 +221,36 @@ export function resolveMonsterSpriteName(name, action = "idle", map) {
   return `monster-full-${target}-${safeAction}.png`;
 }
 
-export function resolveEliteSpriteName(map) {
+export function resolveEliteSpriteName(map, action = "idle") {
   const arena = map?.siteStyle?.arena || HANDCRAFTED_ARENA[map?.id] || "outpost";
   const name = ARENA_ELITE_PORTRAITS[arena] || ARENA_ELITE_PORTRAITS.outpost;
+  const safe = MONSTER_ACTIONS.has(action) ? action : "idle";
+  // 0.8.27：有动作帧的精英按动作拼后缀，否则回退单帧静态立绘。
+  if (safe !== "idle" && ELITE_ACTION_FRAMES.has(name)) {
+    return `monster-full-精英-${name}-${safe}.png`;
+  }
   return `monster-full-精英-${name}.png`;
 }
 
 // Boss 战场贴图：有专属立绘直接用；通用领主用精英图 + 章节色调。
-export function resolveBossSprite(map) {
+export function resolveBossSprite(map, action = "idle") {
   const name = map?.boss?.name;
   if (!name) return null;
-  if (BOSS_PORTRAITS.has(name)) return { name, path: `boss-full-${name}.png`, tint: null };
+  const safe = MONSTER_ACTIONS.has(action) ? action : "idle";
+  // 0.8.27：命中动作帧白名单时按动作取图，同时返回 fallbackPath 供渲染层逐级回退。
+  if (BOSS_PORTRAITS.has(name)) {
+    const basePath = `boss-full-${name}.png`;
+    const actionPath = safe !== "idle" && BOSS_ACTION_FRAMES.has(name) ? `boss-full-${name}-${safe}.png` : basePath;
+    return { name, path: actionPath, fallbackPath: basePath, tint: null };
+  }
   const arena = map?.siteStyle?.arena || HANDCRAFTED_ARENA[map?.id] || "outpost";
   const elite = ARENA_ELITE_PORTRAITS[arena] || ARENA_ELITE_PORTRAITS.outpost;
+  const basePath = `monster-full-精英-${elite}.png`;
+  const actionPath = safe !== "idle" && ELITE_ACTION_FRAMES.has(elite) ? `monster-full-精英-${elite}-${safe}.png` : basePath;
   return {
     name: `精英-${elite}`,
-    path: `monster-full-精英-${elite}.png`,
+    path: actionPath,
+    fallbackPath: basePath,
     tint: CHAPTER_TINTS[(Math.max(1, map?.chapter || 1) - 1) % CHAPTER_TINTS.length]
   };
 }
