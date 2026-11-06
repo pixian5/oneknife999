@@ -8,6 +8,10 @@
 
 ## 快速开始
 
+**在线游玩（Hugging Face Space 静态托管）**：https://xbzsb-oneknife999.static.hf.space
+
+本地运行：
+
 ```bash
 npm install
 npm run serve      # 打开 http://127.0.0.1:4174
