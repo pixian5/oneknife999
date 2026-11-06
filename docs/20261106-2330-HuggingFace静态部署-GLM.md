@@ -69,3 +69,23 @@ HF Space 依赖**仓库根 README.md 顶部的 YAML front matter** 声明 `sdk: 
 ## 流量与耗时
 
 上传 171MB 走本机 Wi-Fi（用户已确认），实际约 1 分钟；测试请求若干。
+
+## 补记（同日晚：同步 0.8.25 与脚本化根治）
+
+WorkBuddy 云电脑已把仓库推进到 **0.8.25**（素材瘦身 172→104MB、三职业难度归因、
+反伤尊重入场无敌、首领印记出口、CI 流水线等约 20 个提交）。本地部署文档提交已变基合入。
+
+**第二次踩同一坑**：增量同步 0.8.25 时 `upload_folder` 再次把无 YAML 头的 `game/README.md`
+覆盖到 Space 根，sdk 元数据丢失 → CONFIG_ERROR → 全站 404（随后手工修复恢复 RUNNING）。
+同坑两踩证明手工流程不可靠，已固化部署脚本：
+
+- `scripts/deploy-hf.py`：上传（排除 .DS_Store）→ **无条件重传带 sdk 元数据的 README** →
+  清理本地已删除文件（过滤 list_repo_tree 的目录条目，避免误删）→ 状态自查。
+  令牌只从 `HF_TOKEN` 环境变量读取，不落仓库。
+- 以后更新线上版本一条命令：`python3 scripts/deploy-hf.py`
+
+另排除一次险情：`list_repo_tree` 递归模式混入 `assets`/`src` 目录条目，清理逻辑曾把它们
+当作多余文件传给 delete——实测 HF 按精确文件名匹配未造成破坏，脚本已加类型过滤根治。
+
+**当前线上状态（0.8.25）**：素材 103MB/551 个、首页与模块 200、无头浏览器进图验证
+零 pageerror、Space RUNNING / sdk static。
