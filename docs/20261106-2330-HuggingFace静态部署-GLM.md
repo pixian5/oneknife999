@@ -1,0 +1,71 @@
+# 20261106-2330-HuggingFace静态部署-GLM.md
+
+## 概述
+
+把《一刀999》部署到 Hugging Face Space，获得一个可玩的线上地址：
+**https://xbzsb-oneknife999.static.hf.space**
+
+- Space 页面：https://huggingface.co/spaces/xbzsb/oneknife999
+- 直接游玩：https://xbzsb-oneknife999.static.hf.space
+- 类型：`sdk: static`（纯静态托管，免容器、免 GPU，免费额度永久可用）
+
+## 部署方式
+
+1. 验证令牌（`/api/whoami-v2`，用户 xbzsb、write 权限）。
+2. API 创建 Space：`POST /api/repos/create`，`{"type":"space","name":"oneknife999","sdk":"static"}`。
+3. 临时虚拟环境（`/tmp/hf-venv`，未污染系统 Python）安装 `huggingface_hub` 2.4.0。
+4. `upload_folder(folder_path="game")` 把 `game/` 全部内容上传到 Space 仓库根
+   （543 个素材 + index.html + src/，171MB，实际耗时约 1 分钟）。
+5. 上传带 YAML front matter 的 README.md 声明 `sdk: static`。
+6. 清理垃圾文件：`.DS_Store`、实验文件、HF 模板残留 `style.css`。
+
+## 踩坑记录（三进三出，全部实测定位）
+
+### 坑一：上传覆盖了 Space 配置 → CONFIG_ERROR
+
+HF Space 依赖**仓库根 README.md 顶部的 YAML front matter** 声明 `sdk: static` 等配置。
+首次 `upload_folder` 把游戏自带的 `game/README.md`（无 YAML 头）覆盖上去，Space 直接
+`CONFIG_ERROR`（runtime 状态 API 可查），所有请求 503。
+
+**修复**：上传带 front matter 的 README.md（`title/emoji/colorFrom/colorTo/sdk: static`）。
+**教训**：向 Space 用 `upload_folder` 传整个目录时，务必先放一份带 YAML 头的 README，
+或改用 `upload_file` 逐个上传避开根 README。
+
+### 坑二：static Space 的直接域名多一段 `.static`
+
+普通 Space（gradio/docker）直接域名是 `{owner}-{space}.hf.space`；
+**static Space 是 `{owner}-{space}.static.hf.space`**。用普通域名测试一直 404，
+官方文档没写这一点，最后从 Space 页面 HTML 里的 iframe `src` 找到真实地址。
+
+**教训**：调试部署先抓平台页面里的实际资源地址，不要按记忆里的规则猜。
+
+### 坑三（乌龙）：用不存在的文件测试 404
+
+一度怀疑「中文文件名在 HF 上 404」，测试用的 `monster-full-腐烬矿工-idle.png`
+**本身就不存在**——动作帧素材只有 0.5.1 的 50 种新野怪有，腐烬矿工只有静态立绘。
+用 tree API 确认存在的文件（`boss-full-地宫龙君.png` 等）重测全部 200。
+**教训**：报 404 先核对文件是否真的存在，再怀疑平台。最小对照实验（上传 `测试.png`
+再取回，200）是推翻假设的关键一步。另外排除了 macOS NFD（分解式 Unicode）文件名
+干扰——实测本机文件名均为 NFC，与 JS 源码一致。
+
+## 验证数据
+
+| 项 | 结果 |
+|---|---|
+| 首页 / game.css / src/main.js | 全部 200，MIME 正确（`application/javascript`，ES Module 可加载） |
+| 中文文件名素材 | 200（`boss-full-地宫龙君.png` 62KB、`monster-full-冥河巨鳄-idle.png` 50KB 等） |
+| 无头浏览器（本机 Chrome 通道） | 职业弹窗 3 项、选职业进入灰烬村外、引导横幅显示、Canvas 正常渲染 |
+| 页面错误（pageerror） | 0 |
+| 资源请求 | 85 个，其中 12 个 404 均为手工图怪的动作帧（素材不存在，走三级回退显示静态立绘，与本地行为一致） |
+| 首次加载（networkidle） | 约 9.3 秒（含 171MB 中按需加载的部分） |
+
+## 已知边界
+
+- 直接访问域名仅 `*.static.hf.space`；`huggingface.co/spaces/xbzsb/oneknife999` 页面内嵌 iframe 同样可玩。
+- 存档在浏览器 localStorage（本地存储）里，与本地版本互通需导入/导出功能（游戏已有）。
+- Space 内容与仓库 `game/` 目录需手动同步：改代码后重跑上传命令即可（`upload_folder` 增量上传）。
+- 部署脚本未入库（临时 venv 在 `/tmp`）；如需自动化可后续加 `scripts/deploy-hf.py` 与 GitHub Actions。
+
+## 流量与耗时
+
+上传 171MB 走本机 Wi-Fi（用户已确认），实际约 1 分钟；测试请求若干。
