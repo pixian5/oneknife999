@@ -1226,10 +1226,16 @@ export function drawSkillRangePreview() {
 export function playerSpriteAction(player = state.player) {
   // hp 缺失（或未初始化）不视为死亡：只有明确 hp <= 0 才用 death 帧，避免新档首帧误判。
   if (typeof player.hp === "number" && player.hp <= 0) return "death";
+  // 0.8.26 新增主角四动作帧（纯函数判定，缺图会自动回退到无后缀静态立绘）：
+  // victory 击败 Boss 后 3 秒庆祝；guard 受击瞬间的防御姿态；run 持续移动超过 0.7 秒；
+  // lowhp 血量 ≤25% 且静止时的重伤虚弱。
+  if ((player.victoryTimer || 0) > 0) return "victory";
   if ((player.hitFlash || 0) > 0) return "hit";
   if ((player.castTimer || 0) > 0) return "cast";
   if ((player.attackTimer || 0) > 0) return "attack";
-  if (player.moving) return "walk";
+  if ((player.guardTimer || 0) > 0) return "guard";
+  if (player.moving) return (player.runTimer || 0) > 0.7 ? "run" : "walk";
+  if (player.maxHp > 0 && typeof player.hp === "number" && player.hp / player.maxHp <= 0.25) return "lowhp";
   return "idle";
 }
 
@@ -1247,6 +1253,9 @@ export function drawPlayer() {
   ctx.globalAlpha = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable * 8) % 2 === 0 ? 0.45 : 1;
   // 0.6.0 P1 玩家六动作帧：player-full-{class}-{action}.png（idle/walk/attack/cast/hit/death），
   // 缺失动作回退到无后缀静态立绘。cast 只在技能前摇的短窗口出现，death 在复活无敌期间。
+  // 0.8.26 奔跑计时：用当帧 moving 标记累计（约 1/60 秒一帧），连续移动 0.7 秒以上切 run 帧。
+  if (state.player.moving) state.player.runTimer = (state.player.runTimer || 0) + 1 / 60;
+  else state.player.runTimer = 0;
   const playerAction = playerSpriteAction();
   const actionSprite = loadSprite(
     `player-full-${state.classId}-${playerAction}`,
