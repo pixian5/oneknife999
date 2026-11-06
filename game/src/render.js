@@ -917,13 +917,22 @@ export function drawEntity(entity) {
   let sprite = null;
   if (!entity.npc) {
     if (entity.boss) {
-      const bossSprite = resolveBossSprite(map);
+      // 0.8.27：按动作取帧（walk/attack/hit），动作帧未就绪时回退静态单帧立绘。
+      const bossSprite = resolveBossSprite(map, action);
       if (bossSprite) {
-        const bossKey = `boss-${bossSprite.name}`;
-        sprite = bossSprite.tint
-          ? loadTintedSprite(bossKey, `assets/${bossSprite.path}`, bossSprite.tint)
-          : loadSprite(bossKey, `assets/${bossSprite.path}`);
-        if (!sprite) sprite = loadSprite(bossKey, `assets/${bossSprite.path}`);
+        const bossKey = `boss-${bossSprite.name}-${action}`;
+        const primarySrc = `assets/${bossSprite.path}`;
+        const fallbackSrc = `assets/${bossSprite.fallbackPath || bossSprite.path}`;
+        if (bossSprite.tint) {
+          loadSprite(bossKey, primarySrc); // 先触发动作帧加载
+          sprite = loadTintedSprite(bossKey, primarySrc, bossSprite.tint);
+        } else {
+          sprite = loadSprite(bossKey, primarySrc);
+        }
+        if (!spriteReady(sprite) && fallbackSrc !== primarySrc) {
+          const fbKey = `boss-${bossSprite.name}-static`;
+          sprite = bossSprite.tint ? loadTintedSprite(fbKey, fallbackSrc, bossSprite.tint) : loadSprite(fbKey, fallbackSrc);
+        }
       }
     } else {
       const spriteName = resolveMonsterSpriteName(entity.name, action, map);
