@@ -172,3 +172,27 @@ export function nextSetTier(pieces = 0) {
   for (const tier of [2, 4, 6]) if (pieces < tier) return { tier, missing: tier - pieces };
   return null;
 }
+
+// ============ 图鉴称号（0.8.27 P2：零数值收集反馈） ============
+// 针对「长线目标感弱」（见 docs/20261106-2130 当前进度分析）的最小解法：
+// 集齐一章（该章全部怪物击杀过至少一次）点亮该章图鉴，点亮数量达到门槛授予称号。
+// 刻意零数值：不加属性、不掉落，只做展示与收集动机，避免破坏数值平衡。
+export const BESTIARY_TITLE_TIERS = [
+  { chapters: 1, title: "见闻者" },
+  { chapters: 3, title: "博物学徒" },
+  { chapters: 6, title: "怪物学者" },
+  { chapters: 10, title: "百图全鉴" }
+];
+
+// 统计各章图鉴完成度。chapterGroups 形如 [{ name, names: [怪物名...] }]（render 层按章分组）。
+// 返回 { perChapter: [{ name, seen, total, done }], doneChapters, totalChapters, title }。
+export function bestiaryChapterProgress(chapterGroups, bestiary = {}) {
+  const perChapter = (chapterGroups || []).map((group) => {
+    const seen = group.names.filter((name) => (bestiary[name] || 0) > 0).length;
+    return { name: group.name, seen, total: group.names.length, done: seen >= group.names.length && group.names.length > 0 };
+  });
+  const doneChapters = perChapter.filter((chapter) => chapter.done).length;
+  let title = "";
+  for (const tier of BESTIARY_TITLE_TIERS) if (doneChapters >= tier.chapters) title = tier.title;
+  return { perChapter, doneChapters, totalChapters: perChapter.length, title };
+}
