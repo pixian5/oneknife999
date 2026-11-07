@@ -270,3 +270,27 @@ export function resolveMapBackgroundName(map) {
   const stage = Math.max(1, map?.stageNumber || 1);
   return `map-c${String(chapter).padStart(2, "0")}-${String(((stage - 1) % 5) + 1).padStart(2, "0")}.jpg`;
 }
+
+// ============ 0.8.29 技能特效贴图与地图物件（豆包 11-06 批次接入） ============
+
+// 技能名 → 施放特效贴图（fx-skill-*.png，四角透明，目标点一次渐隐闪光）。
+// 12 张全用上：战士震地冲无贴图（保持粒子+震屏），freeze/frost 用于怪物减速/打断命中玩家的被动视觉。
+export const SKILL_FX = {
+  破甲斩: "shield", // 护甲碎裂意象
+  旋风扫: "whirlwind",
+  雷矛术: "chain", // 闪电链
+  焰痕地带: "fireball",
+  烈焰震环: "inferno",
+  天火陨星: "meteor",
+  蚀骨咒: "poison",
+  召唤骨卫: "shadow",
+  生息法阵: "heal",
+  镇魂符: "holy"
+};
+
+// 怪物被动命中玩家时的状态特效（0.8.29）。
+export const PASSIVE_FX = { slow: "frost", stun: "freeze" };
+
+// 地图物件：战术节点与地标 → 贴图（prop-*.png）。
+export const TACTICAL_PROP = { rest: "prop-campfire", resource: "prop-chest" };
+export const LANDMARK_PROP = { watchtower: "prop-watchtower", signpost: "prop-signpost", banner: "prop-banner", rock: "prop-rockpile" };
