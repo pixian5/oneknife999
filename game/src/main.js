@@ -142,6 +142,7 @@ import {
   rollElite,
   seededRandom
 } from "./elite.js";
+import { SKILL_FX, PASSIVE_FX } from "./assets.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -505,7 +506,7 @@ export function selectTarget(entity) {
 
 // 伤害结算：纯计算交给 combat.js，这里只负责写回实体状态与打击反馈。
 // 0.6.0 P0：结算前先过怪物行为被动（首击减伤 / 残血减伤 / 致命保留），近战命中带反伤的怪会反噬玩家。
-export function resolveDamage(target, multiplier, skillName, kind) {
+export function resolveDamage(target, multiplier, skillName, kind, fxKey = null) {
   const hero = activeHero();
   if (target.npc) target.hostile = true;
   // 0.7.1 致盲（无名雾 / 雪隐）：被致盲期间玩家出手按 missChance 落空，不结算伤害。
@@ -607,6 +608,8 @@ export function resolveDamage(target, multiplier, skillName, kind) {
     fx.shakePower = 5;
   }
   spark(target.x, target.y, hero.color, kind === "范围" ? 14 : 7);
+  // 0.8.29 技能特效贴图：命中点一次渐隐闪光（life 0.28s，渲染层 drawWorld 绘制）。
+  if (fxKey) fx.skillFx.push({ key: fxKey, x: target.x, y: target.y - 12, life: 0.28, total: 0.28 });
   textAt(`${damage}`, target.x, floatYAboveNameplate(target, 6), kind === "爆发" ? "#e7b36b" : "#eff4ef", kind === "爆发" ? 18 : 13);
   if (skillName) log(`${skillName} 命中 <b>${target.name}</b>，造成 ${damage} 点伤害。`);
   // 0.8.7：玩家输出按 8 次采样记一条，能看出「打不动」是伤害低、被盾吸收，还是被减伤被动吃掉。
@@ -804,7 +807,7 @@ export function castSkill(index) {
     state.player.x = clamp(point.x, 55, map.width - 55);
     state.player.y = clamp(point.y, 55, map.height - 55);
     state.player.invulnerable = Math.max(state.player.invulnerable, SKILL_RULES.charge.invulnerable);
-    resolveDamage(target, multiplier, skill.name, skill.kind);
+    resolveDamage(target, multiplier, skill.name, skill.kind, SKILL_FX[skill.name]);
     if (target.alive) {
       const knocked = resolveKnockback({
         origin: state.player,
@@ -820,7 +823,7 @@ export function castSkill(index) {
   }
   // 破甲斩（0.3.4）：命中后目标防御 -15%，持续 4 秒。
   if (skill.kind === "破甲") {
-    resolveDamage(target, multiplier, skill.name, skill.kind);
+    resolveDamage(target, multiplier, skill.name, skill.kind, SKILL_FX[skill.name]);
     if (target.alive) {
       applyArmorBreak(target);
       log(
@@ -841,15 +844,15 @@ export function castSkill(index) {
       maxTargets: SKILL_RULES.pierce.maxTargets
     });
     const list = hits.length ? hits : [target];
-    list.forEach((entity) => resolveDamage(entity, multiplier, null, skill.kind));
+    list.forEach((entity) => resolveDamage(entity, multiplier, null, skill.kind, SKILL_FX[skill.name]));
     fx.pierce = { x1: state.player.x, y1: state.player.y, x2: target.x, y2: target.y, life: 0.18 };
     log(`<b>${skill.name}</b> 穿透命中 ${list.length} 个目标（最多 ${SKILL_RULES.pierce.maxTargets} 个）。`, "loot");
     if (list.length > 1) showToast(`${skill.name} 穿透 ${list.length} 个目标`);
     return;
   }
   if (skill.kind === "范围") {
-    nearestTargets(skill.range, 5).forEach((entity) => resolveDamage(entity, multiplier, skill.name, skill.kind));
-  } else resolveDamage(target, multiplier, skill.name, skill.kind);
+    nearestTargets(skill.range, 5).forEach((entity) => resolveDamage(entity, multiplier, skill.name, skill.kind, SKILL_FX[skill.name]));
+  } else resolveDamage(target, multiplier, skill.name, skill.kind, SKILL_FX[skill.name]);
 }
 
 export function oneMoment() {
@@ -1378,12 +1381,14 @@ export function applyOnHitPassives(attacker, damage) {
     state.player.slowTimer = Math.max(state.player.slowTimer || 0, slow.params?.duration || 2);
     state.player.slowFactor = slow.params?.factor ?? 0.55;
     textAt("减速", state.player.x, floatYAbovePlayer(30), "#78b6ec", 12);
+    fx.skillFx.push({ key: PASSIVE_FX.slow, x: state.player.x, y: state.player.y - 20, life: 0.4, total: 0.4 });
   }
   // 打断：清空普攻计时器，让玩家多等一个冷却。
   const stun = rollPassive(passives, "stun");
   if (stun.triggered) {
     state.player.attackTimer = Math.max(state.player.attackTimer, stun.params?.duration || 0.5);
     textAt("打断", state.player.x, floatYAbovePlayer(36), "#f16d66", 12);
+    fx.skillFx.push({ key: PASSIVE_FX.stun, x: state.player.x, y: state.player.y - 20, life: 0.4, total: 0.4 });
   }
   // 资源压制：按比例抽走当前职业资源。
   const drain = rollPassive(passives, "resourceDrain");
@@ -2149,6 +2154,8 @@ export function update(dt) {
     fx.pierce.life -= dt;
     if (fx.pierce.life <= 0) fx.pierce = null;
   }
+  // 0.8.29 技能特效贴图衰减。
+  fx.skillFx = (fx.skillFx || []).filter((item) => (item.life -= dt) > 0);
   movePlayer(dt);
   // 杂货商面板只在城镇内有效：走出城镇范围立即收起（面板内容仍由 renderAll 刷新）。
   if (state.shopOpen && !nearTown()) state.shopOpen = false;

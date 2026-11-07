@@ -11,6 +11,7 @@ import {
 } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth } from "./maps.js";
 import { ATTACK_SHAPES } from "./monster-abilities.js";
+import { SKILL_FX, TACTICAL_PROP, LANDMARK_PROP } from "./assets.js";
 import { ELITE_AFFIXES } from "./elite.js";
 import { resolveMonsterSpriteName, resolveBossSprite, resolveBossUiPortrait, resolveMapBackgroundName } from "./assets.js";
 import {
@@ -304,7 +305,12 @@ function getGroundLayer(map) {
   const mapBg = loadSprite(`map-bg-${mapBgName}`, `assets/${mapBgName}`);
   const chapterBg = loadSprite(`chapter-bg-${map.chapter}`, `assets/chapter-${String(map.chapter).padStart(2, "0")}.jpg`);
   const bgKey = spriteReady(mapBg) ? mapBgName : spriteReady(chapterBg) ? `chapter-${map.chapter}` : "none";
-  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgKey === bgKey) {
+  // 0.8.29 地标贴图进缓存键：异步就绪后重建一次静态层，让贴图替换几何。
+  const propKey = ["prop-watchtower", "prop-signpost", "prop-banner", "prop-rockpile"]
+    .map((name) => (spriteReady(loadSprite(name, `assets/${name}.png`)) ? 1 : 0))
+    .join("");
+  const cacheKey = `${bgKey}|${propKey}`;
+  if (groundLayer?.mapId === map.id && groundLayer?.dpr === dpr && groundLayer?.bgKey === cacheKey) {
     return groundLayer.canvas;
   }
   const layer = document.createElement("canvas");
@@ -315,7 +321,7 @@ function getGroundLayer(map) {
   layerCtx.scale(scale, scale);
   const bg = bgKey === mapBgName ? mapBg : bgKey === "none" ? null : chapterBg;
   paintGroundLayer(layerCtx, map, bg);
-  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgKey };
+  groundLayer = { mapId: map.id, dpr: scale, canvas: layer, bgKey: cacheKey };
   return layer;
 }
 
@@ -347,6 +353,17 @@ export function drawWorld() {
   drawPierceBeam();
   drawSkillRangePreview();
   drawPlayer();
+  // 0.8.29 技能特效贴图：命中点渐隐闪光（缩放 0.6→1.15）。
+  for (const item of fx.skillFx || []) {
+    const sprite = loadSprite(`fx-skill-${item.key}`, `assets/fx-skill-${item.key}.png`);
+    if (!spriteReady(sprite)) continue;
+    const ratio = 1 - item.life / item.total;
+    const size = 34 + ratio * 30;
+    ctx.save();
+    ctx.globalAlpha = clamp(item.life / item.total, 0, 1) * 0.95;
+    ctx.drawImage(sprite, item.x - size / 2, item.y - size / 2, size, size);
+    ctx.restore();
+  }
   // 0.3.3：目标指引箭头 + 升级光环在世界坐标系内绘制，跟随相机但不受 HUD 布局影响。
   drawGuideArrow();
   drawLevelUpFx();
@@ -638,6 +655,21 @@ export function drawTacticalPoints(map) {
   (map.tacticalPoints || []).forEach((point) => {
     const claimed = (point.kind === "resource" && progress.resourceClaimed) || (point.kind === "site" && progress.siteClaimed);
     const accent = point.kind === "rest" ? "98, 213, 198" : point.kind === "site" ? "185, 155, 234" : "231, 179, 107";
+    // 0.8.29 地图物件贴图：篝火（rest）/ 宝箱（resource）替代纯几何，未就绪时走原几何。
+    const propKey = TACTICAL_PROP[point.kind];
+    let propDrawn = false;
+    if (propKey) {
+      const prop = loadSprite(propKey, `assets/${propKey}.png`);
+      if (spriteReady(prop)) {
+        // 0.8.29：贴图就绪即替代几何（篝火/宝箱居中，缩放呼吸感由外圈脉动承担）。
+        const size = point.kind === "rest" ? 64 : 58;
+        ctx.save();
+        ctx.globalAlpha = claimed ? 0.45 : 1;
+        ctx.drawImage(prop, point.x - size / 2, point.y - size / 2 - 6, size, size);
+        ctx.restore();
+        propDrawn = true;
+      }
+    }
     ctx.globalAlpha = claimed ? 0.34 : 1;
     ctx.fillStyle = `rgba(${accent}, ${point.kind === "rest" ? 0.12 : 0.16})`;
     ctx.strokeStyle = `rgba(${accent}, ${point.kind === "rest" ? 0.48 : pulse})`;
@@ -649,19 +681,22 @@ export function drawTacticalPoints(map) {
     ctx.stroke();
     ctx.setLineDash([]);
     if (point.kind === "rest") {
-      ctx.fillStyle = "rgba(98, 213, 198, .78)";
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y - 18);
-      ctx.lineTo(point.x - 13, point.y + 10);
-      ctx.lineTo(point.x + 13, point.y + 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = "rgba(231, 179, 107, .9)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y + 6);
-      ctx.lineTo(point.x, point.y - 9);
-      ctx.stroke();
+      // 0.8.29：贴图已画篝火时跳过青色三角与竖线（此前叠加遮挡火焰）。
+      if (!propDrawn) {
+        ctx.fillStyle = "rgba(98, 213, 198, .78)";
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - 18);
+        ctx.lineTo(point.x - 13, point.y + 10);
+        ctx.lineTo(point.x + 13, point.y + 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "rgba(231, 179, 107, .9)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y + 6);
+        ctx.lineTo(point.x, point.y - 9);
+        ctx.stroke();
+      }
     } else if (point.kind === "site") {
       ctx.fillStyle = claimed ? "rgba(150, 140, 170, .55)" : "rgba(185, 155, 234, .92)";
       ctx.beginPath();
@@ -679,14 +714,16 @@ export function drawTacticalPoints(map) {
       ctx.arc(point.x, point.y, 28, 0, Math.PI * 2);
       ctx.stroke();
     } else {
-      ctx.fillStyle = claimed ? "rgba(120, 140, 140, .55)" : "rgba(231, 179, 107, .9)";
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y - 13);
-      ctx.lineTo(point.x + 15, point.y);
-      ctx.lineTo(point.x, point.y + 13);
-      ctx.lineTo(point.x - 15, point.y);
-      ctx.closePath();
-      ctx.fill();
+      if (!propDrawn) {
+        ctx.fillStyle = claimed ? "rgba(120, 140, 140, .55)" : "rgba(231, 179, 107, .9)";
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - 13);
+        ctx.lineTo(point.x + 15, point.y);
+        ctx.lineTo(point.x, point.y + 13);
+        ctx.lineTo(point.x - 15, point.y);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.strokeStyle = "rgba(35, 45, 47, .8)";
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -708,6 +745,16 @@ export function drawLandmarks(target, map) {
   const ctx = target;
   ctx.save();
   map.landmarks.forEach((l) => {
+    // 0.8.29 地标贴图：瞭望塔/路牌/旗帜/岩石四类有对应 prop，未就绪回退几何。
+    const propKey = LANDMARK_PROP[l.type];
+    if (propKey) {
+      const prop = loadSprite(propKey, `assets/${propKey}.png`);
+      if (spriteReady(prop)) {
+        const size = l.r * 2.4;
+        ctx.drawImage(prop, l.x - size / 2, l.y - size * 0.78, size, size);
+        return;
+      }
+    }
     ctx.fillStyle = l.color;
     ctx.strokeStyle = "rgba(236, 202, 134, .35)";
     ctx.lineWidth = 3;
