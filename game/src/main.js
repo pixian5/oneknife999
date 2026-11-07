@@ -741,6 +741,8 @@ export function castSkill(index) {
       }
     ];
     state.player.charge = clamp(state.player.charge + 18, 0, 100);
+    // 0.8.30：治疗分支不走 resolveDamage，特效在此显式挂载（脚下法阵展开）。
+    fx.skillFx.push({ key: SKILL_FX[skill.name], x: state.player.x, y: state.player.y - 20, life: 0.4, total: 0.4 });
     log(
       `生息法阵展开：${SKILL_RULES.healZone.duration} 秒内站在阵中每秒恢复 ${Math.round(SKILL_RULES.healZone.perSecond * 100)}% 生命，离开即失效。`,
       "loot"
@@ -761,6 +763,8 @@ export function castSkill(index) {
     });
     state.entities.push(guard);
     state.player.charge = clamp(state.player.charge + 12, 0, 100);
+    // 0.8.30：召唤分支不走 resolveDamage，特效在骨卫出生点显式挂载。
+    fx.skillFx.push({ key: SKILL_FX[skill.name], x: guard.x, y: guard.y - 14, life: 0.4, total: 0.4 });
     log(
       `骨卫在场景中现身：${SKILL_RULES.summon.duration} 秒内跟随你并自动索敌，按你 ${Math.round(SKILL_RULES.summon.attackRatio * 100)}% 的普攻伤害出手。`,
       "loot"
