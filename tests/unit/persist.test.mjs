@@ -174,3 +174,51 @@ test("sanitizeSavedGame：未提供的字段不会被凭空补成 0", () => {
   assert.equal(cleaned.player.maxHp, undefined, "缺失的 maxHp 不应被写成 0/1");
   assert.equal(cleaned.player.potion, undefined, "缺失的 potion 不应被补值");
 });
+
+test("sanitizeSavedGame：旧档只存在 player.equipment 时装备不被清空", () => {
+  // v2/v3 的装备可能只写在 player.equipment；净化阶段必须回退读取，否则会生成 12 槽 null 覆盖。
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    saveVersion: 2,
+    player: { equipment: { weapon: { id: "w1", name: "旧档战刃", slot: "weapon", power: 12 } } }
+  });
+  assert.equal(cleaned.equipment.weapon?.name, "旧档战刃", "旧档嵌套装备必须保留");
+  assert.equal(cleaned.player.equipment.weapon?.name, "旧档战刃", "player.equipment 同步保留");
+  assert.equal(cleaned.equipment.helmet, null, "未提供槽位仍为 null");
+});
+
+test("sanitizeSavedGame：非法 slot 会被拒绝，防止拼进 img src 注入属性", () => {
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    inventory: [
+      { id: "ok", name: "合法装备", slot: "weapon" },
+      { id: "bad", name: "注入", slot: 'x" onerror="window.__xss=1" data-p="' }
+    ]
+  });
+  assert.equal(cleaned.inventory.length, 1, "非法 slot 的物品应被丢弃");
+  assert.equal(cleaned.inventory[0].slot, "weapon");
+});
+
+test("sanitizeSavedGame：物品数值超过上限时被钳制", () => {
+  const cleaned = sanitizeSavedGame({
+    classId: "warrior",
+    inventory: [
+      {
+        id: "x",
+        name: "超限装备",
+        slot: "weapon",
+        power: 1e308,
+        value: 1e308,
+        enhance: 999,
+        blessing: 999,
+        affixes: [{ key: "attack", label: "攻击", value: 1e308 }]
+      }
+    ]
+  });
+  const item = cleaned.inventory[0];
+  assert.ok(item.power <= 100000, `power 应被钳制，实际 ${item.power}`);
+  assert.ok(item.value <= 1000000, `value 应被钳制，实际 ${item.value}`);
+  assert.equal(item.enhance, 15, "强化等级钳制到上限 15");
+  assert.equal(item.blessing, 100, "祝福值钳制到 100");
+  assert.ok(item.affixes[0].value <= 999, "词缀数值钳制到 999");
+});

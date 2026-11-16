@@ -137,6 +137,13 @@ export function setupInput() {
     if (!action) return;
     // 0.8.7：按键触发的动作按动作键 250ms 节流记录——「按了没反应」时先看动作有没有派发。
     logThrottled(`key-${action}`, 250, "debug", "input", "action", { action, key });
+    // 0.8.31：职业选择页 / 重置后 state 为空，R/T/F 等游戏动作会直接访问空状态而抛 TypeError。
+    // 面板类动作（K 技能面板、M 静音、改键）不依赖 state，仍允许使用。
+    const panelOnly = action === "skillUpgrade" || action === "mute" || action === "keybind";
+    if (!state && !panelOnly) {
+      showToast("请先选择职业开始游戏");
+      return;
+    }
     if (action === "attack") normalAttack();
     if (action === "potion") usePotion();
     if (action === "pickup") collectDrops();
@@ -146,6 +153,12 @@ export function setupInput() {
       renderAll();
     }
     if (action === "travel") {
+      // 0.8.31：深层模式下 T 必须进入下一层。此前先判普通出口，而复用的主线地图几乎都有出口，
+      // 导致按 T 回到主线下一图、abyssFloor 不变但深层倍率仍在，流程与难度错位。
+      if ((state.abyssFloor || 0) > 0) {
+        enterAbyss();
+        return;
+      }
       const exit = primaryExit();
       if (exit) tryTravel(exit);
       else if (mapProgress().completed) {

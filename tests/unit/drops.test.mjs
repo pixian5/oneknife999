@@ -296,3 +296,10 @@ test("pickRedNameDrop：无穿戴或装备为空返回 null", () => {
   assert.equal(pickRedNameDrop(null, {}), null);
   assert.equal(pickRedNameDrop({ weapon: null, armor: null }, {}), null);
 });
+
+test("computeSiteEffect：scout 不会把友军骨卫当成目标", () => {
+  const guard = { id: "bone-guard-1", name: "骨卫", x: 6, y: 6, alive: true, friendly: true };
+  const mob = { id: "mob-9", name: "腐烬矿工", x: 400, y: 400, alive: true };
+  const scout = computeSiteEffect({ effect: "scout" }, siteContext(sitePlayer(), [guard, mob]));
+  assert.equal(scout.patch.targetId, "mob-9", "友军即使更近也不能被锁定");
+});

@@ -137,7 +137,8 @@ export function normalizeInventory(inventory) {
 // 返回 { result, patch, clearHazards, retarget }：
 //   result 为界面文案；patch 为玩家字段增量；clearHazards 表示需要清空地面危险区；retarget 表示需要取消点击寻路。
 export function computeSiteEffect(point, { player, hero, entities, maxHp }) {
-  const alive = entities.filter((entity) => entity.alive);
+  // 0.8.31：召唤物（骨卫）是 friendly，不能成为“追迹路标”的目标，也不能被击杀结算。
+  const alive = entities.filter((entity) => entity.alive && !entity.friendly && !entity.npc);
   const nearestAlive = () => [...alive].sort((a, b) => distance(player, a) - distance(player, b))[0] || null;
   const patch = {};
   let result = point.detail;
