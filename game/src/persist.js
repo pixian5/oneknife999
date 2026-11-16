@@ -132,17 +132,29 @@ export function clearStorage() {
 // 导入时统一：剥除 HTML 危险字符、截断长度、校验颜色格式、数值字段强制非负整数。
 const cleanText = (value, max = 64) => (typeof value === "string" ? value.replace(/[<>&"']/g, "").slice(0, max) : "");
 
+// 0.8.31：slot 会拼进 <img src="assets/equip-${slot}.png">，setKey 会拼进 title，
+// 旧净化没有校验这两个字段，恶意存档可借此注入属性。这里改为白名单 + 严格截断。
+const ITEM_SLOTS = new Set([...EQUIPMENT_SLOT_KEYS, "consumable", "currency", "material"]);
+// 物品数值上限：逐字段钳制，避免导入 1e308 战力/拆解价值破坏战斗与经济。
+const ITEM_LIMITS = { power: 100000, value: 1000000, amount: 9999999, enhance: 15, blessing: 100, count: 999999 };
+
 function sanitizeItem(item) {
   if (!item || typeof item !== "object") return null;
   const cleaned = { ...item };
+  if (item.slot !== undefined && !ITEM_SLOTS.has(String(item.slot))) return null;
   cleaned.id = cleanText(item.id, 80) || `imported-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   cleaned.name = cleanText(item.name, 40) || "未知物品";
   cleaned.desc = cleanText(item.desc, 200);
   cleaned.glyph = cleanText(item.glyph, 4);
   cleaned.source = cleanText(item.source, 40);
   cleaned.color = /^#[0-9a-fA-F]{6}$/.test(String(item.color)) ? item.color : "#78b6ec";
-  for (const key of ["power", "value", "amount", "enhance", "blessing", "count"])
-    if (item[key] !== undefined) cleaned[key] = Math.max(0, Math.round(Number(item[key]) || 0));
+  cleaned.slot = item.slot;
+  cleaned.setKey = cleanText(item.setKey, 12);
+  for (const key of ["power", "value", "amount", "enhance", "blessing", "count"]) {
+    if (item[key] === undefined) continue;
+    const numeric = Number(item[key]);
+    cleaned[key] = Number.isFinite(numeric) ? Math.max(0, Math.min(ITEM_LIMITS[key], Math.round(numeric))) : 0;
+  }
   if (Array.isArray(item.affixes))
     cleaned.affixes = item.affixes
       .slice(0, 4)
@@ -153,7 +165,7 @@ function sanitizeItem(item) {
               group: cleanText(affix.group, 12),
               key: cleanText(affix.key, 20),
               label: cleanText(affix.label, 12),
-              value: Math.max(0, Math.round(Number(affix.value) || 0))
+              value: Math.max(0, Math.min(999, Math.round(Number(affix.value) || 0)))
             }
           : null
       )
@@ -181,7 +193,10 @@ export function sanitizeSavedGame(saved) {
   const cleaned = { ...saved, player: { ...(saved.player || {}) } };
   if (Array.isArray(saved.inventory)) cleaned.inventory = saved.inventory.map(sanitizeItem).filter(Boolean);
   const equipment = {};
-  for (const slotKey of EQUIPMENT_SLOT_KEYS) equipment[slotKey] = sanitizeItem(saved.equipment?.[slotKey]);
+  // 0.8.31：v2/v3 旧档的装备可能只存在于 player.equipment，净化阶段必须回退读取，
+  // 否则会先生成 12 槽全 null 再覆盖，导入后装备永久丢失。
+  const sourceEquipment = saved.equipment ?? saved.player?.equipment ?? {};
+  for (const slotKey of EQUIPMENT_SLOT_KEYS) equipment[slotKey] = sanitizeItem(sourceEquipment[slotKey]);
   cleaned.equipment = equipment;
   if (cleaned.player.equipment) cleaned.player.equipment = equipment;
   // 终局字段净化：防止导入存档把深层层数写成 Infinity / 超大值导致怪物数值溢出。

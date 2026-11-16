@@ -1526,6 +1526,9 @@ export function renderPlayer() {
     state.player.gold,
     state.player.marks,
     state.player.potion,
+    // 0.8.31：技能点与技能等级进入签名，否则升级加点后按钮 Lv 与角标不刷新。
+    state.player.skillPoints || 0,
+    (state.player.skillLevels || []).join(","),
     state.quest.kills,
     state.quest.bossDefeated
   ].join("|");
@@ -1818,7 +1821,8 @@ export function renderSkills() {
   // 骨架只在换职业或改技能键位时重建；冷却角标与禁用态逐按钮更新，
   // 避免冷却期间每秒整段 innerHTML 重建导致键盘焦点丢失（可访问性回归）。
   const skillKeys = [0, 1, 2, 3].map((index) => keyLabel(`skill${index + 1}`)).join("");
-  const skeletonSignature = `${state.classId}|${skillKeys}`;
+  // 0.8.31：技能等级必须进入骨架签名，否则升级后按钮上的 Lv 不会重新渲染。
+  const skeletonSignature = `${state.classId}|${skillKeys}|${(state.player.skillLevels || []).join(",")}`;
   if (skillSkeletonSignature !== skeletonSignature) {
     skillSkeletonSignature = skeletonSignature;
     setHtml(

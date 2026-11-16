@@ -68,7 +68,7 @@ import {
   renderInventory,
   renderTravelConfirm
 } from "./render.js";
-import { persistGame, readSavedGame, clearStorage, sanitizeSavedGame, CURRENT_SAVE_VERSION } from "./persist.js";
+import { persistGame, readSavedGame, clearStorage, sanitizeSavedGame, migrateSave, CURRENT_SAVE_VERSION } from "./persist.js";
 import {
   computeDamage,
   computeKillReward,
@@ -464,7 +464,8 @@ export function chooseClass(classId) {
 export function findTarget() {
   if (state.player.targetId) {
     const current = state.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
-    if (current && distance(state.player, current) < 330) return current;
+    // 0.8.31：友军 / NPC 不可锁定；旧档里残留的 friendly targetId 必须丢弃。
+    if (current && !current.friendly && !current.npc && distance(state.player, current) < 330) return current;
   }
   // 自动索敌不锁定流浪武者：PK 必须显式点击目标（docs/05 主动攻击规则）。
   return (
@@ -629,7 +630,13 @@ export function resolveDamage(target, multiplier, skillName, kind, fxKey = null)
 
 export function nearestTargets(range, limit = 1) {
   return state.entities
-    .filter((entity) => entity.alive && !entity.friendly && distance(state.player, entity) <= range)
+    .filter(
+      (entity) =>
+        entity.alive &&
+        !entity.friendly &&
+        (!entity.npc || state.player.level >= PK_RULES.minLevelToAttack) &&
+        distance(state.player, entity) <= range
+    )
     .sort((a, b) => distance(state.player, a) - distance(state.player, b))
     .slice(0, limit);
 }
@@ -724,13 +731,14 @@ export function castSkill(index) {
     return;
   }
   const target = findTarget();
-  // 0.8.13 回响词缀的触发源：记录最近一次施法的游戏内时刻（秒计，由 tick 累加）。
-  state.player.lastSkillAge = 0;
   // 生息法阵（0.3.4）：在脚下展开 4 秒持续回复区，每秒回 8% 最大生命，离开立即失效。
   if (skill.kind === "治疗") {
     logInfo("skill", "cast", { skill: skill.name, kind: skill.kind, hp: Math.round(state.player.hp), maxHp: playerMaxHp() });
     state.player.resource -= skill.cost;
     state.player.cooldowns[index] = skill.cd;
+    // 0.8.31：只有真正扣费并进入冷却的施法才算「最近一次施法」；此前写在目标校验之前，
+    // 空放一次就会让精英「回响」的下一次命中增伤 40%。
+    state.player.lastSkillAge = 0;
     state.healZones = [
       {
         x: state.player.x,
@@ -754,6 +762,9 @@ export function castSkill(index) {
   if (skill.kind === "召唤") {
     state.player.resource -= skill.cost;
     state.player.cooldowns[index] = skill.cd;
+    // 0.8.31：只有真正扣费并进入冷却的施法才算「最近一次施法」；此前写在目标校验之前，
+    // 空放一次就会让精英「回响」的下一次命中增伤 40%。
+    state.player.lastSkillAge = 0;
     state.player.castTimer = 0.35;
     const guard = createBoneGuard({
       player: state.player,
@@ -799,6 +810,9 @@ export function castSkill(index) {
   });
   state.player.resource -= skill.cost;
   state.player.cooldowns[index] = skill.cd;
+  // 0.8.31：只有真正扣费并进入冷却的施法才算「最近一次施法」；此前写在目标校验之前，
+  // 空放一次就会让精英「回响」的下一次命中增伤 40%。
+  state.player.lastSkillAge = 0;
   // 0.6.0 P1：施法动作帧窗口（cast 动作在 render 里按 castTimer > 0 选取）。
   state.player.castTimer = 0.35;
   // 技能升级（docs/02 原型简化）：每级 +6% 技能倍率。
@@ -994,6 +1008,8 @@ function handleEliteDeath(target) {
 }
 
 export function defeat(target) {
+  // 0.8.31：友军（骨卫）与 NPC 不参与击杀结算，避免误伤友军仍加击杀/经验/掉落。
+  if (!target || target.friendly) return;
   // 0.6.0 P0 亡语：残星复起（死亡后短暂复原一次，一次副本内只触发一次）。
   const onDeath = resolveOnDeath(target.abilities?.onDeath, { entity: target });
   if (onDeath.revive && !target.revivedOnce) {
@@ -1038,7 +1054,9 @@ export function defeat(target) {
   // 0.6.0 P2 难度模式：烬火 / 灰烬难度下击杀经验加成。
   const difficulty = resolveDifficulty(state.difficulty, MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length);
   const abyssExp = state.abyssFloor > 0 ? abyssMultipliers(state.abyssFloor).exp : 1;
-  gainExperience(Math.round(reward.expGain * (1 + difficulty.expBonus) * abyssExp));
+  // 0.8.31：精英 expMult 此前从未进入结算，导致 ELITE_TUNING.expMult 成为死配置。
+  const eliteExp = target.elite ? ELITE_TUNING.expMult : 1;
+  gainExperience(Math.round(reward.expGain * eliteExp * (1 + difficulty.expBonus) * abyssExp));
   state.player.gold += target.gold;
   state.player.totalKills += 1;
   state.player.kills += 1;
@@ -1137,7 +1155,11 @@ export function spawnDrop(source, roll = 0) {
     const abyssBonus = state.abyssFloor > 0 ? abyssQualityBonus(state.abyssFloor) : 0;
     item.quality = upgradeQuality(item.quality, difficulty.qualityBonus + abyssBonus);
   }
+  // 0.8.31：普通怪与首领可无限刷新，装备又必须手动拾取；不设上限时同图长刷会让 drops 无界增长，
+  // 每帧绘制与渐变创建成本线性上升。这里只保留最近 200 件（旧掉落优先淘汰）。
+  const MAX_GROUND_DROPS = 200;
   state.drops.push(item);
+  if (state.drops.length > MAX_GROUND_DROPS) state.drops.splice(0, state.drops.length - MAX_GROUND_DROPS);
   // 0.8.7：掉落生成只记 debug，避免每只怪都刷 info；带来源、品质、槽位与战力。
   logDebug("drop", "spawn", {
     from: source.name,
@@ -1588,7 +1610,11 @@ export function playerDamage(dt) {
   if (readyToWindup.length && MAX_WINDUP_ATTACKERS > windingUp) {
     const closest = readyToWindup.sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
     const rules = closest.boss ? MONSTER_ATTACK_RULES.boss : MONSTER_ATTACK_RULES.normal;
-    const shape = attackShapeConfig(closest.abilities?.attack || "normal");
+    // 0.8.31：前摇必须与伤害阶段使用同一套形态参数，否则「修罗怒」的攻速层数完全不生效。
+    const shape = attackShapeConfig(closest.abilities?.attack || "normal", {
+      hpRatio: closest.hp / Math.max(1, closest.maxHp),
+      rageStacks: closest.rageStacks || 0
+    });
     const windup = rules.windup * (shape.windupMult || 1);
     closest.windup = windup;
     closest.windupTotal = windup;
@@ -2726,9 +2752,10 @@ export function importSave(file) {
     try {
       const parsed = JSON.parse(String(reader.result));
       if (!parsed || !CLASSES[parsed.classId]) throw new Error("invalid save");
-      // 0.4.4：导入是唯一外部存档入口，先净化再落盘——物品的字符串字段会拼进渲染层
-      // innerHTML / title / style，剥除危险字符并校验数值后才允许写入 localStorage。
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeSavedGame(parsed)));
+      // 0.8.31：先迁移再净化。旧档装备可能只在 player.equipment，若先净化会被清空成 12 槽 null。
+      const migrated = migrateSave(parsed);
+      if (!migrated) throw new Error("unsupported save");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeSavedGame(migrated.saved)));
       logInfo("save", "import", {
         bytes: String(reader.result).length,
         classId: parsed.classId,
