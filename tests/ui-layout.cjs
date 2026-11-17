@@ -117,6 +117,13 @@ async function audit(browser, viewport) {
       document.querySelector(".side-panel").scrollTop = 0;
     });
   }
+  // 3.1 手机横滑卡片：玩家卡必须完整可见（0.8.32 之前固定 96/106px，内容 225px 被裁 60%）。
+  // 矮屏（≤620px 高）保留 96px 精简高度作为兜底，不在此断言内。
+  if (viewport.width <= 760 && viewport.height > 620) {
+    const playerCard = data.sections.find((section) => section.name === "player-card");
+    assert.ok(playerCard, `${tag} 未找到玩家卡`);
+    assert.ok(playerCard.overflow <= 2, `${tag} 玩家卡仍被裁切 ${playerCard.overflow}px（可视 ${playerCard.height}px）`);
+  }
   assert.equal(data.slotCount, 12, `${tag} 装备格数量异常：${data.slotCount}`);
   // 手机横滑卡片只有 198px 宽，6 列均分后单格约 26px；桌面必须留出可点面积。
   const minSlot = viewport.width > 760 ? 28 : 22;
