@@ -44,6 +44,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 
 ## 【当前开发进度】
 
+0.8.32 之后（本机 GLM 轮）：instabox 线上已从 0.8.28 更新至 0.8.32（公网指纹与本地一致、进图冒烟零报错）；新增 [无尽深层程序化地形设计稿](docs/20261117-1010-无尽深层程序化地形设计-GLM.md)——运行时注册不改静态表、独立种子空间、Boss 层锁层、存档零新增字段、12 条回归清单，并指出并修复方向：现状复用百图图时深层踩东侧出口会被 isForwardExit 的 indexOf=-1 雷区误判为前进出口、传送回百图。
+
 0.8.32 **手机横滑卡片精简版（0.8.14 遗留收口）**：移动端 `.side-panel > section` 从固定 96/106px 提到 172px（矮屏 ≤620px 高保留 96px），玩家卡压缩头像与行距、隐藏「击杀·死亡·通关」与「普攻期望」两行，保留生命/攻击/防御、升级进度、金币/印记与难度·图鉴；实测 390×844 下玩家卡 scrollHeight=170 与 clientHeight 一致，不再依赖横滑后仍被裁切。`ui-layout` 新增「手机视口玩家卡不裁切」断言，九视口全 PASS。详见 [docs/20261117-0200-手机横滑卡片精简-DeepSeek-V4.1-Flash.md](docs/20261117-0200-手机横滑卡片精简-DeepSeek-V4.1-Flash.md)。
 
 0.8.31 **代码审查修复：12 项缺陷（P1×4 / P2×8）**：① 导入 v2/v3 旧档时装备只在 `player.equipment` 会被净化阶段清空 → 回退读取 + 先迁移再净化；② 导入物品 `slot/setKey` 未校验，可拼进 `<img src>`/title 形成存储型注入 → 白名单 + 截断，`power/value/enhance` 等逐字段钳制；③ 深层按 T 先判普通出口导致回主线 → `abyssFloor` 优先；④ 骨卫可被锁定并计入击杀 → 目标恢复、场景节点过滤 friendly，`defeat` 加防护；⑤ 范围技能绕过 20 级 PK 保护；⑥ 施法失败也刷新 `lastSkillAge` 触发精英回响增伤；⑦ 修罗怒攻速层数未参与前摇；⑧ 精英 `expMult` 未进入经验结算；⑨ 地面掉落无上限；⑩ 技能升级后按钮 Lv 与技能点角标不刷新；⑪ 未选职业时 R/T/F 空指针。验证：208 单测全绿（新增 4 条），`test:ui`/`regression`/`timeline`/`summon`/`levelup`/`nameplate` 全 PASS，新增 `test:ui:fixes0831` 与 `test:ui:abyss`（深层 T 进入下一层，`ash_outskirts → stage_075`）。详见 [docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md](docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md)。
