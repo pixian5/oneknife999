@@ -60,8 +60,19 @@ test("回归5 数值同源：深层怪基础数值 = 主题章基准关同名怪
     const base = generatedMap(chapterIndex * 10 + 5);
     const baseByName = new Map(base.monsterTypes.map((t) => [t.name, t]));
     for (const type of abyss.monsterTypes) {
+      if (type.deepTuned) {
+        // 0.8.34 深渊化怪：基准关同档位 hp × 1.6（名字带「深渊」前缀，素材同名复用）。
+        const baseName = type.name
+          .replace(/^深渊/, "")
+          .replace(new RegExp(`^${["边境", "苍月", "龙脉", "冰封", "烬火", "幽冥", "天穹", "星陨", "神魔", "帝陵"][chapterIndex]}`), "");
+        const ref = baseByName.get(baseName.startsWith("边境") ? baseName : baseName);
+        const idx = Math.max(0, [...baseByName.keys()].indexOf(ref?.name ?? ""));
+        const tierHp = Math.round((480 + idx * 17.5) * (1 + (chapterIndex * 10 + 5 - 4) * 0.0097));
+        assert.equal(type.hp, Math.round(tierHp * 1.6), `深渊怪 ${type.name} 应为基准档 ×1.6`);
+        continue;
+      }
       const ref = baseByName.get(type.name);
-      assert.ok(ref, `深层怪 ${type.name} 应来自主题章基准关`);
+      assert.ok(ref, `深层章怪 ${type.name} 应来自主题章基准关`);
       assert.equal(type.hp, ref.hp, `${type.name} 基础 hp 与基准关一致`);
       assert.equal(type.attack, ref.attack);
     }

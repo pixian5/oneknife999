@@ -102,3 +102,18 @@ export function applyExperience({ level = 1, exp = 0, nextExp = 100, expGain = 0
   if (nextLevel >= cap) currentExp = Math.min(currentExp, need);
   return { level: nextLevel, exp: currentExp, nextExp: need, levelsGained };
 }
+
+// ============ 0.8.35 施法生命周期（docs/02「技能释放生命周期」的原型落地） ============
+// 起手（windup）→ 生效 → 后摇（recovery）；起手中被控制打断 → 取消并按比例返还资源。
+// 前摇时长按冷却档位分档（越大的技能起手越长）；打断返还统一 50%（设计的 0~50% 配置区间取中值）。
+export function castTiming(skill) {
+  const cd = Number(skill?.cd) || 0;
+  if (cd <= 3) return { windup: 0.25, recovery: 0.3 };
+  if (cd <= 12) return { windup: 0.35, recovery: 0.35 };
+  return { windup: 0.5, recovery: 0.4 };
+}
+
+// 打断返还比例（docs/02：interrupt_level 以上控制命中取消释放，返还 0~50% 由配置给出）。
+export function castCancelRefund() {
+  return 0.5;
+}

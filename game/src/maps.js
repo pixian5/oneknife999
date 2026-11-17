@@ -28,6 +28,9 @@ export function hexToRgba(hex, alpha) {
 // 这里只登记「实测出峰值」的关卡，避免继续全局削形态系数把 100 张图一起变简单。
 // attackMult 同时作用于该关普通怪与首领的输出（生命不变，只降承伤速率）。
 // hazardMult 只作用于该关首领技能生成的地面危险区伤害（不动普通怪与首领本体输出）。
+// aggroMult（0.8.34）作用于该关普通怪的初始仇恨半径（基准 190px）——
+// 0.8.22 归因烬火章 41-50「入场小怪包 1 秒集火」后选定的方案②：压仇恨范围
+// 让玩家有进图反应空间，不动数值不改布局确定性（删刷怪点会破坏 encounterBands 一致性）。
 export const MAP_DIFFICULTY_OVERRIDES = {
   30: { attackMult: 0.88, reason: "战士 n=8 死亡中位 7、承伤 5741/百秒；相邻关 60/75/90 为 0–2 死" },
   // 0.8.3：第 75 关是「脱手伤害」型峰值——两职业致死来源都指向地面危险区
@@ -41,10 +44,16 @@ export const MAP_DIFFICULTY_OVERRIDES = {
   // 与第 30 关当年同型同杠杆（中位 7 死 / 5224 每百秒 → attackMult 0.88）。
   41: {
     attackMult: 0.88,
+    aggroMult: 0.63,
     reason:
       "烬火章入口峰。0.8.22 复测：该修正不改变死亡中位（4→4），仅降承伤约 8%（5113→4713/百秒）——死因是入场小怪包 1 秒集火（三职业同型、区伤 0%），attackMult 杠杆不足以解。保留作小幅减伤，真正修复待设计决策（入场保护/怪物密度/成长曲线）。"
   }
 };
+
+// 0.8.34 烬火章 42-50：与 41 同款仇恨半径下调（方案②，0.8.22 归因的入场爆发带覆盖全章）。
+for (let stage = 42; stage <= 50; stage += 1) {
+  MAP_DIFFICULTY_OVERRIDES[stage] = { aggroMult: 0.63, reason: "烬火章入场爆发带（0.8.22 归因）：仇恨半径 190→120，保留数值与布局" };
+}
 
 export function mapDifficultyOverride(stageNumber) {
   return MAP_DIFFICULTY_OVERRIDES[stageNumber] || null;
@@ -99,36 +108,67 @@ export function buildAbyssMap(floor) {
     [order[i], order[j]] = [order[j], order[i]];
   }
   const pick = Math.min(order.length, 5 + ((f - 1) % 3));
+  // 0.8.34 P2 深层专属怪：每 3 层（f%3===0）掺入 2 只，从专属池按层种子轮转确定选取。
+  // 0.8.34 P2 深渊化怪：每 3 层从该章**未出场**的怪里确定性取 2 只强化（hp×1.6/攻×1.15/金币×2），
+  // 名字加「深渊」前缀、复用同名动作帧素材——素材库 12 物种经实证已全部分配进十章（0.6.0），
+  // 不存在"真正专属"物种，故走强化变体而非新物种。
+  const leftovers = chapter.monsters.filter((name) => !order.slice(0, pick).includes(name));
+  const abyssOnly = [];
+  if (f % 3 === 0) {
+    for (let i = 0; i < 2 && i < leftovers.length; i += 1) {
+      abyssOnly.push({ name: leftovers[(Math.floor(f / 3) + i) % leftovers.length], deep: true });
+    }
+  }
   // 数值公式与 generatedMap 完全同源（typeIndex 用洗牌后位置，实现档位重排）。
   const anchored = (base, slope) => Math.round(base + (baseStage - 4) * slope);
   // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
-  const monsterTypes = order.slice(0, pick).map((name) => {
-    const typeIndex = originalIndex(name);
-    const rawName = name.startsWith(chapter.short) ? name : `${chapter.short}${name}`;
-    const attack = anchored(70 + typeIndex * 2.785, 0.32);
-    return {
-      name: rawName,
-      color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
-      hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)),
-      attack,
-      defense: anchored(16 + typeIndex * 0.4875, 0.35),
-      exp: 0,
-      gold: anchored(36 + typeIndex * 1.125, 1.4),
-      radius: 16 + Math.floor(typeIndex * 0.44),
-      intro: `深层第 ${f} 层的${name}，被余烬重熔后比表层同类更凶。`,
-      skills: [`${name}回响：基础伤害 ${attack}`, `${name}深层形态：受伤后更加狂暴`]
-    };
-  });
+  const monsterTypes = order
+    .slice(0, pick)
+    .concat(abyssOnly.map((entry) => entry.name))
+    .map((name) => {
+      const deep = abyssOnly.some((entry) => entry.deep && entry.name === name);
+      const typeIndex = originalIndex(name);
+      const rawName = deep
+        ? `深渊${name.startsWith(chapter.short) ? name : chapter.short + name}`
+        : name.startsWith(chapter.short)
+          ? name
+          : `${chapter.short}${name}`;
+      const attack = anchored(70 + typeIndex * 2.785, 0.32);
+      return {
+        name: rawName,
+        color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
+        hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)),
+        attack,
+        defense: anchored(16 + typeIndex * 0.4875, 0.35),
+        exp: 0,
+        gold: anchored(36 + typeIndex * 1.125, 1.4),
+        radius: 16 + Math.floor(typeIndex * 0.44),
+        intro: `深层第 ${f} 层的${name}，被余烬重熔后比表层同类更凶。`,
+        skills: [`${name}回响：基础伤害 ${attack}`, `${name}深层形态：受伤后更加狂暴`],
+        // 0.8.34 深渊化：hp×1.6 / 攻×1.15 / 金币×2（调参对齐精英），成长倍率仍在实体层叠加。
+        ...(deep
+          ? {
+              deepTuned: true,
+              hp: Math.round(Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)) * 1.6),
+              attack: Math.round(attack * 1.15),
+              gold: anchored(36 + typeIndex * 1.125, 1.4) * 2
+            }
+          : {})
+      };
+    });
   // Boss：主题章首领做「回响」，首领层（每 10 层）×1.35、守门层 ×0.55；
   // 深层成长倍率仍在 createEntities 层叠加。
   const bossScale = f % 10 === 0 ? 1.35 : 0.55;
   const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
   const id = abyssMapId(f);
+  // 0.8.34 P2 裂隙层：每 5 层一次（f%5===0 且非首领层），精英概率与词缀数提升（createEntities 读取）。
+  const riftFloor = f % 5 === 0 && f % 10 !== 0;
   return {
     id,
     abyssFloor: f,
+    riftFloor,
     stageNumber: 100 + f,
     chapter: chapterIndex + 1,
     chapterName: chapter.name,
@@ -1386,7 +1426,7 @@ export function generatedMap(stageNumber) {
     monsterTypes,
     monsterSpawns: layout.monsterSpawns,
     // 0.7.7：局部难度修正记录在关卡对象上，单测据此确认「只作用于登记过的关卡」。
-    difficulty: { attackMult, hazardMult, reason: difficulty?.reason || null },
+    difficulty: { attackMult, hazardMult, aggroMult: difficulty?.aggroMult || 1, reason: difficulty?.reason || null },
     boss: {
       id: `boss-${id}`,
       name: bossName,

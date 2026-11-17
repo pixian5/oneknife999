@@ -185,3 +185,20 @@ test("computeIncomingDamage：attackerLevel 缺省为 1、伤害下限为 1、�
   assert.equal(computeIncomingDamage({ attack: 1, defense: 9999 }), 1, "伤害下限为 1");
   assert.equal(computeIncomingDamage({ attack: 30, defense: 10, attackerLevel: -5 }), Math.max(1, Math.round(30 * (1 - 10 / 110))));
 });
+
+// ============ 0.8.35 施法生命周期 ============
+import { castTiming } from "../../game/src/combat.js";
+
+test("castTiming：按冷却档位分档（起手/后摇随技能规模增长）", () => {
+  const fast = castTiming({ cd: 2 }); // 雷矛/破甲/镇魂符
+  const mid = castTiming({ cd: 6 }); // 旋风扫/焰痕/蚀骨咒
+  const slow = castTiming({ cd: 18 }); // 天火陨星
+  assert.deepEqual(fast, { windup: 0.25, recovery: 0.3 });
+  assert.deepEqual(mid, { windup: 0.35, recovery: 0.35 });
+  assert.deepEqual(slow, { windup: 0.5, recovery: 0.4 });
+  // 单调性：冷却越大起手越长
+  assert.ok(fast.windup <= mid.windup && mid.windup <= slow.windup, "起手时长随冷却单调不减");
+  // 异常输入回退到最小档，不抛错
+  assert.deepEqual(castTiming({}), { windup: 0.25, recovery: 0.3 });
+  assert.deepEqual(castTiming(null), { windup: 0.25, recovery: 0.3 });
+});

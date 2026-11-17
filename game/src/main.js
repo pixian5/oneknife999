@@ -4,6 +4,7 @@ import {
   TEST_MODE,
   FAST_FORWARD,
   ABILITIES_ENABLED,
+  CAST_TIMING_ENABLED,
   ATTACK_SHAPES_ENABLED,
   PASSIVES_ENABLED,
   DEATH_EFFECTS_ENABLED,
@@ -80,6 +81,7 @@ import {
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, sanitizeSavedGame, migrateSave, CURRENT_SAVE_VERSION } from "./persist.js";
 import {
+  castTiming,
   computeDamage,
   computeKillReward,
   computeIncomingDamage,
@@ -229,6 +231,9 @@ export function createEntities(map) {
       index,
       monsterCount: map.monsterSpawns.length,
       order,
+      // 0.8.34 深层裂隙层（每 5 层）：精英概率 0.12→0.3 且词缀翻倍（riftFloor 由 buildAbyssMap 标记）。
+      forceChance: map.riftFloor ? 0.3 : undefined,
+      affixCount: map.riftFloor ? 2 : undefined,
       random: seededRandom(`${map.id}:${index}`)
     })
   );
@@ -705,8 +710,71 @@ export function normalAttack() {
   resolveDamage(target, 1, "普攻", "普通");
 }
 
+// 0.8.35 施法生命周期（docs/02「技能释放生命周期」）：真实玩家起手 → 生效 → 后摇；
+// e2e 默认 fastcast（跳过前摇，探针与全部既有回归节奏不变），&realcast=1 测真实链路。
+// 起手期是零损承诺：资源未扣、冷却未启；被打断（stun）/目标死亡/失距时取消无损失。
 export function castSkill(index) {
   if (!state) return;
+  const hero = activeHero();
+  const skill = hero.skills[index];
+  if (!skill || state.player.cooldowns[index] > 0 || (state.player.skillLock || 0) > 0) return;
+  if ((state.player.castWindup || 0) > 0 || (state.player.recovery || 0) > 0) {
+    // 前摇/后摇中不能再起手（docs/02：recovery 期间不能施法）。
+    logThrottled("cast-busy", 400, "debug", "skill", "castBlocked", { reason: "casting" });
+    return;
+  }
+  if (state.player.resource < skill.cost) return; // 交给结算路径出提示，这里只挡重复起手
+  if (CAST_TIMING_ENABLED) {
+    const timing = castTiming(skill);
+    const needTarget = skill.kind !== "治疗";
+    const target = needTarget ? findTarget() : null;
+    if (needTarget && !target) {
+      showToast("先锁定一个目标");
+      return;
+    }
+    state.player.castWindup = timing.windup;
+    state.player.castTimer = timing.windup; // 施法动作帧与真实前摇对齐
+    state.player.pendingSkill = index;
+    logInfo("skill", "castStart", { skill: skill.name, windup: timing.windup });
+    return;
+  }
+  resolveSkillCast(index);
+}
+
+// 前摇结束的生效入口：目标复查（死亡/失距 → 取消），通过则进入原结算。
+function finishCastWindup() {
+  const index = state.player.pendingSkill;
+  state.player.pendingSkill = null;
+  const skill = activeHero().skills[index];
+  if (!skill) return;
+  if (skill.kind !== "治疗") {
+    const target = findTarget();
+    if (!target || !target.alive || distance(state.player, target) > skill.range * 1.25) {
+      textAt("施法落空", state.player.x, floatYAbovePlayer(26), "#8d9ca0", 12);
+      logInfo("skill", "castCancelled", { skill: skill.name, reason: "lostTarget" });
+      return;
+    }
+  }
+  const timing = castTiming(skill);
+  state.player.recovery = timing.recovery;
+  resolveSkillCast(index);
+}
+
+// 打断取消（怪物 stun 命中玩家时由 applyOnHitPassives 调用）：零损取消 + 复述原因。
+export function interruptCast(reason) {
+  if ((state.player.castWindup || 0) <= 0 || state.player.pendingSkill === null || state.player.pendingSkill === undefined) return false;
+  const skill = activeHero().skills[state.player.pendingSkill];
+  state.player.castWindup = 0;
+  state.player.castTimer = 0;
+  state.player.pendingSkill = null;
+  textAt("施法被打断", state.player.x, floatYAbovePlayer(26), "#f16d66", 12);
+  logInfo("skill", "castCancelled", { skill: skill?.name, reason });
+  return true;
+}
+
+// 0.8.35 生效结算：原 castSkill 逐字节保留（fastcast 路径 = 旧行为；真实路径前摇结束后进入）。
+// 扣费与冷却都在各分支内完成——前摇期是「零损承诺」，打断/失距取消时无损失（docs/02 返还区间 0~50% 取 0 端）。
+function resolveSkillCast(index) {
   const hero = activeHero();
   const skill = hero.skills[index];
   if (!skill) {
@@ -1432,6 +1500,8 @@ export function applyOnHitPassives(attacker, damage) {
   const stun = rollPassive(passives, "stun");
   if (stun.triggered) {
     state.player.attackTimer = Math.max(state.player.attackTimer, stun.params?.duration || 0.5);
+    // 0.8.35 施法打断：起手期被控制命中 → 取消释放（docs/02 interrupt_level 规则）。
+    interruptCast("interrupted");
     textAt("打断", state.player.x, floatYAbovePlayer(36), "#f16d66", 12);
     fx.skillFx.push({ key: PASSIVE_FX.stun, x: state.player.x, y: state.player.y - 20, life: 0.4, total: 0.4 });
   }
@@ -2177,6 +2247,12 @@ export function update(dt) {
   state.player.victoryTimer = Math.max(0, (state.player.victoryTimer || 0) - dt);
   // 0.6.0 P0：怪物行为施加的负面状态倒计时（减速 / 药水封锁 / 技能封锁）。
   state.player.castTimer = Math.max(0, (state.player.castTimer || 0) - dt);
+  // 0.8.35 施法前摇/后摇：前摇归零时生效（目标复查），后摇只锁起手不锁普攻与移动。
+  if ((state.player.castWindup || 0) > 0) {
+    state.player.castWindup = Math.max(0, state.player.castWindup - dt);
+    if (state.player.castWindup <= 0) finishCastWindup();
+  }
+  state.player.recovery = Math.max(0, (state.player.recovery || 0) - dt);
   state.player.hitFlash = Math.max(0, (state.player.hitFlash || 0) - dt);
   state.player.slowTimer = Math.max(0, (state.player.slowTimer || 0) - dt);
   state.player.potionLock = Math.max(0, (state.player.potionLock || 0) - dt);
@@ -2936,7 +3012,8 @@ if (TEST_MODE) {
                 skillPoints: state.player.skillPoints || 0,
                 skillLevels: [...(state.player.skillLevels || [0, 0, 0, 0])],
                 targetId: state.player.targetId,
-                previewSkill: state.player.previewSkill
+                previewSkill: state.player.previewSkill,
+                castWindup: Math.round((state.player.castWindup || 0) * 100) / 100
               },
               inventoryCount: (state.inventory || []).length,
               // 0.7.7：地面掉落的位置与槽位（只给测试用）。0.4.4 起装备必须站到 85px 内按 F 才能拾取，
