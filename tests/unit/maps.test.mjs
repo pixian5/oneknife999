@@ -251,7 +251,9 @@ test("关卡局部难度修正：只作用于登记过的关卡，且不误伤�
   assert.ok(maxAttack(MAPS.stage_041) < maxAttack(MAPS.stage_042), "第 41 关最强普通怪应低于第 42 关");
   assert.ok(MAPS.stage_041.boss.attack < MAPS.stage_042.boss.attack, "第 41 关首领攻击应低于第 42 关");
   assert.equal(mapDifficultyOverride(40), null, "相邻关不应被修正");
-  assert.equal(mapDifficultyOverride(42), null, "相邻关不应被修正");
+  // 0.8.34：42-50 起整段烬火章登记 aggroMult（方案②入场压力修复），42 不再是"未登记相邻关"。
+  assert.ok(mapDifficultyOverride(42)?.aggroMult < 1, "第 42 关起应有仇恨半径修正");
+  assert.equal(mapDifficultyOverride(51), null, "烬火章之后的相邻关不应被修正");
   assert.equal(mapDifficultyOverride(29), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(31), null, "相邻关不应被修正");
   assert.equal(mapDifficultyOverride(74), null, "相邻关不应被修正");

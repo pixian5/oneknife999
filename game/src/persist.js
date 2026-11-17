@@ -64,7 +64,8 @@ export function persistGame() {
       player: state.player,
       inventory: state.inventory || [],
       equipment: state.player.equipment,
-      mapProgress: state.mapProgress,
+      // 0.8.34 P2：存档剥离深层地图进度键（运行时锁层判定用内存态即可，落盘会随层数无限增长）。
+      mapProgress: Object.fromEntries(Object.entries(state.mapProgress || {}).filter(([id]) => !id.startsWith("abyss-"))),
       // 0.6.0 P2：终局系统状态（难度档、怪物图鉴、深层最高层）。
       difficulty: state.difficulty || "normal",
       bestiary: state.bestiary || {},
