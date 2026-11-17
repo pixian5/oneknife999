@@ -1603,9 +1603,32 @@ body {
   .side-panel > section {
     flex: 0 0 230px;
     width: 230px;
-    height: 106px;
+    height: 150px;
     overflow: hidden;
     scroll-snap-align: start;
+  }
+  /* 0.8.32：手机横滑卡片此前固定 106px，玩家卡内容 225px 被裁掉 60%（升级进度条永远看不全）。
+     精简为准：压缩头像与行距，隐藏「击杀/死亡/通关」与「普攻期望」两行，保留生命/攻击/防御、
+     升级进度、金币/印记与难度/图鉴行。 */
+  .player-card {
+    padding: 8px 10px;
+  }
+  .player-card .player-heading {
+    min-height: 44px;
+  }
+  .player-card .avatar {
+    width: 36px;
+    height: 36px;
+  }
+  .player-card #statsLine,
+  .player-card #damageEstimate {
+    display: none;
+  }
+  .player-card .meter-label {
+    font-size: 10px;
+  }
+  .side-panel > section {
+    row-gap: 3px;
   }
   .side-panel .inventory-grid {
     gap: 3px;
@@ -2792,4 +2815,38 @@ body {
   float: right;
   color: var(--muted);
   font-weight: 400;
+}
+
+/* 0.8.32：移动端横滑卡片精简版（追加在文件末尾以覆盖前面的 96/80px 高度规则）。
+   目标：玩家卡在 390/360 宽下能完整看到「生命/攻击/防御 + 升级进度 + 金币/印记 + 难度·图鉴」，
+   不再依赖横滑后仍被裁切。矮屏（≤620px 高）保持 96px 以给画布留空间。 */
+@media (max-width: 760px) {
+  .side-panel > section {
+    height: 172px;
+  }
+  .player-card {
+    padding: 8px 10px;
+  }
+  .player-card .player-heading {
+    min-height: 44px;
+  }
+  .player-card .avatar {
+    width: 36px;
+    height: 36px;
+  }
+  .player-card #statsLine,
+  .player-card #damageEstimate {
+    display: none;
+  }
+  .player-card .stat-row {
+    margin-top: 3px;
+  }
+  .player-card .meter-group {
+    margin-top: 3px;
+  }
+}
+@media (max-height: 620px) and (max-width: 760px) {
+  .side-panel > section {
+    height: 96px;
+  }
 }
