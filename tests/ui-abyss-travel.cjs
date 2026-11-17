@@ -95,7 +95,8 @@ const emptySlots = () => ({
     const s = window.__ONEKNIFE_E2E__.snapshot();
     return { floor: save.abyssFloor ?? s.abyssFloor, map: s.currentMapId, best: save.abyssBest };
   });
-  assert.equal(after.map, catalog[(2 * 37) % catalog.length].id, `第 2 层地形应为确定性映射，实际 ${after.map}`);
+  // 0.8.33 起深层为程序化地形（设计稿 docs/20261117-1010），第 2 层不再是百图确定性映射。
+  assert.equal(after.map, "abyss-F2", `第 2 层应为程序化深层地图，实际 ${after.map}`);
   assert.notEqual(after.map, before.map, "按 T 后地图必须变化");
 
   assert.deepEqual(errors, [], `页面异常：${errors.join(" | ")}`);
