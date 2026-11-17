@@ -44,7 +44,7 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 
 ## 【当前开发进度】
 
-0.8.31 **代码审查修复：12 项缺陷（P1×4 / P2×8）**：① 导入 v2/v3 旧档时装备只在 `player.equipment` 会被净化阶段清空 → 回退读取 + 先迁移再净化；② 导入物品 `slot/setKey` 未校验，可拼进 `<img src>`/title 形成存储型注入 → 白名单 + 截断，`power/value/enhance` 等逐字段钳制；③ 深层按 T 先判普通出口导致回主线 → `abyssFloor` 优先；④ 骨卫可被锁定并计入击杀 → 目标恢复、场景节点过滤 friendly，`defeat` 加防护；⑤ 范围技能绕过 20 级 PK 保护；⑥ 施法失败也刷新 `lastSkillAge` 触发精英回响增伤；⑦ 修罗怒攻速层数未参与前摇；⑧ 精英 `expMult` 未进入经验结算；⑨ 地面掉落无上限；⑩ 技能升级后按钮 Lv 与技能点角标不刷新；⑪ 未选职业时 R/T/F 空指针。验证：208 单测全绿（新增 4 条），`test:ui`/`regression`/`timeline`/`summon`/`levelup`/`nameplate` 全 PASS，新增 `test:ui:fixes0831`。详见 [docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md](docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md)。
+0.8.31 **代码审查修复：12 项缺陷（P1×4 / P2×8）**：① 导入 v2/v3 旧档时装备只在 `player.equipment` 会被净化阶段清空 → 回退读取 + 先迁移再净化；② 导入物品 `slot/setKey` 未校验，可拼进 `<img src>`/title 形成存储型注入 → 白名单 + 截断，`power/value/enhance` 等逐字段钳制；③ 深层按 T 先判普通出口导致回主线 → `abyssFloor` 优先；④ 骨卫可被锁定并计入击杀 → 目标恢复、场景节点过滤 friendly，`defeat` 加防护；⑤ 范围技能绕过 20 级 PK 保护；⑥ 施法失败也刷新 `lastSkillAge` 触发精英回响增伤；⑦ 修罗怒攻速层数未参与前摇；⑧ 精英 `expMult` 未进入经验结算；⑨ 地面掉落无上限；⑩ 技能升级后按钮 Lv 与技能点角标不刷新；⑪ 未选职业时 R/T/F 空指针。验证：208 单测全绿（新增 4 条），`test:ui`/`regression`/`timeline`/`summon`/`levelup`/`nameplate` 全 PASS，新增 `test:ui:fixes0831` 与 `test:ui:abyss`（深层 T 进入下一层，`ash_outskirts → stage_075`）。详见 [docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md](docs/20261117-0100-代码审查修复-DeepSeek-V4.1-Flash.md)。
 
 0.8.30 **探针补数据**：道士 30/75、三职业 60/90 共 8 组全部 PASS（探针数据，无代码变更）。
 
