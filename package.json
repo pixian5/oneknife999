@@ -25,7 +25,8 @@
     "test:ui:summon": "node tests/ui-summon.cjs",
     "test:ui:elite": "node tests/ui-elite.cjs",
     "test:ui:layout": "node tests/ui-layout.cjs",
-    "test:ui:fixes0831": "node tests/ui-fixes-0831.cjs"
+    "test:ui:fixes0831": "node tests/ui-fixes-0831.cjs",
+    "test:ui:abyss": "node tests/ui-abyss-travel.cjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1",
