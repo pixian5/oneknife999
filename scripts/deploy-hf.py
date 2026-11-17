@@ -54,6 +54,17 @@ def main() -> int:
     if not os.path.isdir(GAME_DIR):
         print(f"错误：找不到游戏目录 {GAME_DIR}")
         return 1
+    # 0.8.36 PWA 版本一致性校验：VERSION / sw.js 缓存键 / main.js 应用版本三处必须同步，
+    # 否则 Service Worker 更新语义失效（旧缓存永不失效或每次全量重取）。
+    version = open(os.path.join(GAME_DIR, "..", "VERSION")).read().strip()
+    sw = open(os.path.join(GAME_DIR, "sw.js"), encoding="utf-8").read()
+    main_js = open(os.path.join(GAME_DIR, "src", "main.js"), encoding="utf-8").read()
+    if f"oneknife999-v{version}" not in sw:
+        print(f"错误：sw.js 的 CACHE_VERSION 未同步到 {version}（发布前手动更新 sw.js 与 main.js）")
+        return 1
+    if f'CURRENT_APP_VERSION = "{version}"' not in main_js:
+        print(f"错误：main.js 的 CURRENT_APP_VERSION 未同步到 {version}")
+        return 1
     api = HfApi(token=token)
 
     # 1. 上传游戏内容（排除 macOS 元数据；upload_folder 增量，只传有变化的文件）
