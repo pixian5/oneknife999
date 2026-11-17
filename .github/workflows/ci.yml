@@ -35,8 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 冒烟 / 布局 / 升级 / 渲染输入回归 / 铭牌 / 行为旗标 / 精英
-        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite]
+        # 0.8.36 补全：全部 14 个 UI 回归进 CI（此前 matrix 落后于测试资产，
+        # abyss/abyss-terrain/cast/blind/timeline/summon/fixes0831 仅本地跑，WorkBuddy 改坏无法第一时间发现）。
+        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite, ui:blind, ui:timeline, ui:summon, ui:fixes0831, ui:abyss, ui:abyss-terrain, ui:cast]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,3 +57,27 @@ jobs:
         env:
           ONEKNIFE_CHANNEL: chromium
         run: npm run test:${{ matrix.test }}
+
+  perf:
+    name: 性能门禁（软件渲染基线）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 安装依赖与浏览器
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      - name: 启动静态服务（4174）
+        run: |
+          python3 -m http.server 4174 --directory game &
+          sleep 2
+      # 0.8.36：perf 进 CI。Ubuntu 软件渲染 p99 与 macOS 本机（1-2ms）不可比（约 10ms），
+      # 用 ONEKNIFE_PERF_P99_MAX=12 放宽；零 20ms+ 长帧仍是硬指标（渲染方式无关）。
+      - name: 帧率探测与门禁
+        run: ONEKNIFE_CHANNEL=chromium ONEKNIFE_PERF_P99_MAX=12 npm run perf
