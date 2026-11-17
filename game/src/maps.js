@@ -50,6 +50,175 @@ export function mapDifficultyOverride(stageNumber) {
   return MAP_DIFFICULTY_OVERRIDES[stageNumber] || null;
 }
 
+// ============ 0.8.33 无尽深层程序化地形（设计稿：docs/20261117-1010） ============
+
+export const ABYSS_MAP_PREFIX = "abyss-F";
+
+export function abyssMapId(floor) {
+  return `${ABYSS_MAP_PREFIX}${Math.max(1, Math.floor(Number(floor) || 1))}`;
+}
+
+// 从地图 id 解析层数（非深层 id 返回 0）。
+export function abyssFloorFromId(mapId) {
+  const match = /^abyss-F(\d+)$/.exec(String(mapId || ""));
+  return match ? Number(match[1]) : 0;
+}
+
+// 深层每层的场景词（与十章主题轮换错开一位）。
+const ABYSS_SITE_NAMES = ["裂隙", "回廊", "蚀窟", "寒渊", "熔道", "冥河", "浮台", "残骸", "战场", "帝寝"];
+
+// 深层剧情：不引用百图剧情弧，消除「第 57 层套着第 3 关文案」的错位感。
+function abyssStory(floor, chapter) {
+  const siteName = ABYSS_SITE_NAMES[(floor - 1) % ABYSS_SITE_NAMES.length];
+  return {
+    chapterTitle: `无尽深层 · ${chapter.name}`,
+    beatTitle: `深层 F${floor} · ${siteName}`,
+    premise: "百图之下是被玄烬余烬反复重熔的深层，地形没有尽头。",
+    objective: `深入第 ${floor} 层，击破${chapter.boss}的回响`,
+    summary: `第 ${floor} 层由${chapter.name}的余烬重熔而成，怪物的强度随深度不断攀升。`,
+    speaker: "深层回声",
+    dialogue: `「第 ${floor} 层……你比上一次走得更深。」`,
+    reveal: "深层的尽头，还没有人见过。"
+  };
+}
+
+// 构建第 floor 层的完整地图（纯函数：同层同布局，供 ensureAbyssMap 注册与单测复现）。
+// 数值锚 = 主题章首张生成图（chapterIndex*10+5），基础曲线与百图同源；
+// 深层成长由 createEntities 的 abyssMultipliers(floor) 在实体层叠加（本函数不乘）。
+export function buildAbyssMap(floor) {
+  const f = Math.max(1, Math.floor(Number(floor) || 1));
+  const chapterIndex = (f - 1) % CHAPTERS.length;
+  const chapter = CHAPTERS[chapterIndex];
+  const layout = generatedAbyssLayout(f, chapter);
+  const baseStage = chapterIndex * 10 + 5;
+  // 怪物种类：主题章 9 种按层种子洗牌后取 5~7 种（数值档随洗牌顺序重排，压力组合每层不同）。
+  const shuffle = seededRandom(f * 40503 + 977);
+  const order = [...chapter.monsters];
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(shuffle() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const pick = Math.min(order.length, 5 + ((f - 1) % 3));
+  // 数值公式与 generatedMap 完全同源（typeIndex 用洗牌后位置，实现档位重排）。
+  const anchored = (base, slope) => Math.round(base + (baseStage - 4) * slope);
+  // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
+  // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
+  const originalIndex = (name) => chapter.monsters.indexOf(name);
+  const monsterTypes = order.slice(0, pick).map((name) => {
+    const typeIndex = originalIndex(name);
+    const rawName = name.startsWith(chapter.short) ? name : `${chapter.short}${name}`;
+    const attack = anchored(70 + typeIndex * 2.785, 0.32);
+    return {
+      name: rawName,
+      color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
+      hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)),
+      attack,
+      defense: anchored(16 + typeIndex * 0.4875, 0.35),
+      exp: 0,
+      gold: anchored(36 + typeIndex * 1.125, 1.4),
+      radius: 16 + Math.floor(typeIndex * 0.44),
+      intro: `深层第 ${f} 层的${name}，被余烬重熔后比表层同类更凶。`,
+      skills: [`${name}回响：基础伤害 ${attack}`, `${name}深层形态：受伤后更加狂暴`]
+    };
+  });
+  // Boss：主题章首领做「回响」，首领层（每 10 层）×1.35、守门层 ×0.55；
+  // 深层成长倍率仍在 createEntities 层叠加。
+  const bossScale = f % 10 === 0 ? 1.35 : 0.55;
+  const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
+  const id = abyssMapId(f);
+  return {
+    id,
+    abyssFloor: f,
+    stageNumber: 100 + f,
+    chapter: chapterIndex + 1,
+    chapterName: chapter.name,
+    story: abyssStory(f, chapter),
+    name: `深层·${chapter.short}${siteName}`,
+    subtitle: `无尽深层 · 第 ${f} 层`,
+    levelMin: 41,
+    levelMax: 41,
+    danger: chapter.danger,
+    dangerLabel: "深层禁区",
+    layoutId: layout.layoutId,
+    width: 2400,
+    height: 1500,
+    palette: {
+      ground: chapter.ground,
+      road: "rgba(210, 184, 125, .12)",
+      roadHi: "rgba(235, 210, 150, .16)",
+      grid: "rgba(220, 230, 220, .035)",
+      town: "rgba(98, 213, 198, .08)",
+      townBorder: "rgba(98, 213, 198, .22)",
+      special: chapter.special,
+      specialBorder: `${chapter.accent}66`,
+      water: "rgba(100, 150, 170, .14)"
+    },
+    townRect: layout.townRect,
+    specialRect: layout.specialRect,
+    paths: layout.paths,
+    branchPath: layout.branchPath,
+    landmarks: layout.landmarks,
+    tacticalPoints: layout.tacticalPoints,
+    siteStyle: layout.siteStyle,
+    routePlan: layout.routePlan,
+    encounterBands: layout.routePlan.encounterBands,
+    landmarkLabels: [
+      { text: `深层补给点 F${f}`, x: layout.townRect.x + 70, y: layout.townRect.y + layout.townRect.h + 25 },
+      { text: `${chapter.boss}回响`, x: layout.boss.x - 80, y: layout.boss.y + 95 }
+    ],
+    monsterTypes,
+    // 布局层刷怪档位按「九档全开」生成（0-8），但本层只选取了 5~7 种怪——
+    // 档位必须对本层实际种数取模，否则 monsterTypes[7] 越界（实测 PageError: undefined.hp，
+    // 且异常发生在 persistGame 之前导致层数不落盘）。
+    monsterSpawns: layout.monsterSpawns.map(([x, y, tier, route, progress]) => [x, y, tier % pick, route, progress]),
+    boss: {
+      id: `boss-${id}`,
+      name: `${chapter.boss}回响`,
+      color: chapter.accent,
+      hp: Math.round(anchored(3000, 67.5) * bossScale),
+      attack: Math.round(anchored(112, 0.42) * (f % 10 === 0 ? 1.1 : 0.8)),
+      defense: anchored(60, 0.05),
+      exp: 0,
+      gold: anchored(1100, 6.5),
+      radius: 34,
+      x: layout.boss.x,
+      y: layout.boss.y,
+      phases: f % 10 === 0 ? 3 : 2,
+      phase1Trigger: f % 10 === 0 ? 0.68 : 0.5,
+      phase2Trigger: f % 10 === 0 ? 0.34 : undefined,
+      specialInterval: Math.max(3.2, 6.5 - f * 0.025),
+      specialKind: ["crack", "logs", "devour", "sting"][f % 4],
+      poisonStacks: f % 4 === 3
+    },
+    // 掉落沿用该章基准关的掉落表（含 setKey 套装件），品质提档由 spawnDrop 的深层加成处理。
+    drops: generatedMap(baseStage).drops,
+    // 深层无出口：下层唯一途径是按 T（首领层需击败首领）。
+    // 这同时根治「isForwardExit 对非 MAP_ORDER id 判 indexOf=-1，把百图出口当深层前进出口」的错位。
+    exits: []
+  };
+}
+
+// 幂等注册第 floor 层：注册进 MAPS/MAP_CLEAR_RULES 但不进 MAP_ORDER——
+// 通关计数、难度解锁、任务链、区域导航（全部基于 MAP_ORDER）天然忽略深层。
+// rule.abyss 标记供 checkMapCompletion 短路百图通关结算（防误发「百图征途完成」）。
+export function ensureAbyssMap(floor) {
+  const f = Math.max(1, Math.floor(Number(floor) || 1));
+  const id = abyssMapId(f);
+  if (MAPS[id]) return MAPS[id];
+  const map = buildAbyssMap(f);
+  MAPS[id] = map;
+  MAP_CLEAR_RULES[id] = {
+    kills: 5,
+    boss: map.boss.name,
+    next: null,
+    exit: "无出口（按 T 深入）",
+    stageNumber: 100 + f,
+    mapsPerLevel: 4,
+    abyss: true
+  };
+  return map;
+}
+
 // 0.6.0 P2 套装键：10 章映射到 6 套（与 endgame.js 的 SET_BONUSES 对齐）。
 const SET_KEYS = ["边境", "苍月", "龙脉", "冰封", "烬火", "帝陵", "烬火", "帝陵", "烬火", "帝陵"];
 
@@ -840,11 +1009,13 @@ export function campaignGrowth(clearedMaps) {
   return { level: 31 + Math.floor((cleared - 60) / 4), exp: ((cleared - 60) % 4) * 25, nextExp: 100, mapsPerLevel: 4 };
 }
 
-export function generatedLayout(stageNumber, chapter) {
-  const random = seededRandom(stageNumber * 982451653 + 104729);
-  const site = SITE_LAYOUTS[(stageNumber - 1) % 10];
-  const townY = [180, 565, 950][stageNumber % 3];
-  const townRect = { x: 80, y: townY, w: 280, h: 280 };
+// 布局核心（0.8.33 参数化）：key 同时充当种子源与站点/纵向位的取模输入；
+// 百图壳传 stageNumber（行为与旧版逐字节一致），深层壳传独立种子空间的 key，互不撞布局。
+function buildLayout(key, siteIndex, chapter, townWidth, eliteAll) {
+  const random = seededRandom(key * 982451653 + 104729);
+  const site = SITE_LAYOUTS[siteIndex];
+  const townY = [180, 565, 950][key % 3];
+  const townRect = { x: 80, y: townY, w: townWidth, h: 280 };
   const boss = { x: Math.round(1810 + random() * 380), y: Math.round(260 + random() * 840) };
   const start = { x: townRect.x + townRect.w / 2, y: townRect.y + townRect.h / 2 };
   const path = [start.x, start.y];
@@ -854,7 +1025,7 @@ export function generatedLayout(stageNumber, chapter) {
     let y = start.y + (boss.y - start.y) * ratio + (random() - 0.5) * 270;
     if (site.road === "zigzag") {
       // 折返道路必须在控制点上产生实际回摆，而不是只换一个标签。
-      const fold = 320 + (stageNumber % 3) * 20;
+      const fold = 320 + (key % 3) * 20;
       x += point % 2 ? fold : -fold;
       y += point % 2 ? 210 : -210;
     }
@@ -863,13 +1034,13 @@ export function generatedLayout(stageNumber, chapter) {
   }
   path.push(boss.x, boss.y);
   const landmarks = Array.from({ length: 10 }, (_, index) => ({
-    type: site.landmarks[(index + stageNumber) % site.landmarks.length],
+    type: site.landmarks[(index + key) % site.landmarks.length],
     x: Math.round(420 + random() * 1740),
     y: Math.round(150 + random() * 1180),
     r: Math.round(14 + random() * 16),
     color: index % 2 ? chapter.special : chapter.accent
   }));
-  const chapterEnd = stageNumber % 10 === 0;
+  const chapterEnd = key % 10 === 0;
   const specialRect = {
     x: Math.max(1380, Math.min(1780, boss.x - 260)),
     y: Math.max(90, Math.min(930, boss.y - 220)),
@@ -888,7 +1059,7 @@ export function generatedLayout(stageNumber, chapter) {
   if (site.road === "fork" || site.road === "radial") {
     const forkX = path[6];
     const forkY = path[7];
-    const edgeY = Math.max(140, Math.min(1360, forkY + (stageNumber % 2 ? 390 : -390)));
+    const edgeY = Math.max(140, Math.min(1360, forkY + (key % 2 ? 390 : -390)));
     branchPath = [
       forkX,
       forkY,
@@ -916,18 +1087,18 @@ export function generatedLayout(stageNumber, chapter) {
   const branchProgresses = [0.3, 0.42, 0.54, 0.66];
   const monsterRoutes = branchPath
     ? mainProgresses
-        .map((progress, index) => ({ route: "main", progress, lateral: (index % 2 ? 1 : -1) * (28 + ((stageNumber + index) % 3) * 16) }))
+        .map((progress, index) => ({ route: "main", progress, lateral: (index % 2 ? 1 : -1) * (28 + ((key + index) % 3) * 16) }))
         .concat(
           branchProgresses.map((progress, index) => ({
             route: "branch",
             progress,
-            lateral: (index % 2 ? -1 : 1) * (30 + ((stageNumber + index) % 2) * 18)
+            lateral: (index % 2 ? -1 : 1) * (30 + ((key + index) % 2) * 18)
           }))
         )
     : mainProgresses.map((progress, index) => ({
         route: "main",
         progress,
-        lateral: (index % 2 ? 1 : -1) * (28 + ((stageNumber + index) % 3) * 16)
+        lateral: (index % 2 ? 1 : -1) * (28 + ((key + index) % 3) * 16)
       }));
   const monsterSpawns = monsterRoutes.map(({ route, progress, lateral }, index) => {
     const routePath = route === "branch" ? branchPath : path;
@@ -957,7 +1128,8 @@ export function generatedLayout(stageNumber, chapter) {
       // 前 6 档（索引 0-5）为常规刷怪；索引 6-8 为「精英档」（更硬），只在章内后半段关卡出现，
       // 让高关号有额外的强度层次，同时避免低关号被高血量怪压死
       // （实测低关就取满 9 档会让第 15 关死亡中位数从 1 升到 5）。
-      spawnTier(index, stageNumber, (stageNumber - 1) % 10),
+      // eliteAll（深层）：九档全开，压力由 abyssMultipliers 全权调节；百图沿用分段档位。
+      eliteAll ? (index + key) % 9 : spawnTier(index, key, (key - 1) % 10),
       route,
       adjustedProgress
     ];
@@ -1058,7 +1230,7 @@ export function generatedLayout(stageNumber, chapter) {
       return score(b) - score(a);
     })[0];
     if (fallback) return fallback;
-    throw new Error(`地图节点没有安全候选：${stageNumber}/${routePath ? "branch" : "main"}`);
+    throw new Error(`地图节点没有安全候选：${key}/${routePath ? "branch" : "main"}`);
   };
   const restPoint = freePoint({ x: path[4], y: path[5] }, 144);
   occupied.push(restPoint);
@@ -1088,10 +1260,10 @@ export function generatedLayout(stageNumber, chapter) {
   occupied.push(cachePoint);
   const sitePoint = freePoint({ x: path[6], y: path[7] }, 154);
   occupied.push(sitePoint);
-  const siteNode = siteNodeDefinition(stageNumber, chapter.short);
+  const siteNode = siteNodeDefinition(key, chapter.short);
   const tacticalPoints = [
     {
-      id: `rest-${stageNumber}`,
+      id: `rest-${key}`,
       kind: "rest",
       route: "main",
       x: restPoint.x,
@@ -1101,7 +1273,7 @@ export function generatedLayout(stageNumber, chapter) {
       detail: "靠近篝火可恢复生命、资源并净化毒层"
     },
     {
-      id: `cache-${stageNumber}`,
+      id: `cache-${key}`,
       kind: "resource",
       route: branchPath ? "branch" : "main",
       x: cachePoint.x,
@@ -1123,8 +1295,18 @@ export function generatedLayout(stageNumber, chapter) {
     tacticalPoints,
     siteStyle: site,
     routePlan,
-    layoutId: `layout-${stageNumber}-${townY}-${boss.x}-${boss.y}-${site.arena}`
+    layoutId: `layout-${key}-${townY}-${boss.x}-${boss.y}-${site.arena}`
   };
+}
+
+export function generatedLayout(stageNumber, chapter) {
+  return buildLayout(stageNumber, (stageNumber - 1) % 10, chapter, 280, false);
+}
+
+// 0.8.33 深层布局：独立种子空间（floor × 2654435761 + 977，避开百图 5-100 的种子区间），
+// 站点选择按 (floor×3+4)%10 与百图 (stageNumber-1)%10 错位，营地加宽至 320（深层补给更慷慨）。
+export function generatedAbyssLayout(floor, chapter) {
+  return buildLayout(floor * 2654435761 + 977, (floor * 3 + 4) % 10, chapter, 320, true);
 }
 
 export function generatedMap(stageNumber) {

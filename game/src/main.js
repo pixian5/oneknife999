@@ -17,7 +17,17 @@ import {
   QUEST_REWARD,
   BASIC_MATERIAL
 } from "./config.js";
-import { MAPS, MAP_ORDER, MAP_CLEAR_RULES, campaignGrowth, mapLayoutSignature, pathTurnCount } from "./maps.js";
+import {
+  MAPS,
+  MAP_ORDER,
+  MAP_CLEAR_RULES,
+  campaignGrowth,
+  mapLayoutSignature,
+  pathTurnCount,
+  ensureAbyssMap,
+  ABYSS_MAP_PREFIX,
+  abyssFloorFromId
+} from "./maps.js";
 import { pathLength } from "./geometry.js";
 import { $, clamp, distance, rand } from "./util.js";
 import {
@@ -1112,6 +1122,15 @@ export function checkMapCompletion() {
   const map = activeMap();
   const rule = MAP_CLEAR_RULES[map.id];
   const progress = mapProgress();
+  // 0.8.33 深层地图：不走百图通关结算（不发通关文案/奖励、不误报「百图征途完成」）。
+  // 只保留一条轻量清剿提示；首领击杀的 bossDefeated 由 defeat() 正常记录，供锁层判定。
+  if (rule?.abyss) {
+    if (progress.kills >= progress.need && !progress.killAnnounced) {
+      progress.killAnnounced = true;
+      if (!progress.bossDefeated) log(`本层清剿完成：按 T 深入下一层，或挑战守门者${rule.boss}。`, "loot");
+    }
+    return false;
+  }
   if (progress.kills >= progress.need && !progress.killAnnounced) {
     progress.killAnnounced = true;
     if (!progress.bossDefeated) {
@@ -2256,7 +2275,22 @@ export function loadGame() {
     state.abyssFloor = Math.max(0, Math.min(state.abyssBest, Math.floor(Number(saved.abyssFloor) || 0)));
     if (saved.quest && saved.currentMapId && !state.mapProgress[saved.currentMapId]) state.mapProgress[saved.currentMapId] = saved.quest;
     syncCampaignGrowth(true);
-    const startMap = saved.currentMapId && MAPS[saved.currentMapId] ? saved.currentMapId : "ash_outskirts";
+    // 0.8.33：深层存档恢复——currentMapId 是 abyss-F{n} 时先注册该层再进（必须在三元判定前
+    // 保留原始 id：否则 else 分支已把它覆盖为灰烬村，前缀判断永远不成立——实测回归 9 踩坑）。
+    // 层数不得超过存档记录的 abyssFloor，防篡改跳层。
+    let startMap = "ash_outskirts";
+    if (saved.currentMapId && (MAPS[saved.currentMapId] || saved.currentMapId.startsWith(ABYSS_MAP_PREFIX))) {
+      startMap = saved.currentMapId;
+      if (!MAPS[startMap]) {
+        const floor = abyssFloorFromId(startMap);
+        if (floor >= 1 && floor <= (state.abyssFloor || 0)) {
+          ensureAbyssMap(floor);
+        } else {
+          startMap = "ash_outskirts";
+          logWarn("save", "abyssRestoreFallback", { floor, abyssFloor: state.abyssFloor || 0 });
+        }
+      }
+    }
     logInfo("save", "loadReady", {
       fromVersion,
       migrated,
@@ -2462,12 +2496,22 @@ export function enterAbyss() {
     showToast(`无尽深层需通关百图后解锁（当前 ${cleared}/100）`);
     return;
   }
+  // 0.8.33 首领层锁层：第 10/20/30… 层必须击败本层首领才能继续深入，防止无限跳层。
+  if ((state.abyssFloor || 0) > 0 && abyssFloorFromId(state.currentMapId) > 0) {
+    const currentRule = MAP_CLEAR_RULES[state.currentMapId];
+    const currentProgress = state.mapProgress?.[state.currentMapId];
+    if (currentRule?.abyss && state.abyssFloor % 10 === 0 && !currentProgress?.bossDefeated) {
+      showToast(`第 ${state.abyssFloor} 层为首领层：击败${currentRule.boss}后才能深入`);
+      logInfo("abyss", "gateLocked", { floor: state.abyssFloor });
+      return;
+    }
+  }
   const floor = Math.max(state.abyssFloor || 0, state.abyssBest || 0) + 1;
   state.abyssFloor = floor;
   state.abyssBest = Math.max(state.abyssBest || 0, floor);
-  // 地形随机：按层数取确定性的地图（同层可复现，不同层布局不同）。
-  const mapId = MAP_ORDER[(floor * 37) % MAP_ORDER.length];
-  const map = MAPS[mapId];
+  // 0.8.33 程序化地形：每层由层数确定性生成（同层同布局、异层不撞图），不再复用百图地形。
+  const map = ensureAbyssMap(floor);
+  const mapId = map.id;
   const spawn = { x: map.townRect.x + map.townRect.w / 2, y: map.townRect.y + map.townRect.h / 2 };
   logInfo("abyss", "enter", {
     floor,
