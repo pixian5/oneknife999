@@ -1,0 +1,17 @@
+{
+  "name": "一刀999 · 百图征途",
+  "short_name": "一刀999",
+  "description": "传奇类 MMORPG 玩法验证原型：十章百图、三职业、106 种带独立行为 AI 的怪物、装备与终局系统",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101820",
+  "theme_color": "#101820",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

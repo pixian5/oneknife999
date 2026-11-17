@@ -1,34 +1,92 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#101820">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101820" />
     <title>一刀999 · 百图征途</title>
-    <link rel="stylesheet" href="game.css">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23101820'/%3E%3Ctext x='16' y='24' font-size='21' text-anchor='middle' fill='%23f0b429'%3E%E5%88%80%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="game.css" />
+    <!-- 0.8.36 PWA 应用化：可安装到主屏幕、全屏运行、二次访问离线可玩（见 sw.js） -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#101820" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="一刀999" />
+    <style>
+      /* 启动画面：JS 就绪前的品牌占位（main.js 初始化完成后移除） */
+      #bootSplash {
+        position: fixed;
+        inset: 0;
+        z-index: 99;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #101820;
+        color: #e7b36b;
+        font-family: Georgia, serif;
+      }
+      #bootSplash img {
+        width: min(320px, 72vw);
+        filter: drop-shadow(0 4px 18px rgba(231, 179, 107, 0.25));
+      }
+      #bootSplash .boot-tip {
+        color: #7d8f8a;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+      }
+      #bootSplash.hidden {
+        display: none;
+      }
+    </style>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23101820'/%3E%3Ctext x='16' y='24' font-size='21' text-anchor='middle' fill='%23f0b429'%3E%E5%88%80%3C/text%3E%3C/svg%3E"
+    />
   </head>
   <body>
+    <div id="bootSplash" role="status">
+      <img src="assets/logo-word.png" alt="一刀999" />
+      <span class="boot-tip">烬阳服务器连接中……</span>
+    </div>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-lockup">
-          <img class="brand-mark" src="assets/logo-word.png" alt="一刀999">
+          <img class="brand-mark" src="assets/logo-word.png" alt="一刀999" />
           <div>
             <span>十章百图 · 传奇征途</span>
           </div>
         </div>
         <div class="server-status"><span class="status-dot"></span> 烬阳-01</div>
         <div class="top-actions">
-          <button class="icon-button" id="skillBtn" title="技能升级（快捷键 K）"><img class="btn-ico" src="assets/btn-skill.png" alt="">技能<span class="point-badge hidden" id="skillPointBadge">0</span></button>
-          <button class="icon-button" id="difficultyBtn" title="切换难度（百图通关后解锁烬火 / 灰烬）"><img class="btn-ico" src="assets/btn-skill.png" alt="">难度</button>
-          <button class="icon-button" id="bestiaryBtn" title="怪物图鉴（收集度）"><img class="btn-ico" src="assets/btn-skill.png" alt="">图鉴</button>
-          <button class="icon-button" id="settingsBtn" title="键位设置"><img class="btn-ico" src="assets/btn-settings.png" alt="">设置</button>
-          <button class="icon-button" id="muteBtn" title="开关音效"><img class="btn-ico" src="assets/btn-sound.png" alt="">音效</button>
-          <button class="icon-button top-archive" id="exportBtn" title="导出存档为 JSON 文件"><img class="btn-ico" src="assets/btn-export.png" alt="">导出</button>
-          <button class="icon-button top-archive" id="importBtn" title="从 JSON 文件导入存档"><img class="btn-ico" src="assets/btn-import.png" alt="">导入</button>
+          <button class="icon-button" id="skillBtn" title="技能升级（快捷键 K）">
+            <img class="btn-ico" src="assets/btn-skill.png" alt="" />技能<span class="point-badge hidden" id="skillPointBadge">0</span>
+          </button>
+          <button class="icon-button" id="difficultyBtn" title="切换难度（百图通关后解锁烬火 / 灰烬）">
+            <img class="btn-ico" src="assets/btn-skill.png" alt="" />难度
+          </button>
+          <button class="icon-button" id="bestiaryBtn" title="怪物图鉴（收集度）">
+            <img class="btn-ico" src="assets/btn-skill.png" alt="" />图鉴
+          </button>
+          <button class="icon-button" id="settingsBtn" title="键位设置">
+            <img class="btn-ico" src="assets/btn-settings.png" alt="" />设置
+          </button>
+          <button class="icon-button" id="muteBtn" title="开关音效"><img class="btn-ico" src="assets/btn-sound.png" alt="" />音效</button>
+          <button class="icon-button top-archive" id="exportBtn" title="导出存档为 JSON 文件">
+            <img class="btn-ico" src="assets/btn-export.png" alt="" />导出
+          </button>
+          <button class="icon-button top-archive" id="importBtn" title="从 JSON 文件导入存档">
+            <img class="btn-ico" src="assets/btn-import.png" alt="" />导入
+          </button>
           <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
-          <button class="icon-button top-archive" id="saveBtn" title="保存当前进度"><img class="btn-ico" src="assets/btn-save.png" alt="">保存</button>
-          <button class="icon-button top-archive" id="resetBtn" title="重新开始本次体验"><img class="btn-ico" src="assets/btn-reset.png" alt="">重置</button>
+          <button class="icon-button top-archive" id="saveBtn" title="保存当前进度">
+            <img class="btn-ico" src="assets/btn-save.png" alt="" />保存
+          </button>
+          <button class="icon-button top-archive" id="resetBtn" title="重新开始本次体验">
+            <img class="btn-ico" src="assets/btn-reset.png" alt="" />重置
+          </button>
         </div>
       </header>
 
@@ -39,12 +97,14 @@
               <span class="eyebrow">当前区域</span>
               <h1 id="mapTitle">灰烬村外 · 腐烬矿道</h1>
             </div>
-            <div class="map-pills"><span class="pill" id="mapLevelRange">推荐 Lv.1-10</span><span class="pill safe" id="mapDanger">村口保护</span></div>
+            <div class="map-pills">
+              <span class="pill" id="mapLevelRange">推荐 Lv.1-10</span><span class="pill safe" id="mapDanger">村口保护</span>
+            </div>
           </div>
           <div class="canvas-wrap" id="canvasWrap">
             <canvas id="gameCanvas" aria-label="灰烬边境战斗场景"></canvas>
             <div class="boss-alert" id="bossAlert">
-              <img class="boss-portrait" id="bossPortrait" src="assets/boss-liebei.jpg" alt="首领立绘">
+              <img class="boss-portrait" id="bossPortrait" src="assets/boss-liebei.jpg" alt="首领立绘" />
               <span class="boss-pulse"></span>
               <span><b>首领情报</b><small id="bossAlertText">裂碑领主正在苏醒</small></span>
             </div>
@@ -54,8 +114,12 @@
               <span id="mapObjectiveText">击败 8 只普通怪物</span>
               <div class="objective-checks" id="mapObjectiveChecks"></div>
             </div>
-            <div class="guide-banner hidden" id="guideBanner" role="status"><span class="guide-step" id="guideStep">1/3</span><span id="guideText">新手引导</span></div>
-            <div class="combat-hint" id="combatHint">WASD / 摇杆移动 · X 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡</div>
+            <div class="guide-banner hidden" id="guideBanner" role="status">
+              <span class="guide-step" id="guideStep">1/3</span><span id="guideText">新手引导</span>
+            </div>
+            <div class="combat-hint" id="combatHint">
+              WASD / 摇杆移动 · X 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡
+            </div>
           </div>
           <div class="world-footer">
             <div class="mini-objectives" id="mapDynamics">
@@ -71,15 +135,26 @@
           <section class="player-card">
             <div class="player-heading">
               <div class="avatar" id="avatar">?</div>
-              <div class="player-name"><span class="eyebrow" id="className">选择职业</span><strong id="playerName">边境旅人</strong><span class="bestiary-badge hidden" id="bestiaryBadge"></span></div>
+              <div class="player-name">
+                <span class="eyebrow" id="className">选择职业</span><strong id="playerName">边境旅人</strong
+                ><span class="bestiary-badge hidden" id="bestiaryBadge"></span>
+              </div>
               <div class="power-score"><span>战力</span><b id="powerText">0</b></div>
             </div>
-            <div class="stat-row hero-stats"><span>生命 <b id="hpStat">0</b></span><span>攻击 <b id="attackStat">0</b></span><span>防御 <b id="defenseStat">0</b></span></div>
+            <div class="stat-row hero-stats">
+              <span>生命 <b id="hpStat">0</b></span
+              ><span>攻击 <b id="attackStat">0</b></span
+              ><span>防御 <b id="defenseStat">0</b></span>
+            </div>
             <div class="meter-group">
               <div class="meter-label"><span id="expLabel">升级进度</span><b id="expText">0 / 120</b></div>
               <div class="meter exp"><span id="expBar"></span></div>
             </div>
-            <div class="stat-row"><span>金币 <b id="goldText">0</b></span><span>首领印记 <b id="markText">0 / 800</b></span><span class="sin-pill hidden" id="sinPill">罪恶 0</span></div>
+            <div class="stat-row">
+              <span>金币 <b id="goldText">0</b></span
+              ><span>首领印记 <b id="markText">0 / 800</b></span
+              ><span class="sin-pill hidden" id="sinPill">罪恶 0</span>
+            </div>
             <div class="stat-row stats-line" id="statsLine">击杀 0 · 死亡 0 · 通关 0/100</div>
             <div class="stat-row stats-line damage-estimate" id="damageEstimate">普攻期望(本区怪) ≈ 0</div>
             <!-- 0.6.0 P2 终局：难度 / 图鉴 / 套装横向信息条 -->
@@ -87,7 +162,10 @@
           </section>
 
           <section class="quest-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-quest.png" alt=""> 当前关卡</span><span class="quest-tag" id="questTag">进行中</span></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-quest.png" alt="" /> 当前关卡</span
+              ><span class="quest-tag" id="questTag">进行中</span>
+            </div>
             <h2 id="questTitle">肃清灰烬村外</h2>
             <p id="questDescription">先清剿普通怪物，再击败区域首领，最后从前进出口离开。</p>
             <div class="quest-progress"><span id="questBar"></span></div>
@@ -95,40 +173,53 @@
           </section>
 
           <section class="region-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-nav.png" alt=""> 区域导航</span><span class="region-tip">走出口切换</span></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-nav.png" alt="" /> 区域导航</span><span class="region-tip">走出口切换</span>
+            </div>
             <div class="region-list" id="regionList"></div>
           </section>
 
-
           <section class="equipment-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-equip.png" alt=""> 装备</span><button class="link-button" id="inventoryHint">背包 <b id="inventoryCount">0/12</b></button></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-equip.png" alt="" /> 装备</span
+              ><button class="link-button" id="inventoryHint">背包 <b id="inventoryCount">0/12</b></button>
+            </div>
             <div class="equipment-grid" id="equipmentGrid"></div>
           </section>
           <section class="quest-chain-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-chain.png" alt=""> <span id="questChainTitle">任务链</span></span><span class="quest-chain-tip" id="questChainTip">本章进度</span></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-chain.png" alt="" /> <span id="questChainTitle">任务链</span></span
+              ><span class="quest-chain-tip" id="questChainTip">本章进度</span>
+            </div>
             <div class="quest-chain-list" id="questChainList"></div>
           </section>
 
           <section class="log-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-log.png" alt=""> 战场记录</span><span class="live-label"><i></i> LIVE</span></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-log.png" alt="" /> 战场记录</span
+              ><span class="live-label"><i></i> LIVE</span>
+            </div>
             <div class="event-log" id="eventLog" aria-live="polite"></div>
           </section>
 
           <section class="inventory-card panel-block">
-            <div class="section-heading"><span><img class="section-icon" src="assets/panel-bag.png" alt=""> 随身背包</span><span class="inventory-tip">点击装备</span></div>
+            <div class="section-heading">
+              <span><img class="section-icon" src="assets/panel-bag.png" alt="" /> 随身背包</span
+              ><span class="inventory-tip">点击装备</span>
+            </div>
             <div class="inventory-grid" id="inventoryGrid"></div>
           </section>
 
           <!-- 0.3.5 城镇杂货商：走进城镇后按 F（拾取键）打开，离开城镇自动收起 -->
           <section class="shop-card panel-block hidden" id="shopCard">
             <div class="section-heading">
-              <span><img class="section-icon" src="assets/panel-shop.png" alt=""> 城镇杂货商</span>
+              <span><img class="section-icon" src="assets/panel-shop.png" alt="" /> 城镇杂货商</span>
               <button class="link-button" id="shopClose" title="关闭面板（F）">关闭</button>
             </div>
             <p class="shop-tip" id="shopTip">金币 0 · 重铸卷 ×0</p>
             <div class="shop-goods" id="shopGoods"></div>
             <div class="section-heading shop-reforge-heading">
-              <span><img class="section-icon" src="assets/panel-reforge.png" alt=""> 词缀重铸</span>
+              <span><img class="section-icon" src="assets/panel-reforge.png" alt="" /> 词缀重铸</span>
               <span class="inventory-tip">每次只重掷一条</span>
             </div>
             <div class="shop-reforge" id="shopReforge"></div>
@@ -142,13 +233,23 @@
             <div class="joystick-knob" id="joystickKnob"></div>
           </div>
         </div>
-        <div class="target-block"><span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span></div>
-        <button class="normal-attack-button" id="normalAttackBtn" title="普通攻击"><img class="attack-icon" src="assets/skill-attack.png" alt=""><span class="attack-key">X</span><strong>普攻</strong><small>100% 攻击</small><span class="skill-tooltip" id="normalAttackTooltip"></span></button>
+        <div class="target-block">
+          <span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span>
+        </div>
+        <button class="normal-attack-button" id="normalAttackBtn" title="普通攻击">
+          <img class="attack-icon" src="assets/skill-attack.png" alt="" /><span class="attack-key">X</span><strong>普攻</strong
+          ><small>100% 攻击</small><span class="skill-tooltip" id="normalAttackTooltip"></span>
+        </button>
         <div class="skill-stack">
-          <div class="action-resource"><div><span id="actionResourceName">资源</span><b id="actionResourceText">-- / --</b></div><div class="action-resource-meter"><span id="actionResourceBar"></span></div></div>
+          <div class="action-resource">
+            <div><span id="actionResourceName">资源</span><b id="actionResourceText">-- / --</b></div>
+            <div class="action-resource-meter"><span id="actionResourceBar"></span></div>
+          </div>
           <div class="skill-bar" id="skillBar"></div>
         </div>
-        <button class="potion-button" id="potionBtn" title="使用生命药水"><img class="potion-icon" src="assets/skill-potion.png" alt="">药水 <span id="potionKey">Q</span><b id="potionCount">3</b></button>
+        <button class="potion-button" id="potionBtn" title="使用生命药水">
+          <img class="potion-icon" src="assets/skill-potion.png" alt="" />药水 <span id="potionKey">Q</span><b id="potionCount">3</b>
+        </button>
       </footer>
     </main>
 
@@ -175,8 +276,12 @@
 
     <div class="class-modal skill-modal hidden" id="skillModal" role="dialog" aria-modal="true" aria-label="技能升级">
       <div class="skill-modal-box">
-        <div class="section-heading"><span><img class="section-icon" src="assets/panel-skill.png" alt=""> 技能升级</span><b id="skillModalPoints">可用技能点：0</b></div>
-        <p class="skill-modal-tip" id="skillModalTip">升级获得技能点；每级提高该技能倍率 +6%（原型简化，上限 10 级）。按 K 或点击右上角「技能」关闭。</p>
+        <div class="section-heading">
+          <span><img class="section-icon" src="assets/panel-skill.png" alt="" /> 技能升级</span><b id="skillModalPoints">可用技能点：0</b>
+        </div>
+        <p class="skill-modal-tip" id="skillModalTip">
+          升级获得技能点；每级提高该技能倍率 +6%（原型简化，上限 10 级）。按 K 或点击右上角「技能」关闭。
+        </p>
         <div class="skill-modal-list" id="skillModalList"></div>
         <button class="icon-button" data-close-modal>关闭</button>
       </div>
@@ -185,7 +290,9 @@
     <!-- 0.6.0 P2 怪物图鉴：106 种收集度，按章节分组，未收集项置灰 -->
     <div class="class-modal skill-modal hidden" id="bestiaryModal" role="dialog" aria-modal="true" aria-label="怪物图鉴">
       <div class="skill-modal-box">
-        <div class="section-heading"><span><i class="section-icon">◈</i> 怪物图鉴</span><b id="bestiaryStats">0 / 0</b></div>
+        <div class="section-heading">
+          <span><i class="section-icon">◈</i> 怪物图鉴</span><b id="bestiaryStats">0 / 0</b>
+        </div>
         <p class="skill-modal-tip">击败过的怪物会记入图鉴。共 10 章 106 种，灰色为未收集。</p>
         <div class="bestiary-list" id="bestiaryList"></div>
         <button class="icon-button" data-close-bestiary>关闭</button>
@@ -194,7 +301,10 @@
 
     <div class="class-modal skill-modal hidden" id="settingsModal" role="dialog" aria-modal="true" aria-label="键位设置">
       <div class="skill-modal-box">
-        <div class="section-heading"><span><img class="section-icon" src="assets/panel-key.png" alt=""> 键位设置</span><b id="settingsHint">点击右侧按键后再按新键</b></div>
+        <div class="section-heading">
+          <span><img class="section-icon" src="assets/panel-key.png" alt="" /> 键位设置</span
+          ><b id="settingsHint">点击右侧按键后再按新键</b>
+        </div>
         <p class="skill-modal-tip">普攻默认 X，紧邻技能键 1-4。移动固定为 WASD / 方向键；键位单独保存，重置游戏不会清除。</p>
         <div class="skill-modal-list" id="keybindList"></div>
         <div class="settings-save-row">

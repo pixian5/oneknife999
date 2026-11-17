@@ -180,6 +180,9 @@ import {
 // 0.8.7 构建版本：与仓库根目录 VERSION 文件保持同步，启动横幅会写进诊断日志。
 const BUILD_VERSION = "0.8.7";
 
+// 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
+const CURRENT_APP_VERSION = "0.8.36";
+
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
 let pendingTravel = null;
@@ -3122,3 +3125,11 @@ if (!loadGame()) {
   logInfo("boot", "chooseClassPrompt");
 }
 requestAnimationFrame(frame);
+// 0.8.36 PWA：移除启动画面（游戏可交互即撤品牌占位）。
+document.getElementById("bootSplash")?.classList.add("hidden");
+// 0.8.36 PWA：注册 Service Worker（正式环境才注册；e2e/探针跳过，避免缓存干扰测试断言）。
+if (!TEST_MODE && "serviceWorker" in navigator && ["https:", "http:"].includes(location.protocol)) {
+  navigator.serviceWorker.register(`sw.js?v=${CURRENT_APP_VERSION}`).catch((error) => {
+    console.warn("[oneknife999] Service Worker 注册失败（不影响游戏）：", error);
+  });
+}
