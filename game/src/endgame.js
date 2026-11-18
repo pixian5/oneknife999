@@ -63,7 +63,9 @@ export function upgradeQuality(quality, bonus = 0) {
 // 层数越高，怪物数值与掉落品质越高——这是百图之后的长期目标循环。
 export const ABYSS_RULES = {
   hpGrowthPerFloor: 0.14,
-  attackGrowthPerFloor: 0.11,
+  // 0.8.38：0.11→0.07。实测 F10 首领层毕业装 10 秒连死 6 次（死亡循环）——
+  // 攻击成长直接乘 boss 基准（本就高于普通怪），10 层 ×2.1 达百图终关 2.3 倍。
+  attackGrowthPerFloor: 0.07,
   expGrowthPerFloor: 0.18,
   bossEvery: 10,
   qualityGrowthPerFloor: 0.15 // 每层累积到 1 才升一档品质

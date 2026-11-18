@@ -7,10 +7,10 @@
 //   导航请求 network-first（保证更新即时生效），离线时回退缓存的 index.html；
 // - activate：清理旧版本缓存（cache name 带构建版本，VERSION 变更即失效）。
 //
-// 更新语义：index.html 里 SW 地址带版本查询串（?v=0.8.37），版本变更触发浏览器重新安装
+// 更新语义：index.html 里 SW 地址带版本查询串（?v=0.8.38），版本变更触发浏览器重新安装
 // SW → activate 清旧缓存 → 壳与素材按需重取。e2e/探针（?e2e=1）由 main.js 侧不注册，互不影响。
 
-const CACHE_VERSION = "oneknife999-v0.8.37";
+const CACHE_VERSION = "oneknife999-v0.8.38";
 const SHELL = ["./", "./index.html", "./game.css", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

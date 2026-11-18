@@ -81,11 +81,11 @@ test("回归5 数值同源：深层怪基础数值 = 主题章基准关同名怪
   assert.ok(abyssMultipliers(1).hp > 1);
 });
 
-test("回归6 Boss 层系数：F10 ×1.35（三阶段）、守门层 ×0.55", () => {
+test("回归6 Boss 层系数：F10 ×1.25（三阶段）、守门层 ×0.55（0.8.38 调参，攻击另设补偿系数）", () => {
   const bossFloor = buildAbyssMap(10);
   const guardFloor = buildAbyssMap(3);
   const base = generatedMap(((10 - 1) % 10) * 10 + 5);
-  assert.equal(bossFloor.boss.hp, Math.round(base.boss.hp * 1.35));
+  assert.equal(bossFloor.boss.hp, Math.round(base.boss.hp * 1.25));
   assert.equal(bossFloor.boss.phases, 3);
   assert.equal(guardFloor.boss.hp, Math.round(generatedMap(((3 - 1) % 10) * 10 + 5).boss.hp * 0.55));
   assert.equal(guardFloor.boss.phases, 2);
