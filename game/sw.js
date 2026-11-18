@@ -10,8 +10,37 @@
 // 更新语义：index.html 里 SW 地址带版本查询串（?v=0.8.38），版本变更触发浏览器重新安装
 // SW → activate 清旧缓存 → 壳与素材按需重取。e2e/探针（?e2e=1）由 main.js 侧不注册，互不影响。
 
-const CACHE_VERSION = "oneknife999-v0.8.38";
-const SHELL = ["./", "./index.html", "./game.css", "./manifest.webmanifest"];
+const CACHE_VERSION = "oneknife999-v0.8.39";
+// 0.8.39：应用壳必须包含全部 ES 模块。此前只缓存 index.html/game.css/manifest，
+// 而 SW 注册发生在整张模块图加载完之后——首次会话的 src/*.js 全绕过缓存，
+// 离线再开时 main.js 取不到，启动画面（z-index 99）永久停留。
+const SHELL = [
+  "./",
+  "./index.html",
+  "./game.css",
+  "./manifest.webmanifest",
+  "./src/assets.js",
+  "./src/audio.js",
+  "./src/combat.js",
+  "./src/config.js",
+  "./src/drops.js",
+  "./src/elite.js",
+  "./src/endgame.js",
+  "./src/feedback.js",
+  "./src/geometry.js",
+  "./src/input.js",
+  "./src/keybinds.js",
+  "./src/logger.js",
+  "./src/main.js",
+  "./src/maps.js",
+  "./src/monster-abilities.js",
+  "./src/persist.js",
+  "./src/render.js",
+  "./src/runtime.js",
+  "./src/shop.js",
+  "./src/skills.js",
+  "./src/util.js"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -55,15 +84,19 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
-      return fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
+      return (
+        fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
+            }
+            return response;
+          })
+          // 0.8.39：cached 在走到 catch 时必然是 undefined（有值时前面已 return），
+          // 返回 undefined 会让 respondWith 直接抛错。给一个 504 空响应兜底。
+          .catch(() => cached || new Response("", { status: 504, statusText: "offline-miss" }))
+      );
     })
   );
 });

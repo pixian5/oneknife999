@@ -80,10 +80,22 @@ export function seededRandom(seedText) {
 
 // 判定某只怪是否精英。返回 null 或 { affixes, reward }。
 // order 是关卡序号（1 起），决定词缀条数。
-export function rollElite({ mapId, index, monsterCount, order, random = Math.random, force = false }) {
+export function rollElite({
+  mapId,
+  index,
+  monsterCount,
+  order,
+  random = Math.random,
+  force = false,
+  // 0.8.39：裂隙层此前传了 forceChance/affixCount，但签名没有这两个字段，被静默丢弃，
+  // 导致「每 5 层必出双词缀精英」完全失效（深层 order=-1 还会让词缀数恒为 1）。
+  forceChance,
+  affixCount
+}) {
   if (monsterCount < ELITE_TUNING.minMonsters) return null;
-  if (!force && random() >= ELITE_TUNING.chance) return null;
-  const count = order > ELITE_TUNING.singleAffixBefore ? 2 : 1;
+  const chance = forceChance ?? ELITE_TUNING.chance;
+  if (!force && random() >= chance) return null;
+  const count = affixCount ?? (order > ELITE_TUNING.singleAffixBefore ? 2 : 1);
   const affixes = pickAffixes(count, random);
   if (!affixes.length) return null;
   return { affixes, reward: affixes.includes("hoard") ? "gold" : "material" };

@@ -61,6 +61,12 @@ export function mapDifficultyOverride(stageNumber) {
 
 // ============ 0.8.33 无尽深层程序化地形（设计稿：docs/20261117-1010） ============
 
+// 0.8.39：仇恨半径由关卡难度决定（基准 190）。此前 41–50 关登记的 aggroMult 只被透传到
+// map.difficulty，没有任何读者；抽成纯函数后既可被 createEntities 使用，也能被单测直接断言。
+export function aggroRangeFor(difficulty) {
+  return Math.round(190 * (difficulty?.aggroMult || 1));
+}
+
 export const ABYSS_MAP_PREFIX = "abyss-F";
 
 export function abyssMapId(floor) {
@@ -211,7 +217,15 @@ export function buildAbyssMap(floor) {
     // 布局层刷怪档位按「九档全开」生成（0-8），但本层只选取了 5~7 种怪——
     // 档位必须对本层实际种数取模，否则 monsterTypes[7] 越界（实测 PageError: undefined.hp，
     // 且异常发生在 persistGame 之前导致层数不落盘）。
-    monsterSpawns: layout.monsterSpawns.map(([x, y, tier, route, progress]) => [x, y, tier % pick, route, progress]),
+    // 0.8.39：布局只产出 0..6 档，纯取模永远落不到深渊档（7/8）。每 3 层把前两只刷怪点
+    // 固定落在深渊档位，其余仍按基础档位取模。
+    monsterSpawns: layout.monsterSpawns.map(([x, y, tier, route, progress], index) => [
+      x,
+      y,
+      index < abyssOnly.length ? pick + index : tier % pick,
+      route,
+      progress
+    ]),
     boss: {
       id: `boss-${id}`,
       name: `${chapter.boss}回响`,

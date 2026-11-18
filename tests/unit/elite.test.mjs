@@ -113,3 +113,12 @@ test("ELITE_TUNING：强度参数守住设计边界", () => {
   assert.ok(ELITE_TUNING.hpMult >= 1.5 && ELITE_TUNING.hpMult <= 2.5);
   assert.ok(ELITE_TUNING.attackMult <= 1.25, "攻击加成必须远低于生命加成，避免秒杀");
 });
+
+test("rollElite：裂隙层的 forceChance 与 affixCount 必须被消费", () => {
+  // 0.8.39 之前签名没有这两个字段，main.js 传了也被静默丢弃，裂隙层与普通层完全一致。
+  const rift = rollElite({ mapId: "abyss-F5", index: 0, monsterCount: 10, order: -1, random: () => 0.5, forceChance: 1, affixCount: 2 });
+  assert.ok(rift, "forceChance=1 时应必出精英");
+  assert.equal(rift.affixes.length, 2, "affixCount=2 时应为双词缀");
+  const normal = rollElite({ mapId: "ash_outskirts", index: 0, monsterCount: 10, order: 5, random: () => 0.5 });
+  assert.equal(normal, null, "普通层随机 0.5 仍应低于默认 0.12 之外的阈值（不改变默认行为）");
+});

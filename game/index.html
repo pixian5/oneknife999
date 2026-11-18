@@ -51,6 +51,14 @@
       <img src="assets/logo-word.png" alt="一刀999" />
       <span class="boot-tip">烬阳服务器连接中……</span>
     </div>
+    <!-- 0.8.39：启动画面兜底。若 main.js 因离线缓存缺失或加载失败始终未执行，
+         8 秒后强制撤掉占位，避免永久停在「连接中」。 -->
+    <script>
+      setTimeout(function () {
+        var splash = document.getElementById("bootSplash");
+        if (splash && !splash.classList.contains("hidden")) splash.classList.add("hidden");
+      }, 8000);
+    </script>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-lockup">

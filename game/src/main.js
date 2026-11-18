@@ -27,7 +27,8 @@ import {
   pathTurnCount,
   ensureAbyssMap,
   ABYSS_MAP_PREFIX,
-  abyssFloorFromId
+  abyssFloorFromId,
+  aggroRangeFor
 } from "./maps.js";
 import { pathLength } from "./geometry.js";
 import { $, clamp, distance, rand } from "./util.js";
@@ -181,7 +182,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.38";
+const CURRENT_APP_VERSION = "0.8.39";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -287,6 +288,8 @@ export function createEntities(map) {
       spawnY: spawn[1],
       patrolRadius: 55 + Math.random() * 50,
       aggro: false,
+      // 0.8.39：仇恨半径此前硬编码 190，烬火章 41–50 登记的 aggroMult 从未被消费。
+      aggroRange: aggroRangeFor(map.difficulty),
       friendly: false,
       // 0.6.0 P0 怪物行为：把 config 里 56 种怪的行为描述落成可执行配置（见 monster-abilities.js）。
       // 0.7.3 gateAbilities 再按细粒度开关裁剪：noabilities 总闸关闭时三个开关全 false，
@@ -2039,8 +2042,10 @@ export function updateMonsterAI(entity, dt) {
   const distToPlayer = distance(entity, player);
   const anchorDistance = Math.hypot(entity.x - entity.spawnX, entity.y - entity.spawnY);
   const canAggro = !entity.npc || entity.hostile;
-  if (!entity.aggro && canAggro && !sanctuary && player.invulnerable <= 0 && distToPlayer < 190) entity.aggro = true;
-  if (entity.aggro && (distToPlayer > 340 || anchorDistance > 430 || sanctuary)) entity.aggro = false;
+  const aggroRange = entity.aggroRange || 190;
+  if (!entity.aggro && canAggro && !sanctuary && player.invulnerable <= 0 && distToPlayer < aggroRange) entity.aggro = true;
+  // 脱战半径同比缩放（340/190≈1.79），避免小仇恨半径的怪一旦锁定就甩不掉。
+  if (entity.aggro && (distToPlayer > aggroRange * 1.79 || anchorDistance > 430 || sanctuary)) entity.aggro = false;
   // 0.3.4 攻击前摇：蓄力期间原地不动，玩家可在红色蓄力环收拢前走位躲开（前摇结束落空）。
   if (entity.windup > 0) return;
   let targetX;

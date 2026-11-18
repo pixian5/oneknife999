@@ -8,6 +8,7 @@ import {
   MAP_DIFFICULTY_OVERRIDES,
   hexToRgba,
   mapDifficultyOverride,
+  aggroRangeFor,
   campaignGrowth,
   mapsPerLevel,
   generatedLayout,
@@ -280,4 +281,10 @@ test("0.8.11：100 张地图的首领战区填充必须是半透明，避免整�
   });
   // 地标装饰仍保留章节实色（半透明会让地标几乎看不见）。
   for (const chapter of CHAPTERS) assert.match(chapter.special, /^#[0-9a-f]{6}$/i);
+});
+
+test("aggroRangeFor：烬火章仇恨半径 190→120，未登记关卡保持 190", () => {
+  assert.equal(aggroRangeFor(mapDifficultyOverride(41)), 120, "第 41 关应按 aggroMult 0.63 缩到 120");
+  assert.equal(aggroRangeFor(undefined), 190, "未登记关卡保持基准 190");
+  assert.equal(aggroRangeFor({ aggroMult: 1 }), 190);
 });
