@@ -117,3 +117,18 @@ test("附带：深层地图结构与命名（供 loadMap/渲染的必要字段�
   const counts = new Set([buildAbyssMap(1), buildAbyssMap(2), buildAbyssMap(3)].map((m) => m.monsterTypes.length));
   assert.ok(counts.size > 1, "相邻层数怪种数应有变化");
 });
+
+test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
+  // 0.8.39 之前 spawn 用 tier % pick（5/6/7），而深渊怪挂在索引 pick / pick+1，
+  // 永远取不到 —— 「每 3 层 2 只深渊化怪」整段配置空转。
+  for (const floor of [3, 6, 9, 12]) {
+    const map = buildAbyssMap(floor);
+    const deepIndexes = map.monsterTypes.map((type, index) => (type.deepTuned ? index : -1)).filter((index) => index >= 0);
+    assert.ok(deepIndexes.length > 0, `F${floor} 应包含深渊化怪`);
+    const usedTiers = new Set(map.monsterSpawns.map((spawn) => spawn[2]));
+    assert.ok(
+      deepIndexes.some((index) => usedTiers.has(index)),
+      `F${floor} 的刷怪点必须出现深渊怪档位 ${deepIndexes}，实际档位 ${[...usedTiers].sort((a, b) => a - b)}`
+    );
+  }
+});
