@@ -8,7 +8,10 @@
 
 ## 快速开始
 
-**在线游玩（Hugging Face Space 静态托管）**：https://xbzsb-oneknife999.static.hf.space
+**在线游玩**：
+
+- **Instabox 公网（当前主入口，随 `main` 更新）**：https://8080-agqxoy6u363jxgfufg2onqxbm4.instabox.tech
+- Hugging Face Space（静态托管，更新节奏可能落后于 `main`）：https://xbzsb-oneknife999.static.hf.space
 
 本地运行：
 
@@ -43,6 +46,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.8.39 **容器部署与接手手册（纯部署轮，不改游戏）**：容器无持久盘，实测一轮内 `/opt` 仓库、8080 进程、`/var/log` 日志与 npm 全局包同时被清空。本轮把「重建部署」固化成 `scripts/container-deploy.sh`（幂等：clone/对齐 → 起静态服务 → 四项验收 → 可选应急隧道；检测到未提交改动时中止，`FORCE=1` 才允许硬对齐），把 instabox 实例从 0.8.38 对齐到 0.8.39（`src/maps.js` md5 `833e1018…`→`e84f8d95…`），并记录隧道选型实测（localhost.run 可用但限速、pinggy 被 reset、serveo 浏览器告警页、cloudflared 下载限速）。验收：容器本地与 instabox 公网四项全通过、真实 Chromium 打开 `#classModal` 可见且 console 零 error。详见 [docs/20261118-2350-容器部署与接手手册-DeepSeek-V4.1-Flash.md](docs/20261118-2350-容器部署与接手手册-DeepSeek-V4.1-Flash.md)。
 
 0.8.39 **增量审查修复（P1×3 + PWA）**：① 烬火章 41–50 的 `aggroMult` 此前只透传进 `map.difficulty`、无任何消费者，0.8.34 的「入场集火」修复实际空转；抽出 `aggroRangeFor(difficulty)`，实体生成时按 190×aggroMult 写入 `aggroRange`，AI 进战/脱战半径同比缩放（190→120，脱战 340→215）。② 深层「深渊化怪」永远刷不出来：布局档位只有 0..6，`tier % pick` 取不到索引 7/8；改为每 3 层让前两只刷怪点落在深渊档位。③ 裂隙层 `forceChance/affixCount` 被 `rollElite` 静默丢弃（签名没有这两个字段），补上并保持默认行为不变。④ PWA 首访后离线永久停在启动画面：SW 壳缺 21 个 `src/*.js`、`catch(() => cached)` 返回 undefined；补齐 SHELL、加 504 兜底、index.html 加 8 秒启动画面超时。验证：220 单测全绿（+3 行为断言：aggroRange 120、深渊档位可达、裂隙双词缀），`test:ui`/`abilities`/`elite` 全 PASS。详见 [docs/20261118-2200-增量审查修复-DeepSeek-V4.1-Flash.md](docs/20261118-2200-增量审查修复-DeepSeek-V4.1-Flash.md)。
 
