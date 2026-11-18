@@ -160,7 +160,8 @@ export function buildAbyssMap(floor) {
     });
   // Boss：主题章首领做「回响」，首领层（每 10 层）×1.35、守门层 ×0.55；
   // 深层成长倍率仍在 createEntities 层叠加。
-  const bossScale = f % 10 === 0 ? 1.35 : 0.55;
+  // 0.8.38：hp 首领 1.35→1.25（缩短 boss 战时长）；attack 补偿见下方（防攻击成长叠加爆炸）。
+  const bossScale = f % 10 === 0 ? 1.25 : 0.55;
   const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
   const id = abyssMapId(f);
   // 0.8.34 P2 裂隙层：每 5 层一次（f%5===0 且非首领层），精英概率与词缀数提升（createEntities 读取）。
@@ -216,7 +217,9 @@ export function buildAbyssMap(floor) {
       name: `${chapter.boss}回响`,
       color: chapter.accent,
       hp: Math.round(anchored(3000, 67.5) * bossScale),
-      attack: Math.round(anchored(112, 0.42) * (f % 10 === 0 ? 1.1 : 0.8)),
+      // 0.8.38 攻击补偿：boss 基准本高于普通怪，再乘 abyss 攻击成长会指数化——
+      // 首领层 1.1→0.85、守门层 0.8→0.65（实测 F10 修正前为百图终关攻击 2.3 倍，10 秒死亡循环）。
+      attack: Math.round(anchored(112, 0.42) * (f % 10 === 0 ? 0.85 : 0.65)),
       defense: anchored(60, 0.05),
       exp: 0,
       gold: anchored(1100, 6.5),
