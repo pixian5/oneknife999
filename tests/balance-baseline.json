@@ -1,0 +1,79 @@
+{
+  "note": "0.8.40 线上实测基线（2026-11-19，箱子 xjp / revision 68，VERSION 0.8.40）。默认回归模式只禁止“比这更差”，设计目标断言用 --strict。",
+  "measuredBy": "node tests/balance-sim.mjs && node tests/balance-envelope.mjs",
+  "tolerance": {
+    "minutes": 0.08,
+    "last90": 0.2,
+    "bossShare": 0.05,
+    "potion": 0.25,
+    "gold": 0.25,
+    "spread": 1.1,
+    "potionAbs": 300
+  },
+  "spread": 1.255,
+  "stats": {
+    "warrior": {
+      "totalMinutes": 36.5,
+      "deaths": 10,
+      "zeroDeathMaps": 97,
+      "last90Avg": 20.3,
+      "bossShare": 0.678,
+      "potion": 7053,
+      "goldEnd": 92341,
+      "chapters": [
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "mage": {
+      "totalMinutes": 45.8,
+      "deaths": 0,
+      "zeroDeathMaps": 100,
+      "last90Avg": 27.1,
+      "bossShare": 0.732,
+      "potion": 0,
+      "goldEnd": 16393,
+      "chapters": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "taoist": {
+      "totalMinutes": 37.1,
+      "deaths": 0,
+      "zeroDeathMaps": 100,
+      "last90Avg": 21.8,
+      "bossShare": 0.677,
+      "potion": 0,
+      "goldEnd": 36060,
+      "chapters": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}
