@@ -47,6 +47,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 
 ## 【当前开发进度】
 
+0.8.39 **真实速度游玩与性能实测（验收轮，不改游戏）**：不开 `fast` 用真实伤害/时钟跑前 3 关，耗时 45.6 / 122.9 / 163.3 s，死亡 0→1→3，Lv1→4，进入第 4 关；战斗中 **60.1 fps**（p99 19.1 ms、8 s 内仅 2 帧 >20 ms，采样须在进游戏 4 s 后，否则加载期会读到 17.5 fps 假象）；390×844 移动端 9 个顶栏按钮零越界、无横向滚动、摇杆拖拽位移 191 px、画布 372×481。同时锁定 **「换图不落盘」P2**：`main.js:1916 doTravel()` 无 `persistGame()`，进新图后刷新退回上一图（两次运行 100% 复现），fast 百图 e2e 因每关在结算点落盘而正好绕开。详见 [docs/20261119-1310-真实速度游玩与性能实测-DeepSeek-V4.1-Flash.md](docs/20261119-1310-真实速度游玩与性能实测-DeepSeek-V4.1-Flash.md)。
+
 0.8.39 **三职业百图全量通关（验收轮，不改游戏）**：真实 Chromium 跑完 3 × 100 关，`RUN 1/1 warrior Lv.41: PASS`、`RUN 1/2 mage Lv.41: PASS`、`RUN 2/2 taoist Lv.41: PASS`，`ALL JOURNEYS PASSED`；累计死亡 战士 28 / 道士 58 / 法师 74，错误扫描 0。战士曲线每 10 关采样：死亡在 40→50 关陡增（9→20），50–80 关只 +2，90 关后再 +5，无单关断层。同时记录 aarch64 无头浏览器安装路径（官方 CDN 47KB/s 不可用 → npmmirror `chromium-headless-shell/1155` arm64 包 + 软链到 1243 目录，Chromium 133 跑满 300 关次零协议错误）。详见 [docs/20261119-0254-三职业百图全量通关记录-DeepSeek-V4.1-Flash.md](docs/20261119-0254-三职业百图全量通关记录-DeepSeek-V4.1-Flash.md)。
 
 0.8.39 **容器部署与接手手册（纯部署轮，不改游戏）**：容器无持久盘，实测一轮内 `/opt` 仓库、8080 进程、`/var/log` 日志与 npm 全局包同时被清空。本轮把「重建部署」固化成 `scripts/container-deploy.sh`（幂等：clone/对齐 → 起静态服务 → 四项验收 → 可选应急隧道；检测到未提交改动时中止，`FORCE=1` 才允许硬对齐），把 instabox 实例从 0.8.38 对齐到 0.8.39（`src/maps.js` md5 `833e1018…`→`e84f8d95…`），并记录隧道选型实测（localhost.run 可用但限速、pinggy 被 reset、serveo 浏览器告警页、cloudflared 下载限速）。验收：容器本地与 instabox 公网四项全通过、真实 Chromium 打开 `#classModal` 可见且 console 零 error。详见 [docs/20261118-2350-容器部署与接手手册-DeepSeek-V4.1-Flash.md](docs/20261118-2350-容器部署与接手手册-DeepSeek-V4.1-Flash.md)。
