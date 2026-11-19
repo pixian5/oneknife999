@@ -59,34 +59,177 @@ const ctx = canvas.getContext("2d");
 // 战斗实体贴图缓存（0.4.4）：玩家 / 怪物 / Boss 用生成的美术贴图替换几何图形。
 // Image 加载是异步的——首次帧可能未就绪，此时 img.complete 为假，自动回退原几何绘制；
 // 加载完成后游戏每帧重绘自然生效，无需额外回调。
-const spriteCache = new Map();
-function loadSprite(key, src) {
-  if (!spriteCache.has(key)) {
-    const img = new Image();
-    img.src = src;
-    spriteCache.set(key, img);
-  }
-  return spriteCache.get(key);
+//
+// 0.8.41 贴图内存治理（真实崩溃根因）：
+// 素材库里的怪物动作帧是 2048×2048 的 PNG，单张解码后占 16MB；一关 4 种怪 × 4 帧 = 256MB，
+// 旧实现永久缓存所有贴图，连跑 4–5 关就累计 1GB 以上，4GB 内存的机器直接杀掉渲染进程。
+// 现在的策略：
+// 1) 按用途把贴图降采样到实际显示所需尺寸（普通贴图 256、首领 512、底图 2048、章节图 1280）；
+// 2) 解码完成后用 canvas 替换原 Image 并丢弃大图，避免浏览器继续持有 2048 解码位图；
+// 3) 贴图缓存与染色缓存都做「字节预算 + LRU 淘汰」，总占用有硬上限；
+// 4) 限制同时解码数量，避免一关十几张 2048 图同时解码造成瞬时峰值。
+const SPRITE_BUDGET_BYTES = 128 * 1024 * 1024;
+const TINT_BUDGET_BYTES = 24 * 1024 * 1024;
+const MAX_IN_FLIGHT = 6;
+const SPRITE_FALLBACK_SIDE = 256;
+const spriteCache = new Map(); // key -> { key, src, drawable, bytes, ready, dead }
+let spriteBytes = 0;
+let spriteInFlight = 0;
+const spriteQueue = [];
+
+// 按 key 前缀决定降采样后的最大边（像素）。只降采样，不放大。
+function spriteMaxSide(key) {
+  if (key.startsWith("map-bg-")) return 2048;
+  if (key.startsWith("chapter-bg-")) return 1280;
+  if (key.startsWith("boss-")) return 512;
+  if (key.startsWith("ui-") || key.startsWith("icon-")) return 128;
+  return SPRITE_FALLBACK_SIDE;
 }
-const spriteReady = (img) => img && img.complete && img.naturalWidth > 0;
-const tintCache = new Map();
+
+function drawableSize(drawable) {
+  if (!drawable) return { w: 0, h: 0 };
+  return drawable.naturalWidth ? { w: drawable.naturalWidth, h: drawable.naturalHeight } : { w: drawable.width, h: drawable.height };
+}
+
+function releaseDrawable(drawable) {
+  if (!drawable) return;
+  // canvas 主动清零才能让浏览器回收像素内存；Image 用空 src 解除引用
+  if (typeof drawable.getContext === "function") {
+    drawable.width = 0;
+    drawable.height = 0;
+  } else {
+    drawable.src = "";
+  }
+}
+
+function trimSpriteCache(keepKey = null) {
+  let guard = 0;
+  while (spriteBytes > SPRITE_BUDGET_BYTES && spriteCache.size > 1 && guard < 500) {
+    guard += 1;
+    let victimKey = null;
+    for (const [key, entry] of spriteCache) {
+      if (key === keepKey || !entry.ready) continue;
+      victimKey = key;
+      break;
+    }
+    if (!victimKey) break;
+    const entry = spriteCache.get(victimKey);
+    spriteCache.delete(victimKey);
+    spriteBytes -= entry.bytes || 0;
+    entry.dead = true;
+    releaseDrawable(entry.drawable);
+  }
+}
+
+function startSpriteLoad(entry) {
+  spriteInFlight += 1;
+  const img = entry.drawable;
+  const done = (ok) => {
+    if (entry.finished) return; // onload / onerror 可能因 src 清空再次触发，只结算一次
+    entry.finished = true;
+    spriteInFlight = Math.max(0, spriteInFlight - 1);
+    if (!entry.dead && spriteCache.get(entry.key) === entry && ok) {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (w && h) {
+        const maxSide = spriteMaxSide(entry.key);
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        const targetW = Math.max(1, Math.round(w * scale));
+        const targetH = Math.max(1, Math.round(h * scale));
+        if (scale < 1) {
+          // 降采样后只保留小图，原 2048 解码位图立刻放弃，避免常驻内存
+          const small = document.createElement("canvas");
+          small.width = targetW;
+          small.height = targetH;
+          const g = small.getContext("2d");
+          g.drawImage(img, 0, 0, targetW, targetH);
+          entry.drawable = small;
+          entry.bytes = targetW * targetH * 4;
+          spriteBytes += entry.bytes;
+          img.onload = null;
+          img.onerror = null;
+          img.src = "";
+        } else {
+          entry.bytes = w * h * 4;
+          spriteBytes += entry.bytes;
+        }
+        entry.ready = true;
+      }
+    }
+    trimSpriteCache(entry.key);
+    const next = spriteQueue.shift();
+    if (next) startSpriteLoad(next);
+  };
+  img.onload = () => done(true);
+  img.onerror = () => done(false);
+  img.src = entry.src;
+}
+
+function loadSprite(key, src) {
+  const hit = spriteCache.get(key);
+  if (hit) {
+    // LRU：命中后移到队尾，淘汰时优先清理最久未用的
+    spriteCache.delete(key);
+    spriteCache.set(key, hit);
+    return hit.drawable;
+  }
+  const entry = { key, src, drawable: new Image(), bytes: 0, ready: false, dead: false, finished: false };
+  spriteCache.set(key, entry);
+  if (spriteInFlight < MAX_IN_FLIGHT) startSpriteLoad(entry);
+  else spriteQueue.push(entry);
+  trimSpriteCache(key);
+  return entry.drawable;
+}
+const spriteReady = (img) => !!img && (img.naturalWidth ? img.complete && img.naturalWidth > 0 : img.width > 0);
+
+const tintCache = new Map(); // `key|color` -> { canvas, bytes }
+let tintBytes = 0;
 function loadTintedSprite(key, src, color) {
-  const img = loadSprite(key, src);
-  if (!spriteReady(img)) return null;
-  const cacheKey = `${key}|${color}`;
-  if (!tintCache.has(cacheKey)) {
+  const sprite = loadSprite(key, src);
+  if (!spriteReady(sprite)) return null;
+  if (spriteCache.get(key)?.ready) {
+    const cacheKey = `${key}|${color}`;
+    const hit = tintCache.get(cacheKey);
+    if (hit) {
+      tintCache.delete(cacheKey);
+      tintCache.set(cacheKey, hit);
+      return hit.canvas;
+    }
+    const { w, h } = drawableSize(sprite);
+    if (!w || !h) return null;
     const tinted = document.createElement("canvas");
-    tinted.width = img.naturalWidth;
-    tinted.height = img.naturalHeight;
+    tinted.width = w;
+    tinted.height = h;
     const g = tinted.getContext("2d");
-    g.drawImage(img, 0, 0);
+    g.drawImage(sprite, 0, 0, w, h);
     g.globalCompositeOperation = "source-atop";
     g.globalAlpha = 0.22;
     g.fillStyle = color;
-    g.fillRect(0, 0, tinted.width, tinted.height);
-    tintCache.set(cacheKey, tinted);
+    g.fillRect(0, 0, w, h);
+    tintCache.set(cacheKey, { canvas: tinted, bytes: w * h * 4 });
+    tintBytes += w * h * 4;
+    // 染色图同样按预算淘汰，避免每种怪 × 每章配色无限堆积
+    while (tintBytes > TINT_BUDGET_BYTES && tintCache.size > 1) {
+      const victim = tintCache.keys().next().value;
+      const old = tintCache.get(victim);
+      tintCache.delete(victim);
+      tintBytes -= old.bytes || 0;
+      releaseDrawable(old.canvas);
+    }
+    return tinted;
   }
-  return tintCache.get(cacheKey);
+  return null;
+}
+
+// 供 e2e / 诊断面板核对贴图缓存占用（单位：MB）
+export function spriteCacheStats() {
+  return {
+    sprites: spriteCache.size,
+    spriteMB: Math.round((spriteBytes / 1048576) * 10) / 10,
+    tints: tintCache.size,
+    tintMB: Math.round((tintBytes / 1048576) * 10) / 10,
+    inFlight: spriteInFlight
+  };
 }
 const drawableReady = (source) => !!source && (source.naturalWidth ? source.complete && source.naturalWidth > 0 : source.width > 0);
 const wrap = document.querySelector("#canvasWrap");
