@@ -1,7 +1,7 @@
 // 纯函数单元测试：战斗结算（combat.js）。运行方式：npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience } from "../../game/src/combat.js";
+import { computeDamage, computeKillReward, computeIncomingDamage, applyExperience, bossDamageCapFraction } from "../../game/src/combat.js";
 
 // 队列式假随机：按给定顺序返回随机值，用尽后回退为 0，保证结果完全可复现。
 const queueRandom = (values) => {
@@ -91,9 +91,11 @@ test("computeDamage：快进模式放大 25 倍并把首领单次上限提高到
   assert.equal(bossFast.damage, Math.ceil(900 * 0.18), "首领快进上限 = maxHp 的 18%");
 });
 
-test("computeDamage：首领单次受击不超过 3.5% 最大生命且破势只加 7", () => {
+test("computeDamage：首领单次受击不超过公式上限（随血量递减）且破势只加 7", () => {
+  const cap = Math.ceil(900 * bossDamageCapFraction(900));
+  assert.ok(cap < 900 * 0.05 || cap === Math.ceil(900 * 0.05), "浅水区上限 5%");
   const result = computeDamage({ target: BOSS, hero: HERO, player: playerOf(), multiplier: 3.2, kind: "爆发", random: queueRandom([0.5]) });
-  assert.equal(result.damage, Math.ceil(900 * 0.035));
+  assert.equal(result.damage, cap);
   assert.equal(result.chargeGain, 7);
 });
 

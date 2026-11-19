@@ -141,11 +141,11 @@ export function buildAbyssMap(floor) {
         : name.startsWith(chapter.short)
           ? name
           : `${chapter.short}${name}`;
-      const attack = anchored(70 + typeIndex * 2.785, 0.32);
+      const attack = anchored(70 + typeIndex * 2.785, DIFFICULTY_TUNING.monsterAttackSlope);
       return {
         name: rawName,
         color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
-        hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)),
+        hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth)),
         attack,
         defense: anchored(16 + typeIndex * 0.4875, 0.35),
         exp: 0,
@@ -157,7 +157,7 @@ export function buildAbyssMap(floor) {
         ...(deep
           ? {
               deepTuned: true,
-              hp: Math.round(Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * 0.0097)) * 1.6),
+              hp: Math.round(Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth)) * 1.6),
               attack: Math.round(attack * 1.15),
               gold: anchored(36 + typeIndex * 1.125, 1.4) * 2
             }
@@ -1066,6 +1066,15 @@ export function campaignGrowth(clearedMaps) {
   return { level: 31 + Math.floor((cleared - 60) / 4), exp: ((cleared - 60) % 4) * 25, nextExp: 100, mapsPerLevel: 4 };
 }
 
+// 0.8.40 调参面板：难度曲线的乘数只在这里改，别再对文件做 sed。
+// 当前值 = 0.8.39/0.8.40 线上行为（默认零变化）。改完跑 `node tests/balance-envelope.mjs --sim`。
+export const DIFFICULTY_TUNING = {
+  monsterHpGrowth: 0.0097,
+  monsterAttackSlope: 0.32,
+  // 每张图的清怪目标。实测 8/8/7/8/10/12 + 血量 0.045 能把 Boss 占比压到 53–55%。
+  killsFor: (index) => (index === 0 ? 8 : index < 4 ? 10 : index < 10 ? 5 : index < 40 ? 6 : index < 70 ? 7 : 8)
+};
+
 // 布局核心（0.8.33 参数化）：key 同时充当种子源与站点/纵向位的取模输入；
 // 百图壳传 stageNumber（行为与旧版逐字节一致），深层壳传独立种子空间的 key，互不撞布局。
 function buildLayout(key, siteIndex, chapter, townWidth, eliteAll) {
@@ -1390,7 +1399,7 @@ export function generatedMap(stageNumber) {
       color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
       // 9 档数值：覆盖与原 4 档相同的区间（480 → 620），步长 = 原步长 × 3/8。
       // 若按 20.8 步长会把最高档抬到 646（比原第 4 档强 20%），实测第 15 关死亡中位数因此从 1 升到 4。
-      hp: Math.round((480 + typeIndex * 17.5) * (1 + (stageNumber - 4) * 0.0097)),
+      hp: Math.round((480 + typeIndex * 17.5) * (1 + (stageNumber - 4) * DIFFICULTY_TUNING.monsterHpGrowth)),
       attack,
       defense: anchored(16 + typeIndex * 0.4875, 0.35),
       exp: 0,
@@ -1719,7 +1728,7 @@ MAP_ORDER.forEach((id, index) => {
 export const MAP_CLEAR_RULES = Object.fromEntries(
   MAP_ORDER.map((id, index) => {
     const map = MAPS[id];
-    const kills = index === 0 ? 8 : index < 4 ? 10 : index < 10 ? 5 : index < 40 ? 6 : index < 70 ? 7 : 8;
+    const kills = DIFFICULTY_TUNING.killsFor(index);
     return [
       id,
       {

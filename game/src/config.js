@@ -90,7 +90,9 @@ export const CLASSES = {
     defense: 10,
     speed: 205,
     range: 220,
-    cooldown: 0.86,
+    // 0.8.40 F4（部分）：0.86 → 0.76。法师攻速最慢，深度 100 的首领战（~49 刀）会顶到 42s，
+    // 超出「首领 12–40s」的设计上限；回调到 0.76 后 37s，与战士/道士同区间。
+    cooldown: 0.76,
     skills: [
       {
         name: "雷矛术",

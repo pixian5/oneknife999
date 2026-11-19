@@ -64,3 +64,10 @@ test("精英立绘：10 个场所母题全部有真实 PNG", () => {
     assert.ok(exists(`monster-full-精英-${name}.png`), `精英立绘不存在：${name}`);
   }
 });
+
+test("召唤物：骨卫四动作解析到真实文件（0.8.40 修 404）", () => {
+  for (const action of ["idle", "walk", "attack", "hit"]) {
+    const name = resolveMonsterSpriteName("骨卫", action, { chapter: 1 });
+    assert.ok(exists(name), `骨卫 / ${action} 贴图不存在：${name}`);
+  }
+});

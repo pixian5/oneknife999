@@ -18,6 +18,15 @@ export const MONSTER_ATTACK_RULES = {
   boss: { windup: 0.6, cooldown: 1.7, gate: 1.7 }
 };
 
+// 0.8.40 F3：首领单刀上限系数随首领血量规模递减（血量随深度增长，等价于「越深越硬」）。
+// 旧值恒定 3.5%：血量涨 10.5×（900→9480），单刀上限同步涨 10.5×，Boss 永远 ~43 刀、与深度无关。
+// 现按血量线性递减 5.0%→2.6%：第 100 关单刀只能削 ~2.7% 血（~50 刀），第 25 关 ~37 刀 → 1.35×。
+export function bossDamageCapFraction(maxHp, fastForward = false) {
+  if (fastForward) return 0.18;
+  const hp = Number(maxHp) || 0;
+  return Math.max(0.0264, Math.min(0.05, 0.0659 - hp * 4.17e-6));
+}
+
 // 计算一次攻击的伤害。
 // target 需提供 defense/maxHp/boss；player 需提供 level/charge/equipment；hero 为职业配置。
 // 返回 { damage, critical, chargeGain }：伤害、是否触发满破势爆发、本次应积累的破势值。
@@ -37,7 +46,7 @@ export function computeDamage({ target, hero, player, multiplier, kind, fastForw
   if (critical) damage = Math.round(damage * 1.55);
   if (fastForward) damage *= 25;
   // 首领单次受击上限，避免高倍率技能跳过阶段战设计。
-  if (target.boss) damage = Math.min(damage, Math.ceil(target.maxHp * (fastForward ? 0.18 : 0.035)));
+  if (target.boss) damage = Math.min(damage, Math.ceil(target.maxHp * bossDamageCapFraction(target.maxHp, fastForward)));
   return { damage, critical, chargeGain: target.boss ? 7 : 10 };
 }
 

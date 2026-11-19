@@ -1925,6 +1925,9 @@ function doTravel(exit, target) {
   });
   log(`通过出口前往 <b>${target.name}</b>……`, "loot");
   loadMap(exit.target, exit.spawn.x, exit.spawn.y);
+  // 0.8.40 F1：换图后立即落盘。loadMap() 只 renderAll()，此前全靠 update→advanceGuide 偶然补写，
+  // guideStep=99 的老档整图白走（新图内的击杀/掉落也一起丢）。
+  persistGame();
 }
 
 export function confirmTravel() {
