@@ -78,7 +78,8 @@ import {
   renderTarget,
   renderPlayer,
   renderInventory,
-  renderTravelConfirm
+  renderTravelConfirm,
+  spriteCacheStats
 } from "./render.js";
 import { persistGame, readSavedGame, clearStorage, sanitizeSavedGame, migrateSave, CURRENT_SAVE_VERSION } from "./persist.js";
 import {
@@ -182,7 +183,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.40";
+const CURRENT_APP_VERSION = "0.8.41";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -2931,6 +2932,8 @@ if (TEST_MODE) {
   window.__ONEKNIFE_E2E__ = {
     // 0.8.8：结构化事件时间线（击杀/掉落/升级/通关/存档等），供流程级断言使用。
     timeline: (limit = 300) => traceEvents(limit),
+    // 0.8.41：贴图缓存占用探针，回归时核对「连跑多关内存不涨」
+    spriteStats: () => spriteCacheStats(),
     clearTimeline: () => clearTraceEvents(),
     // 0.8.13：仅 e2e 使用——对指定实体直接扣血，用于验证精英死亡词缀（分裂 / 毒爆）。
     // 走 defeat() 的完整死亡流程，但不经过玩家伤害公式，测试才能精确控制击杀时机。
