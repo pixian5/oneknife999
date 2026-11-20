@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.46";
+const CURRENT_APP_VERSION = "0.8.47";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -665,6 +665,26 @@ export function nearestTargets(range, limit = 1) {
     .slice(0, limit);
 }
 
+// 0.8.47：自动接近的落点：只对“点普攻时选中的那只怪”生效，手动走位/换目标立即取消。
+export function clearAutoAttack() {
+  if (state?.player) state.player.autoAttackId = null;
+}
+
+function tickAutoAttack() {
+  if (!state || pauseState.paused) return;
+  const id = state.player.autoAttackId;
+  if (!id) return;
+  const target = state.entities.find((entity) => entity.id === id && entity.alive);
+  if (!target || state.player.targetId !== id) {
+    state.player.autoAttackId = null;
+    return;
+  }
+  if (distance(state.player, target) <= activeHero().range && state.player.attackTimer <= 0) {
+    state.player.autoAttackId = null;
+    normalAttack();
+  }
+}
+
 export function normalAttack() {
   if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   if (!state) return;
@@ -679,6 +699,7 @@ export function normalAttack() {
   }
   const target = findTarget();
   if (!target) {
+    state.player.autoAttackId = null; // 0.8.47：没有目标就撤销自动接近意图
     logThrottled("attack-notarget", 800, "debug", "input", "attackBlocked", { reason: "noTarget", range: hero.range });
     // 0.8.43：不再只弹“附近没有目标”。把最近的敌人距离报出来，玩家才知道该往哪走。
     const nearest = state.entities
@@ -695,6 +716,9 @@ export function normalAttack() {
   const targetDist = Math.round(distance(state.player, target));
   if (distance(state.player, target) > hero.range) {
     state.player.targetId = target.id;
+    // 0.8.47：点一次普攻 = 走近并在进入射程后自动打一次，不再让玩家反复点。
+    // 提示里不再写死点击瞬间的距离，避免角色走到跟前了还残留“距离 289”。
+    state.player.autoAttackId = target.id;
     setMoveTarget({ x: target.x, y: target.y });
     logThrottled("attack-outrange", 400, "debug", "input", "attackBlocked", {
       reason: "outOfRange",
@@ -702,9 +726,9 @@ export function normalAttack() {
       dist: targetDist,
       range: hero.range
     });
-    showToast(`正在接近 ${target.name}：距离 ${targetDist}，进入 ${hero.range} 内才出手`);
     return;
   }
+  state.player.autoAttackId = null; // 已经在射程内，手动这一下直接打
   const normalAttackCost = state.classId === "mage" ? 8 : 0;
   if (normalAttackCost > 0 && state.player.resource < normalAttackCost) {
     logThrottled("attack-resource", 600, "debug", "input", "attackBlocked", {
@@ -1867,7 +1891,10 @@ export function movePlayer(dt) {
   if (keys.s || keys.arrowdown) dy += 1;
   if (keys.a || keys.arrowleft) dx -= 1;
   if (keys.d || keys.arrowright) dx += 1;
-  if (dx || dy) setMoveTarget(null);
+  if (dx || dy) {
+    setMoveTarget(null);
+    state.player.autoAttackId = null; // 0.8.47：手动移动优先，撤销自动接近
+  }
   // 键盘优先；没有键盘输入时读虚拟摇杆，推力大小按摇杆偏移量缩放（键盘与点击寻路保持全速）。
   let intensity = 1;
   if (!dx && !dy && joystick.active && (joystick.x || joystick.y)) {
@@ -1875,6 +1902,7 @@ export function movePlayer(dt) {
     dy = joystick.y;
     intensity = Math.min(1, Math.hypot(dx, dy));
     setMoveTarget(null);
+    state.player.autoAttackId = null; // 0.8.47：摇杆移动优先，撤销自动接近
   }
   if (!dx && !dy && moveTarget) {
     dx = moveTarget.x - state.player.x;
@@ -2326,6 +2354,7 @@ export function update(dt) {
   // 杂货商面板只在城镇内有效：走出城镇范围立即收起（面板内容仍由 renderAll 刷新）。
   if (state.shopOpen && !nearTown()) state.shopOpen = false;
   updateEntities(dt);
+  tickAutoAttack(); // 0.8.47：射程外点普攻的自动接近，到此检查是否进入射程
   updateHealZones(dt);
   playerDamage(dt);
   state.particles.forEach((particle) => {
@@ -2357,6 +2386,7 @@ export function setPaused(paused, reason = "manual") {
     joystick.active = false;
     pointer.down = false;
     setMoveTarget(null);
+    if (state?.player) state.player.autoAttackId = null; // 0.8.47：暂停后不再替玩家自动出手
     if (state?.player) state.player.moving = false;
   }
   const overlay = $("pauseOverlay");
@@ -3119,6 +3149,7 @@ if (TEST_MODE) {
                 skillPoints: state.player.skillPoints || 0,
                 skillLevels: [...(state.player.skillLevels || [0, 0, 0, 0])],
                 targetId: state.player.targetId,
+                autoAttackId: state.player.autoAttackId || null,
                 previewSkill: state.player.previewSkill,
                 castWindup: Math.round((state.player.castWindup || 0) * 100) / 100
               },

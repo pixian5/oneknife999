@@ -27,7 +27,18 @@ test("悬停可锁定目标时给 pointer 光标", () => {
 
 test("普攻无目标时报告最近敌人距离", () => {
   assert.match(main, /最近的 \$\{nearest\.name\} 距离 \$\{dist\}/);
-  assert.match(main, /进入 \$\{hero\.range\} 内才出手/);
+});
+
+test("射程外点普攻会记录自动接近意图，并在到射程后自动出手", () => {
+  assert.match(main, /state\.player\.autoAttackId = target\.id/);
+  assert.match(main, /state\.player\.autoAttackId = null; \/\/ 已经在射程内/);
+  assert.match(main, /distance\(state\.player, target\) <= activeHero\(\)\.range && state\.player\.attackTimer <= 0/);
+  assert.match(main, /tickAutoAttack\(\); \/\/ 0\.8\.47/);
+});
+
+test("自动接近状态显示在目标栏且不写死旧距离", () => {
+  assert.match(render, /自动接近中/);
+  assert.doesNotMatch(main, /正在接近 \$\{target\.name\}：距离/);
 });
 
 test("目标栏同时显示血量、距离与射程状态", () => {

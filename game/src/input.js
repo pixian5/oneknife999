@@ -239,6 +239,8 @@ export function setupInput() {
       .find((entity) => entityClickHit(point, entity));
     if (target) selectTarget(target);
     else {
+      // 0.8.47：玩家主动点地面走位，优先于“射程外自动接近”的旧意图。
+      if (state?.player) state.player.autoAttackId = null;
       logThrottled("click-move", 200, "debug", "input", "moveOrder", { x: Math.round(point.x), y: Math.round(point.y) });
       setMoveTarget(point);
     }
