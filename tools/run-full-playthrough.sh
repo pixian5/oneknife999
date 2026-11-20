@@ -17,5 +17,7 @@ try: d=json.load(open('/home/user/land/save-w.json'))
 except Exception: print(0); raise SystemExit
 print(1 if d.get('currentMapId')=='stage_100' and d.get('progress',{}).get('stage_100',{}).get('completed') else 0)
 ")
-  if [ "$DONE" = "1" ]; then echo "ALLDONE $(date +%H:%M:%S)" >> "$LOG"; break; fi
+  if [ "$DONE" = "1" ]; then echo "ALLDONE $(date +%H:%M:%S)" >> "$LOG"; exit 0; fi
 done
+echo "45 段已耗尽，未确认第 100 关完成；最后存档：$SAVE" | tee -a "$LOG" >&2
+exit 1
