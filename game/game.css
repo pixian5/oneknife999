@@ -1087,6 +1087,11 @@ p {
 .normal-attack-button:hover .skill-tooltip {
   display: block;
 }
+/* 0.8.49：点击后光标还停在按钮上时不再弹说明，避免遮住目标栏；移出按钮恢复。 */
+.skill-button.tooltip-suppressed .skill-tooltip,
+.normal-attack-button.tooltip-suppressed .skill-tooltip {
+  display: none;
+}
 .class-modal {
   position: fixed;
   inset: 0;

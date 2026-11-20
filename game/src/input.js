@@ -265,6 +265,15 @@ export function setupInput() {
     if (state) state.hoveredEntityId = null;
     canvas.style.cursor = "crosshair";
   });
+  // 0.8.49：技能键同理，施法后光标停在技能上时收起说明。
+  $("skillBar").addEventListener("pointerdown", (event) => {
+    const button = event.target.closest("[data-skill]");
+    if (button) button.classList.add("tooltip-suppressed");
+  });
+  $("skillBar").addEventListener("pointerout", (event) => {
+    const button = event.target.closest("[data-skill]");
+    if (button && !button.contains(event.relatedTarget)) button.classList.remove("tooltip-suppressed");
+  });
   $("skillBar").addEventListener("click", (event) => {
     const button = event.target.closest("[data-skill]");
     if (button) castSkill(Number(button.dataset.skill));
@@ -287,6 +296,9 @@ export function setupInput() {
   };
   $("normalAttackBtn").addEventListener("pointerdown", (event) => {
     event.preventDefault();
+    // 0.8.49：鼠标点普攻后光标通常停在按钮上，悬浮说明会一直挡住目标栏/引导。
+    // 点过一次就暂时收起，移出按钮再恢复，避免战斗时视线被挡。
+    $("normalAttackBtn").classList.add("tooltip-suppressed");
     if (attackHold) return;
     normalAttack();
     attackHold = setInterval(() => {
@@ -298,6 +310,9 @@ export function setupInput() {
   });
   window.addEventListener("pointerup", stopAttackHold);
   window.addEventListener("pointercancel", stopAttackHold);
+  $("normalAttackBtn").addEventListener("pointerleave", () => {
+    $("normalAttackBtn").classList.remove("tooltip-suppressed");
+  });
   $("potionBtn").addEventListener("click", usePotion);
   $("saveBtn").addEventListener("click", saveGame);
   $("resetBtn").addEventListener("click", resetGame);
