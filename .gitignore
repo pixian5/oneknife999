@@ -65,4 +65,4 @@ game/assets/_cutout_report.json
 *.bak
 
 # 真人试玩临时检查点，仅用于浏览器读取，不提交
- game/_checkpoint.json
+game/_checkpoint.json
