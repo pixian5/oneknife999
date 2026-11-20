@@ -1880,11 +1880,11 @@ export function objectiveView() {
   // 打完 8/8 后把“首领身边还有几只小怪”写进目标卡，提示先清小怪或用范围技能。
   const boss = state?.entities?.find((entity) => entity.boss && entity.alive);
   const adds = boss
-    ? state.entities.filter((entity) => entity.alive && !entity.boss && !entity.friendly && !entity.npc && distance(entity, boss) < 180)
+    ? state.entities.filter((entity) => entity.alive && !entity.boss && !entity.friendly && !entity.npc && distance(entity, boss) < 260)
         .length
     : 0;
   const text = adds
-    ? `普通怪清剿已完成。首领身边还有 ${adds} 只小怪，先清小怪或用范围技能再打首领。`
+    ? `普通怪清剿已完成。首领附近还有 ${adds} 只小怪，先清小怪或用范围技能再打首领。`
     : "普通怪清剿已完成，前往首领区域完成关卡。";
   return { step: "步骤 2 / 3", title: `击败 ${rule.boss}`, text, complete: false };
 }

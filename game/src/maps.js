@@ -348,9 +348,11 @@ export const MAPS = {
       id: "boss-ash",
       name: "裂碑领主",
       color: "#e99b5f",
-      hp: 900,
-      attack: 36,
-      defense: 18,
+      // 0.8.54：真人 Lv2 无装备实测 9 死只打掉 9% 血；第一关首领降到 720/30/12，
+      // 保证第一关是“要躲技能但能过”的入门首领，不是装备墙。
+      hp: 720,
+      attack: 30,
+      defense: 12,
       exp: 480,
       gold: 260,
       radius: 34,
