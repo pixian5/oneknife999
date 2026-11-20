@@ -282,8 +282,38 @@ export function canvasPoint(event) {
   return { x: (event.clientX - rect.left) / scale + view.x, y: (event.clientY - rect.top) / scale + view.y };
 }
 
+// 0.8.45 画面缩放：玩家可在设置里选 100% / 125% / 150%，只影响镜头比例，
+// 不改画布分辨率。触屏与鼠标坐标都经 canvasPoint 换算，因此设置后点击仍然对齐。
+const VIEW_ZOOM_KEY = "oneknife999-view-zoom-v1";
+const VIEW_ZOOM_OPTIONS = [1, 1.25, 1.5];
+let viewZoom = (() => {
+  try {
+    const saved = Number(localStorage.getItem(VIEW_ZOOM_KEY));
+    return VIEW_ZOOM_OPTIONS.includes(saved) ? saved : 1;
+  } catch {
+    return 1;
+  }
+})();
+
+export function getViewZoom() {
+  return viewZoom;
+}
+
+export function setViewZoom(value) {
+  const next = Number(value);
+  if (!VIEW_ZOOM_OPTIONS.includes(next)) return viewZoom;
+  viewZoom = next;
+  try {
+    localStorage.setItem(VIEW_ZOOM_KEY, String(next));
+  } catch {
+    // 隐私模式下 localStorage 可能不可用，缩放只在本次会话生效。
+  }
+  logDebug("hud", "viewZoom", { zoom: next });
+  return viewZoom;
+}
+
 export function getViewScale() {
-  return Math.min(canvas.clientWidth / 940, canvas.clientHeight / 590);
+  return Math.min(canvas.clientWidth / 940, canvas.clientHeight / 590) * viewZoom;
 }
 
 export function getCamera(scale = getViewScale()) {

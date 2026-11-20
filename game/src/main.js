@@ -55,6 +55,7 @@ import {
   nearTown,
   isRedName,
   setBonuses,
+  pauseState,
   fx
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
@@ -64,6 +65,7 @@ import {
   resizeCanvas,
   scheduleResize,
   getViewScale,
+  getViewZoom,
   getCamera,
   showToast,
   log,
@@ -183,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.44";
+const CURRENT_APP_VERSION = "0.8.45";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -664,6 +666,7 @@ export function nearestTargets(range, limit = 1) {
 }
 
 export function normalAttack() {
+  if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   if (!state) return;
   const hero = activeHero();
   // 0.8.7：普攻的每个「什么都不发生」分支都留痕——否则玩家反馈「攻击没反应」时无从判断。
@@ -731,6 +734,7 @@ export function normalAttack() {
 // e2e 默认 fastcast（跳过前摇，探针与全部既有回归节奏不变），&realcast=1 测真实链路。
 // 起手期是零损承诺：资源未扣、冷却未启；被打断（stun）/目标死亡/失距时取消无损失。
 export function castSkill(index) {
+  if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   if (!state) return;
   const hero = activeHero();
   const skill = hero.skills[index];
@@ -969,6 +973,7 @@ function resolveSkillCast(index) {
 }
 
 export function oneMoment() {
+  if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   if (!state || state.player.charge < 100) {
     logThrottled("onemoment-charge", 800, "debug", "skill", "burstBlocked", {
       reason: "noCharge",
@@ -1357,6 +1362,7 @@ export function advanceGuide(nextStep) {
 }
 
 export function collectDrops() {
+  if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   const nearby = state.drops.filter((drop) => distance(state.player, drop) < 85);
   if (!nearby.length) {
     const cache = (activeMap().tacticalPoints || []).find(
@@ -2257,6 +2263,13 @@ export function updateHealZones(dt) {
 
 export function update(dt) {
   if (!state) return;
+  // 0.8.45 暂停：时间完全冻结（怪物、掉落计时、重生计时、药水回复都不推进），
+  // 但仍重绘一帧，保证玩家看到的是暂停瞬间的画面而不是黑屏。
+  if (pauseState.paused) {
+    if (state.player) state.player.moving = false;
+    renderAll();
+    return;
+  }
   const hero = activeHero();
   // 0.6.0 P1：每帧先清移动标记，movePlayer / updateMonsterAI 若发生位移再置 true，
   // 供动作帧（walk / idle）在随后的 renderAll 里正确选择。
@@ -2328,6 +2341,44 @@ export function update(dt) {
   });
   state.texts = state.texts.filter((text) => text.life > 0);
   renderAll();
+}
+
+// 0.8.45 暂停/继续：清空输入残留，避免恢复后角色继续沿暂停前的方向走。
+// reason=settings 时暂停覆盖层不显示，因为设置弹窗本身已经盖住画面。
+export function setPaused(paused, reason = "manual") {
+  const next = Boolean(paused);
+  if (next === pauseState.paused) return pauseState.paused;
+  pauseState.paused = next;
+  pauseState.reason = next ? reason : "";
+  if (next) {
+    Object.keys(keys).forEach((key) => delete keys[key]);
+    joystick.x = 0;
+    joystick.y = 0;
+    joystick.active = false;
+    pointer.down = false;
+    setMoveTarget(null);
+    if (state?.player) state.player.moving = false;
+  }
+  const overlay = $("pauseOverlay");
+  if (overlay) overlay.classList.toggle("hidden", !next || reason === "settings");
+  // 暂停时动作栏整体禁用，避免玩家点攻击/药水却没有任何反应的“假按钮”。
+  document.body.classList.toggle("paused", next);
+  const button = $("pauseBtn");
+  if (button) {
+    button.classList.toggle("active", next);
+    button.setAttribute("aria-pressed", String(next));
+  }
+  logInfo("pause", next ? "paused" : "resumed", { reason: pauseState.reason || reason, frame: frameCount });
+  if (!next) {
+    // 恢复时重置计时基准，避免把暂停期间的真实时间算成一帧超大 dt。
+    lastTime = performance.now();
+    showToast("继续游戏");
+  }
+  return pauseState.paused;
+}
+
+export function togglePause() {
+  return setPaused(!pauseState.paused, "manual");
 }
 
 export function autoSaveProgress(mapName) {
@@ -2465,6 +2516,7 @@ export function setupClasses() {
 }
 
 export function usePotion() {
+  if (pauseState.paused) return; // 0.8.45 暂停期间不接任何战斗动作
   if (!state || state.player.potion <= 0) {
     logThrottled("potion-empty", 600, "debug", "item", "potionBlocked", { reason: "noPotion" });
     showToast("生命药水已用完");
@@ -3026,7 +3078,14 @@ if (TEST_MODE) {
         )
       ),
     // 相机 / 视口 / 职业基础数据：e2e 直接读取游戏侧几何，替代测试内镜像实现。
-    meta: () => ({ viewScale: getViewScale(), camera: getCamera(), heroBaseHp: activeHero().hp, attackRange: activeHero().range }),
+    meta: () => ({
+      viewScale: getViewScale(),
+      viewZoom: getViewZoom(),
+      paused: pauseState.paused,
+      camera: getCamera(),
+      heroBaseHp: activeHero().hp,
+      attackRange: activeHero().range
+    }),
     snapshot: () =>
       state
         ? JSON.parse(

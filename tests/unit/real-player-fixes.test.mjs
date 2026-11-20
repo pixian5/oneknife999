@@ -11,6 +11,9 @@ const render = readFileSync(new URL("../../game/src/render.js", import.meta.url)
 test("点击锁定按立绘胶囊判定而非只按脚底半径", () => {
   assert.match(input, /function entityClickHit\s*\(point, entity\)/);
   assert.match(input, /spriteHeight\(entity\) \* \(entity\.boss \? 1 : 0\.9\)/);
+  // Boss 优先排序必须显式 1/0；Number(undefined) 是 NaN，会让排序失效、锁到小怪。
+  assert.match(input, /\(b\.boss \? 1 : 0\) - \(a\.boss \? 1 : 0\)/);
+  assert.doesNotMatch(input, /Number\(b\.boss\)/);
   assert.match(input, /entity\.radius \* \(entity\.boss \? 0\.9 : 0\.55\)/);
   const pad = input.match(/< entity\.radius \+ (\d+)/);
   assert.ok(pad, "胶囊命中要有横向补值");
