@@ -2006,6 +2006,14 @@ export function renderSkills() {
     });
 }
 
+// 0.8.42：装备图标统一入口。左右手镯共用 equip-bracelet.png、左右戒指共用 equip-ring.png；
+// 此前装备面板做了映射，但商店/重铸/背包各写各的，ringL/braceletL 会去请求不存在的 equip-ringL.png（实玩 404）。
+function equipIconKey(slot) {
+  if (slot === "braceletL" || slot === "braceletR") return "bracelet";
+  if (slot === "ringL" || slot === "ringR") return "ring";
+  return slot || "weapon";
+}
+
 export function renderEquipment() {
   // 12 部位（docs/03）；点击已穿戴的槽位 = 尝试强化。
   // 签名必须覆盖「本件贡献」展示的所有输入：词缀变化（重铸）也要重建，否则标题一直显示旧数值。
@@ -2022,8 +2030,7 @@ export function renderEquipment() {
       const item = state.player.equipment?.[slotKey];
       const label = EQUIPMENT_SLOTS[slotKey].label;
       // 装备图标：左右手镯/左右戒指共用一张图
-      const iconKey =
-        slotKey === "braceletL" || slotKey === "braceletR" ? "bracelet" : slotKey === "ringL" || slotKey === "ringR" ? "ring" : slotKey;
+      const iconKey = equipIconKey(slotKey);
       const icon = `<img class="slot-icon" src="assets/equip-${iconKey}.png" alt="">`;
       if (!item)
         return `<button class="equipment-slot" data-equip-slot="${slotKey}" title="${label}空位：拾取对应部位装备后自动穿戴位">${icon}<span class="slot-name">${label}</span></button>`;
@@ -2084,14 +2091,7 @@ export function renderInventory() {
       const setHint = setHintFor(item);
       const title = `${item.name}${item.enhance ? ` +${item.enhance}` : ""}：${item.desc}${affixText ? `；词缀：${affixText}` : ""}；有效战力 ${powerValue}${setHint ? `\n${setHint}` : ""}${previewText ? `\n${previewText}` : ""}`;
       // 背包格图标按物品类型映射（消耗品/货币/材料用各自图，装备用部位图，左右手镯/戒指共用）
-      const invIcon =
-        item.slot === "consumable" || item.slot === "currency" || item.slot === "material"
-          ? item.slot
-          : item.slot === "braceletL" || item.slot === "braceletR"
-            ? "bracelet"
-            : item.slot === "ringL" || item.slot === "ringR"
-              ? "ring"
-              : item.slot || "weapon";
+      const invIcon = equipIconKey(item.slot || "weapon");
       return `<div class="inventory-slot" data-item-index="${index}" title="${title}"><span class="quality-line" style="color:${item.color}"></span><img class="slot-icon" src="assets/equip-${invIcon}.png" alt="">${item.enhance ? `<span class="enhance">+${item.enhance}</span>` : ""}<span class="slot-power">${powerValue}</span><button class="salvage-btn" data-salvage-id="${item.id}" title="拆解：返还 1 黑铁矿石与 10% 价值金币">拆</button></div>`;
     }).join("")
   );
@@ -2129,7 +2129,7 @@ export function renderShopPanel() {
   const marksRows = MARKS_SET.map((def) => {
     const owned = ownedMarksSlots.includes(def.slot);
     const affordable = !owned && marks >= MARKS_SET_PRICE;
-    return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/equip-${def.slot}.png" alt=""><div class="shop-good-info"><strong>${def.name}</strong><small>绑定过渡橙装 · ${EQUIPMENT_SLOTS[def.slot].label} · 战力 ${def.power}</small></div><button class="link-button" data-buy-marks="${def.slot}" ${affordable ? "" : "disabled"}>${owned ? "已兑换" : `${MARKS_SET_PRICE} 印记`}</button></div>`;
+    return `<div class="shop-good${affordable ? "" : " unaffordable"}"><img class="shop-good-ico" src="assets/equip-${equipIconKey(def.slot)}.png" alt=""><div class="shop-good-info"><strong>${def.name}</strong><small>绑定过渡橙装 · ${EQUIPMENT_SLOTS[def.slot].label} · 战力 ${def.power}</small></div><button class="link-button" data-buy-marks="${def.slot}" ${affordable ? "" : "disabled"}>${owned ? "已兑换" : `${MARKS_SET_PRICE} 印记`}</button></div>`;
   }).join("");
   if (!panelChanged($("shopGoods"), `v4|${gold}|${scrolls}|${marks}|${ownedMarksSlots.join(",")}|${lockSignature}|${equipmentSignature}`))
     return;
@@ -2163,7 +2163,7 @@ export function renderShopPanel() {
     const owned = equipmentItemStats(item);
     // 重铸行同时给出「本件贡献」，让玩家知道这条词缀值多少，再决定是否花卷重掷。
     // 融合：装备图标用美术线贴图（equip-{slot}.png），词缀锁定芯片保留 0.4.2 逻辑（≥2 条可锁 1 条、报价 ×1.8）。
-    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><img class="shop-good-ico" src="assets/equip-${slotKey}.png" alt=""><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixChips.join(" ") || "无词缀"}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷${lockActive ? "（已锁定 ×1.8）" : ""}`}">重铸 ${quote.cost} 金${lockActive ? " 🔒" : ""}</button></div>`;
+    return `<div class="shop-reforge-row${pulse === slotKey ? " pulse" : ""}"><img class="shop-good-ico" src="assets/equip-${equipIconKey(slotKey)}.png" alt=""><div class="shop-good-info"><strong>${EQUIPMENT_SLOTS[slotKey].label}：${item.name}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>词缀 ${item.affixes?.length || 0} 条 · ${affixChips.join(" ") || "无词缀"}<br>本件贡献：攻击 +${owned.attack} · 生命 +${owned.hp} · 防御 +${owned.defense}</small></div><button class="link-button" data-reforge="${slotKey}" ${quote.canReforge ? "" : "disabled"} title="${quote.reason || `消耗 ${quote.cost} 金币 + ${quote.scrollNeeded} 张词缀重铸卷${lockActive ? "（已锁定 ×1.8）" : ""}`}">重铸 ${quote.cost} 金${lockActive ? " 🔒" : ""}</button></div>`;
   }).join("");
   setHtml($("shopReforge"), rows || `<p class="shop-empty">没有穿戴装备可重铸：先拾取并穿戴一件装备。</p>`);
 }
