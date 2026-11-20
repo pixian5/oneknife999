@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.52";
+const CURRENT_APP_VERSION = "0.8.53";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -2004,6 +2004,11 @@ export function cancelTravel() {
 
 export function updateEntities(dt) {
   const map = activeMap();
+  // 0.8.53：首领战期间冻结首领周围普通怪的复活计时。
+  // 真人试玩清完小怪后，28–45s 的重生周期会在首领战中途重新塞回 1–2 只小怪，
+  // 玩家刚把首领打掉一点血又被围死。首领未交战（满血且未仇恨）时不冻结。
+  const liveBoss = state.entities.find((entity) => entity.boss && entity.alive);
+  const bossFight = Boolean(liveBoss && (liveBoss.aggro || liveBoss.hp < liveBoss.maxHp));
   state.entities.forEach((entity) => {
     entity.hitFlash = Math.max(0, entity.hitFlash - dt);
     entity.attackFlash = Math.max(0, (entity.attackFlash || 0) - dt);
@@ -2018,6 +2023,15 @@ export function updateEntities(dt) {
       // boss 召唤物尸体（0.4.4）：无复活周期，跳过 respawn 计时（undefined 递减为 NaN），
       // 由 updateEntities 末尾的过滤统一回收。
       if (entity.summonedMob) return;
+      // 0.8.53：首领交战中，首领 260px 内的普通怪尸体不再倒计时复活；
+      // 等首领死亡或脱战后自然恢复，避免首领战越打小怪越多。
+      if (
+        bossFight &&
+        !entity.boss &&
+        Math.hypot((entity.spawnX ?? entity.x) - liveBoss.x, (entity.spawnY ?? entity.y) - liveBoss.y) < 260
+      ) {
+        return;
+      }
       entity.respawn -= dt;
       if (entity.respawn <= 0) {
         entity.alive = true;
