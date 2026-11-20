@@ -2964,3 +2964,16 @@ body.paused .action-bar {
 .keybind-row-info span {
   font-size: 11px;
 }
+
+/* 0.8.48：320/360 窄屏的目标栏只有 117–157px，单行放不下“血/距/射程/自动接近”，
+   末尾会被省略号吃掉。这里允许最多两行，行高固定，仍不改变动作条第一行高度。 */
+@media (max-width: 380px) {
+  .target-block span:last-child {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.25;
+    white-space: normal;
+  }
+}
