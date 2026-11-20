@@ -1740,13 +1740,15 @@ export function renderPlayer() {
   // - 生命取 playerMaxHp()（含部位基础加成与生命词缀）；
   // - 防御取 playerDefense()（职业基础 + 防御词缀），与承伤结算同源。
   const attackStat = Math.round(hero.attack + state.player.level * 4 + equippedPower * 0.9 + setBonuses().attack);
-  const hpStat = playerMaxHp();
+  const hpMax = playerMaxHp();
+  const hpNow = Math.max(0, Math.min(hpMax, Math.ceil(state.player.hp)));
   const defenseStat = playerDefense();
   const signature = [
     state.classId,
     power,
     attackStat,
-    hpStat,
+    hpNow,
+    hpMax,
     defenseStat,
     Math.ceil(state.player.resource),
     state.player.exp,
@@ -1767,7 +1769,10 @@ export function renderPlayer() {
   setText($("className"), hero.name);
   setText($("playerName"), `${hero.name} · 灰烬旅人`);
   setText($("powerText"), formatNumber(power));
-  setText($("hpStat"), formatNumber(hpStat));
+  // 0.8.51：显示“当前 / 最大”，并让血条随受伤实时缩短；低于 25% 变亮红。
+  setText($("hpStat"), `${formatNumber(hpNow)} / ${formatNumber(hpMax)}`);
+  setStyle($("hpBar"), "width", `${hpMax > 0 ? clamp((hpNow / hpMax) * 100, 0, 100) : 0}%`);
+  setClass($("hpBar"), "low", hpMax > 0 && hpNow / hpMax <= 0.25);
   setText($("attackStat"), formatNumber(attackStat));
   setText($("defenseStat"), formatNumber(defenseStat));
   setText($("actionResourceName"), hero.resourceName);

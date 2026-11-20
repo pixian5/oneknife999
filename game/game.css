@@ -465,6 +465,19 @@ p {
 .meter.exp span {
   background: var(--amber);
 }
+/* 0.8.51：侧栏真实生命条，避免“生命 386”被误读为当前血量。 */
+.meter.hp {
+  height: 7px;
+  margin-top: 7px;
+  background: #1b0f10;
+  box-shadow: inset 0 0 0 1px rgba(241, 109, 102, 0.22);
+}
+.meter.hp span {
+  background: linear-gradient(90deg, #d84f47, #f08a68);
+}
+.meter.hp span.low {
+  background: #ff5b52;
+}
 .stat-row {
   display: flex;
   justify-content: space-between;
@@ -2849,6 +2862,11 @@ body {
   }
   .player-card .stat-row {
     margin-top: 3px;
+  }
+  /* 0.8.51：移动端玩家卡高度固定 172px，新生命条必须压到 4px/2px，否则 430px 视口会被裁 7px。 */
+  .player-card .meter.hp {
+    height: 4px;
+    margin-top: 2px;
   }
   .player-card .meter-group {
     margin-top: 3px;
