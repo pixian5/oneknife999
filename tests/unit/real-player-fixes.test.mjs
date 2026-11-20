@@ -10,7 +10,8 @@ const render = readFileSync(new URL("../../game/src/render.js", import.meta.url)
 
 test("点击锁定按立绘胶囊判定而非只按脚底半径", () => {
   assert.match(input, /function entityClickHit\s*\(point, entity\)/);
-  assert.match(input, /spriteHeight\(entity\) \* 0\.62/);
+  assert.match(input, /spriteHeight\(entity\) \* \(entity\.boss \? 1 : 0\.9\)/);
+  assert.match(input, /entity\.radius \* \(entity\.boss \? 0\.9 : 0\.55\)/);
   const pad = input.match(/< entity\.radius \+ (\d+)/);
   assert.ok(pad, "胶囊命中要有横向补值");
   assert.ok(Number(pad[1]) >= 30, `补值 ${pad[1]} 太小，点立绘边缘仍会变成走位`);
