@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.49";
+const CURRENT_APP_VERSION = "0.8.50";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
