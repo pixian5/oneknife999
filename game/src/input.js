@@ -40,8 +40,11 @@ import {
 // 点头部/胸甲会落到实体坐标上方几十像素，被判成点地走位。这里用一条从脚到
 // 身体 62% 高度的竖直胶囊做命中，点击立绘任何部位都能锁定。
 function entityClickHit(point, entity) {
-  const top = entity.y - spriteHeight(entity) * 0.62;
-  const clampedY = Math.min(entity.y, Math.max(top, point.y));
+  // 立绘脚底在实体坐标下方（普通怪 +0.55×radius，首领 +0.9×radius），
+  // 身体从脚底向上画 spriteHeight。胶囊要覆盖到脚、上到头顶，首领取全高。
+  const footY = entity.y + entity.radius * (entity.boss ? 0.9 : 0.55);
+  const top = footY - spriteHeight(entity) * (entity.boss ? 1 : 0.9);
+  const clampedY = Math.min(footY, Math.max(top, point.y));
   return Math.hypot(point.x - entity.x, point.y - clampedY) < entity.radius + 32;
 }
 
