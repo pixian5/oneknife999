@@ -1,4 +1,4 @@
-// 0.8.50 回归：清完 8/8 后，目标卡必须提示首领身边还有几只小怪，避免新手被围死。
+// 0.8.50 回归：清完 8/8 后，目标卡必须提示首领附近还有几只小怪，避免新手被围死。
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const { browserLaunchOptions } = require("./browser-options.cjs");
@@ -21,20 +21,32 @@ const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1";
       const progress = runtime.mapProgress();
       progress.kills = progress.need;
       const boss = s.entities.find((entity) => entity.boss && entity.alive);
-      const adds = boss
-        ? s.entities.filter(
-            (entity) =>
-              entity.alive && !entity.boss && !entity.friendly && !entity.npc && Math.hypot(entity.x - boss.x, entity.y - boss.y) < 180
-          ).length
-        : 0;
-      await new Promise((resolve) => setTimeout(resolve, 160));
-      return { adds, text: document.querySelector("#mapObjective").textContent.replace(/\s+/g, " ").trim() };
+      const adds = boss ? s.entities.filter((entity) => entity.alive && !entity.boss && !entity.friendly && !entity.npc) : [];
+      if (!boss || adds.length < 2) return { missing: true };
+      // 把所有小怪先挪远，只留一只在 230px（旧 180 阈值会漏、260 应命中），另一只在 300px 外。
+      for (const add of adds) {
+        add.x = boss.x + 600;
+        add.y = boss.y + 200;
+      }
+      adds[0].x = boss.x + 230;
+      adds[0].y = boss.y;
+      adds[1].x = boss.x + 300;
+      adds[1].y = boss.y;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const nearText = document.querySelector("#mapObjective").textContent.replace(/\s+/g, " ").trim();
+      // 把 230px 的那只也推到 300px，目标卡应回到“前往首领区域”。
+      adds[0].x = boss.x + 300;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const farText = document.querySelector("#mapObjective").textContent.replace(/\s+/g, " ").trim();
+      return { missing: false, nearText, farText };
     });
-    assert.ok(count.adds > 0, "测试地图首领身边没有小怪，无法验证提示");
-    assert.match(count.text, new RegExp(`首领身边还有 ${count.adds} 只小怪`), `目标卡未提示小怪数量：${count.text}`);
-    assert.match(count.text, /先清小怪或用范围技能/, `目标卡缺少处理建议：${count.text}`);
+    assert.ok(!count.missing, "测试地图首领或小怪不足，无法验证提示");
+    assert.match(count.nearText, /首领附近还有 1 只小怪/, `230px 小怪未被 260 阈值统计：${count.nearText}`);
+    assert.match(count.nearText, /先清小怪或用范围技能/, `目标卡缺少处理建议：${count.nearText}`);
+    assert.doesNotMatch(count.farText, /首领附近还有/, `300px 小怪不应计入提示：${count.farText}`);
+    assert.match(count.farText, /前往首领区域完成关卡/, `无小怪时未回到前往首领区域：${count.farText}`);
     assert.deepEqual(errors, [], "boss adds hint 测试期间页面异常");
-    process.stdout.write(`UI boss adds hint: PASS · ${count.adds} 只小怪\n`);
+    process.stdout.write(`UI boss adds hint: PASS · 230px 命中 / 300px 排除\n`);
   } finally {
     await context.close();
     await browser.close();

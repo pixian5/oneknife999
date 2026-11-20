@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.53";
+const CURRENT_APP_VERSION = "0.8.54";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -1206,6 +1206,18 @@ export function defeat(target) {
     log(`<b>首领击破</b>：${target.name} 倒下，个人获得 ${reward.marksGain} 首领印记。`, "loot");
     showToast("首领结算完成：贡献快照已锁定");
     state.quest.bossDefeated = true;
+    // 0.8.54 真实试玩：首领倒下时玩家只剩 64 HP，残存小怪立刻把玩家打死，胜利结算后多记 1 次死亡。
+    // 首领余波清空 260px 内普通怪（不结算经验/金币），避免“刚赢就被杂兵补刀”。
+    const arenaAdds = state.entities.filter(
+      (entity) =>
+        entity.alive && !entity.boss && !entity.friendly && !entity.npc && Math.hypot(entity.x - target.x, entity.y - target.y) < 260
+    );
+    for (const add of arenaAdds) {
+      add.alive = false;
+      add.hp = add.maxHp;
+      add.respawn = Math.max(add.respawn || 0, 42);
+    }
+    if (arenaAdds.length) log(`首领余波清空附近 ${arenaAdds.length} 只小怪。`, "loot");
   } else {
     log(`${target.name} 被击败，获得 ${reward.expGain} 经验与 ${target.gold} 金币。`);
     advanceGuide(3);
