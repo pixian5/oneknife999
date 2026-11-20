@@ -1696,13 +1696,18 @@ export function renderTarget() {
   const range = activeHero().range;
   const dist = target ? Math.round(distance(state.player, target)) : null;
   // 0.8.43：目标栏补“距离 / 是否在射程内”。此前只显示血条，玩家看不出为什么按 X 不掉血。
-  if (state && !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}|${dist}`)) return;
+  const autoApproach = Boolean(target && state.player.autoAttackId === target.id);
+  if (
+    state &&
+    !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}|${dist}|${autoApproach ? 1 : 0}`)
+  )
+    return;
   setText($("targetText"), target ? target.name : "未锁定目标");
   if (target) {
     const inRange = dist <= range;
     setText(
       $("targetHint"),
-      `${Math.max(0, Math.round(target.hp))}/${target.maxHp} · 距 ${dist} · ${inRange ? "射程内" : `超射程 ${range}`}`
+      `${Math.max(0, Math.round(target.hp))}/${target.maxHp} · 距 ${dist} · ${inRange ? "射程内" : `超射程 ${range}`}${autoApproach && !inRange ? " · 自动接近中" : ""}`
     );
     setStyle($("targetHint"), "color", inRange ? "var(--muted)" : "#e08a72");
   } else {

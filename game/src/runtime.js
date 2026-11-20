@@ -95,6 +95,8 @@ export function createState(classId) {
       attackGate: 0,
       cooldowns: [0, 0, 0, 0],
       targetId: null,
+      // 0.8.47：射程外点“普攻”后的自动接近意图；到射程自动打一次，改为手动移动立即取消。
+      autoAttackId: null,
       previewSkill: null,
       skillPoints: 0,
       skillLevels: [0, 0, 0, 0],
