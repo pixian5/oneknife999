@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.51";
+const CURRENT_APP_VERSION = "0.8.52";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -1880,6 +1880,9 @@ export function die() {
   // loadMap 第 5 参 keepBossHp=true（合并自远程 0.4.2 分支）：同图复活保留首领已损失生命。
   // 场景重置完成后回填爆装掉落：装备不会被 autoPickupPass 自动拾取，玩家需跑尸按 F 捡回。
   if (redDrop) state.drops.push(redDrop.drop);
+  // 0.8.52：死亡本身也要落盘。此前只在击杀/升级等事件 persistGame，
+  // 死完直接关浏览器会丢死亡数、金币与复活位置，下次读档像没死过。
+  persistGame();
 }
 
 export function movePlayer(dt) {
