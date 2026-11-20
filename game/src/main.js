@@ -183,10 +183,11 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.42";
+const CURRENT_APP_VERSION = "0.8.43";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
+let potionsUsed = 0;
 let pendingTravel = null;
 // 0.3.4 围攻上限：同一时刻只允许 1 只怪蓄力。旧实现每帧只判定「最近的一只」敌人，
 // 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
@@ -2452,6 +2453,7 @@ export function usePotion() {
     return;
   }
   state.player.potion -= 1;
+  if (TEST_MODE) potionsUsed += 1;
   const restore = Math.round(maxHp * 0.32);
   const before = state.player.hp;
   state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
@@ -3019,6 +3021,7 @@ if (TEST_MODE) {
                 exp: state.player.exp,
                 nextExp: state.player.nextExp,
                 potion: state.player.potion,
+                potionsUsed,
                 gold: state.player.gold,
                 marks: state.player.marks,
                 deaths: state.player.deaths || 0,

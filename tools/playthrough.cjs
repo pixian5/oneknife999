@@ -246,6 +246,7 @@ async function backToMap(page, mapId) {
     let snap = await snapshot(page);
     const deaths0 = snap.player.deaths || 0;
     const potion0 = snap.player.potion;
+    const used0 = snap.player.potionsUsed;
     const gold0 = snap.player.gold;
     const level0 = snap.player.level;
     let minHpRatio = 1;
@@ -253,6 +254,7 @@ async function backToMap(page, mapId) {
     let restVirtual = 0; // 回补给点待机/折返耗时
     let bossStart = null;
     let bossDeaths = 0;
+    let bossMaxHp = null;
     let heapPeak = 0;
     let addsDuringBoss = 0; // 首领战期间同时存活的小怪数量峰值（验证刷新是否打断 boss 战）
     let addsNearBoss = 0; // 首领身边 260px 内小怪峰值（真正干扰战斗）
@@ -318,6 +320,7 @@ async function backToMap(page, mapId) {
       snap = await snapshot(page);
       const boss = snap.entities.find((e) => e.alive && e.boss);
       if (boss) {
+        bossMaxHp = boss.maxHp;
         bossStart = await now();
         const bd0 = snap.player.deaths || 0;
         let bguard = 0;
@@ -397,7 +400,8 @@ async function backToMap(page, mapId) {
       addsDuringBoss,
       addsNearBoss,
       bossSeconds: Math.round(bossSeconds),
-      potionUsed: potion0 - snap.player.potion,
+      potionUsed: snap.player.potionsUsed - used0,
+      potionInventoryDelta: snap.player.potion - potion0,
       potionStart: potion0,
       potionEnd: snap.player.potion,
       goldGain: snap.player.gold - gold0,
@@ -412,7 +416,7 @@ async function backToMap(page, mapId) {
         (snap.entities.filter((e) => e.alive && !e.boss && !e.npc).reduce((a, e) => a + e.maxHp, 0) || 0) /
           Math.max(1, snap.entities.filter((e) => e.alive && !e.boss && !e.npc).length)
       ),
-      bossMaxHp: snap.entities.find((e) => e.boss && e.alive)?.maxHp || 0,
+      bossMaxHp,
       maxHp: snap.player.maxHp,
       goldTotal: snap.player.gold,
       marks: snap.player.marks,
