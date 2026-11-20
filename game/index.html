@@ -111,6 +111,9 @@
           </div>
           <div class="canvas-wrap" id="canvasWrap">
             <canvas id="gameCanvas" aria-label="灰烬边境战斗场景"></canvas>
+            <button class="canvas-pause" id="pauseBtn" type="button" title="暂停游戏（Esc 或点击遮罩继续）" aria-pressed="false">
+              <b>Ⅱ</b><span>暂停</span>
+            </button>
             <div class="boss-alert" id="bossAlert">
               <img class="boss-portrait" id="bossPortrait" src="assets/boss-liebei.jpg" alt="首领立绘" />
               <span class="boss-pulse"></span>
@@ -127,6 +130,9 @@
             </div>
             <div class="combat-hint" id="combatHint">
               WASD / 摇杆移动 · X 普攻 · 1-4 技能 · F 拾取 · T 前往目标出口 · 前进出口需完成当前关卡
+            </div>
+            <div class="pause-overlay hidden" id="pauseOverlay" role="button" tabindex="0" aria-label="游戏已暂停，点击继续">
+              <div class="pause-card"><strong>已暂停</strong><span>点击任意处继续 · 切到后台会自动暂停</span></div>
             </div>
           </div>
           <div class="world-footer">
@@ -314,6 +320,15 @@
           ><b id="settingsHint">点击右侧按键后再按新键</b>
         </div>
         <p class="skill-modal-tip">普攻默认 X，紧邻技能键 1-4。移动固定为 WASD / 方向键；键位单独保存，重置游戏不会清除。</p>
+        <div class="settings-scale-row">
+          <span class="settings-save-label">画面缩放</span>
+          <div class="settings-scale-options" id="viewZoomOptions">
+            <button class="icon-button scale-option" type="button" data-view-zoom="1">100%</button>
+            <button class="icon-button scale-option" type="button" data-view-zoom="1.25">125%</button>
+            <button class="icon-button scale-option" type="button" data-view-zoom="1.5">150%</button>
+          </div>
+        </div>
+        <p class="skill-modal-tip">打开设置会自动暂停游戏，关闭后继续。暂停期间怪物、掉落与重生计时全部冻结。</p>
         <div class="skill-modal-list" id="keybindList"></div>
         <div class="settings-save-row">
           <span class="settings-save-label">存档操作</span>

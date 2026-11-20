@@ -2854,3 +2854,113 @@ body {
     height: 96px;
   }
 }
+
+/* 0.8.45 暂停按钮与暂停遮罩：放在画布右上角，触屏也能一眼看到。 */
+.canvas-pause {
+  position: absolute;
+  left: 12px;
+  bottom: 52px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 42px;
+  padding: 2px 0 0;
+  border: 1px solid rgba(231, 179, 107, 0.5);
+  border-radius: 6px;
+  background: rgba(13, 22, 27, 0.78);
+  color: var(--amber);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.canvas-pause b {
+  font-family: Georgia, serif;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.canvas-pause span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.canvas-pause:hover,
+.canvas-pause.active {
+  border-color: var(--amber);
+  background: rgba(231, 179, 107, 0.16);
+}
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 11, 14, 0.72);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pause-overlay.hidden {
+  display: none;
+}
+.pause-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 22px 30px;
+  border: 1px solid rgba(231, 179, 107, 0.55);
+  background: rgba(13, 23, 28, 0.92);
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.pause-card strong {
+  color: var(--amber);
+  font-family: Georgia, serif;
+  font-size: 28px;
+  letter-spacing: 0.14em;
+}
+.pause-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings-scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+.settings-scale-options {
+  display: flex;
+  gap: 6px;
+}
+.scale-option.active {
+  border-color: var(--teal);
+  background: rgba(98, 213, 198, 0.16);
+  color: var(--ink);
+}
+@media (max-width: 400px) {
+  .canvas-pause {
+    width: 40px;
+    height: 38px;
+  }
+  .pause-card {
+    padding: 18px 20px;
+  }
+}
+/* 暂停时动作栏与摇杆整体禁用，避免出现“点了没反应”的假按钮。 */
+body.paused .action-bar {
+  pointer-events: none;
+  opacity: 0.62;
+  filter: grayscale(0.25);
+}
+/* 0.8.45 设置/技能弹窗正文从 10–11px 提到 12px，1280×960 下不再费眼。 */
+.skill-modal-tip {
+  font-size: 12px;
+}
+.skill-modal-box .skill-row-info span,
+.skill-modal-box .skill-row-info small,
+.keybind-row-info span {
+  font-size: 11px;
+}

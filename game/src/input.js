@@ -1,5 +1,26 @@
-import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress, keybindCapture, activeHero } from "./runtime.js";
-import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybindPanel, spriteHeight } from "./render.js";
+import {
+  state,
+  keys,
+  joystick,
+  pointer,
+  setMoveTarget,
+  primaryExit,
+  mapProgress,
+  keybindCapture,
+  activeHero,
+  pauseState
+} from "./runtime.js";
+import {
+  canvas,
+  canvasPoint,
+  showToast,
+  objectiveView,
+  renderAll,
+  renderKeybindPanel,
+  spriteHeight,
+  getViewZoom,
+  setViewZoom
+} from "./render.js";
 import { $, distance } from "./util.js";
 import { isMuted, toggleMute, unlockAudio } from "./audio.js";
 import { loadKeybinds, actionForKey, setKeybind, resetKeybinds } from "./keybinds.js";
@@ -30,7 +51,9 @@ import {
   resetGame,
   exportSave,
   importSave,
-  buyMarksGood
+  buyMarksGood,
+  setPaused,
+  togglePause
 } from "./main.js";
 
 // 《一刀999》输入层：键盘 / 鼠标 / 触屏（虚拟摇杆）与所有 HUD 按钮的事件绑定。
@@ -100,6 +123,14 @@ function refreshMuteLabel() {
   $("muteBtn").textContent = isMuted() ? "静音中" : "音效";
 }
 
+// 0.8.45：设置面板的缩放按钮高亮当前档位（localStorage 记住选择）。
+function refreshViewZoomButtons() {
+  const current = getViewZoom();
+  document.querySelectorAll("[data-view-zoom]").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.viewZoom) === current);
+  });
+}
+
 export function setupInput() {
   // 先载入玩家自定义键位，保证后续 keydown 查表与 HUD 首帧文案就是最新绑定。
   loadKeybinds();
@@ -143,6 +174,8 @@ export function setupInput() {
       $("settingsModal").classList.add("hidden");
       $("skillModal").classList.add("hidden");
       $("bestiaryModal").classList.add("hidden");
+      // 0.8.45：Esc 既关设置也恢复游戏；设置触发的暂停不能把玩家锁在暂停里。
+      if (pauseState.paused) setPaused(false);
       renderAll();
     }
 
@@ -156,6 +189,11 @@ export function setupInput() {
     const panelOnly = action === "skillUpgrade" || action === "mute" || action === "keybind";
     if (!state && !panelOnly) {
       showToast("请先选择职业开始游戏");
+      return;
+    }
+    // 0.8.45 暂停期间只允许开面板/静音/改键；攻击、技能、药水、拾取、传送全部拒绝。
+    if (pauseState.paused && !panelOnly) {
+      showToast("游戏已暂停，点击画面或按 Esc 继续");
       return;
     }
     if (action === "attack") normalAttack();
@@ -186,14 +224,18 @@ export function setupInput() {
     keys[event.key.toLowerCase()] = false;
   });
   canvas.addEventListener("pointerdown", (event) => {
+    // 0.8.45 暂停遮罩通常已盖住画布；这里再兜一层，避免遮罩点掉后误下走位指令。
+    if (pauseState.paused) return;
     pointer.down = true;
     const point = canvasPoint(event);
     // 友军（骨卫）不参与点击锁定，点击其位置视为走位指令。
     // 0.8.43：点击锁定命中区按立绘包围盒放大（原先 radius+22 只有约 30px，
     // 实测点立绘边缘会被判成“点地移动”，玩家会直接走进怪堆）。
+    // 0.8.45 修复：普通怪没有 boss 字段，Number(undefined)=NaN 会让排序整段失效，
+    // 首领与小怪立绘重叠时会锁到小怪。显式转成 1/0 再排。
     const target = state?.entities
       .filter((entity) => entity.alive && !entity.friendly)
-      .sort((a, b) => Number(b.boss) - Number(a.boss))
+      .sort((a, b) => (b.boss ? 1 : 0) - (a.boss ? 1 : 0))
       .find((entity) => entityClickHit(point, entity));
     if (target) selectTarget(target);
     else {
@@ -205,13 +247,13 @@ export function setupInput() {
     pointer.down = false;
   });
   canvas.addEventListener("pointermove", (event) => {
-    if (!state) return;
+    if (!state || pauseState.paused) return;
     const point = canvasPoint(event);
     pointer.x = point.x;
     pointer.y = point.y;
     const hovered = state.entities
       .filter((entity) => entity.alive && !entity.friendly)
-      .sort((a, b) => Number(b.boss) - Number(a.boss))
+      .sort((a, b) => (b.boss ? 1 : 0) - (a.boss ? 1 : 0))
       .find((entity) => entityClickHit(point, entity));
     state.hoveredEntityId = hovered?.id || null;
     // 0.8.43：悬停可锁定目标时给指针手型，让“这里能点”可见。
@@ -260,6 +302,7 @@ export function setupInput() {
   $("muteBtn").addEventListener("click", () => {
     const muted = toggleMute();
     refreshMuteLabel();
+    refreshViewZoomButtons();
     showToast(muted ? "音效已关闭" : "音效已开启");
   });
   refreshMuteLabel();
@@ -300,6 +343,12 @@ export function setupInput() {
     keybindCapture.action = null;
     $("skillModal").classList.add("hidden");
     $("settingsModal").classList.toggle("hidden");
+    // 0.8.45：打开设置即暂停，避免玩家看键位/存档时被怪打死；关闭设置再恢复。
+    if (state) {
+      if (!$("settingsModal").classList.contains("hidden")) setPaused(true, "settings");
+      else if (pauseState.reason === "settings") setPaused(false);
+    }
+    refreshViewZoomButtons();
     renderKeybindPanel();
   });
   $("settingsModal").addEventListener("click", (event) => {
@@ -310,11 +359,32 @@ export function setupInput() {
       showToast("请按下新的按键（Esc 取消）");
       return;
     }
+    const zoomButton = event.target.closest("[data-view-zoom]");
+    if (zoomButton) {
+      setViewZoom(Number(zoomButton.dataset.viewZoom));
+      refreshViewZoomButtons();
+      renderAll();
+      showToast(`画面缩放 ${Math.round(getViewZoom() * 100)}%`);
+      return;
+    }
     if (event.target.closest("[data-close-settings]")) {
       keybindCapture.action = null;
       $("settingsModal").classList.add("hidden");
+      if (pauseState.reason === "settings") setPaused(false);
       renderKeybindPanel();
     }
+  });
+  // 0.8.45 暂停按钮/遮罩/后台自动暂停。
+  $("pauseBtn").addEventListener("click", () => {
+    togglePause();
+    renderAll();
+  });
+  $("pauseOverlay").addEventListener("click", () => setPaused(false));
+  $("pauseOverlay").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") setPaused(false);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state && !pauseState.paused) setPaused(true, "background");
   });
   $("keybindReset").addEventListener("click", () => {
     resetKeybinds();

@@ -38,6 +38,10 @@ export const joystick = { x: 0, y: 0, active: false };
 // 键位捕获状态：设置面板点击某个动作后进入等待按键，此时其余游戏快捷键全部屏蔽。
 export const keybindCapture = { action: null };
 
+// 0.8.45 暂停状态：paused 为 true 时 update() 只渲染不推进时间，
+// reason 记录是谁触发的（manual / settings / background），用于关闭设置时判断是否恢复。
+export const pauseState = { paused: false, reason: "" };
+
 export let moveTarget = null;
 export function setMoveTarget(value) {
   moveTarget = value;
