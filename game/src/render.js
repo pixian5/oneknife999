@@ -495,6 +495,7 @@ export function drawWorld() {
   }
   drawPierceBeam();
   drawSkillRangePreview();
+  drawAttackRange();
   drawPlayer();
   // 0.8.29 技能特效贴图：命中点渐隐闪光（缩放 0.6→1.15）。
   for (const item of fx.skillFx || []) {
@@ -1450,6 +1451,42 @@ export function playerSpriteAction(player = state.player) {
 let lastPlayerX = 0;
 let lastPlayerY = 0;
 
+// 0.8.43：把普攻射程画出来。此前只有一条极细的挥砍弧，玩家在怪堆里根本判断不出
+// “看着贴脸但还差 300 距离”。锁定目标时圈变实，超出射程时圈与连线转红。
+export function drawAttackRange() {
+  if (!state) return;
+  const hero = activeHero();
+  const range = hero?.range;
+  if (!range) return;
+  const target = state.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
+  const dist = target ? distance(state.player, target) : null;
+  const inRange = Boolean(target && dist <= range);
+  ctx.save();
+  ctx.globalAlpha = target ? (inRange ? 0.16 : 0.1) : 0.05;
+  ctx.fillStyle = inRange ? "#62d5c6" : "#c8553d";
+  ctx.beginPath();
+  ctx.arc(state.player.x, state.player.y, range, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = target ? (inRange ? 0.75 : 0.55) : 0.2;
+  ctx.strokeStyle = inRange ? "#62d5c6" : "#d96b52";
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([7, 7]);
+  ctx.beginPath();
+  ctx.arc(state.player.x, state.player.y, range, 0, Math.PI * 2);
+  ctx.stroke();
+  if (target && !inRange) {
+    // 超出射程：从角色到目标画一条红色虚线，明确“还差这一段”。
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = "#d96b52";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(state.player.x, state.player.y);
+    ctx.lineTo(target.x, target.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawPlayer() {
   const hero = activeHero();
   // 0.4.5 玩家全身立绘精灵：player-full-{class}.png（透明抠图），程序化动作动画——
@@ -1626,9 +1663,22 @@ function setClassName(element, className) {
 
 export function renderTarget() {
   const target = state?.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
-  if (state && !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}`)) return;
+  const range = activeHero().range;
+  const dist = target ? Math.round(distance(state.player, target)) : null;
+  // 0.8.43：目标栏补“距离 / 是否在射程内”。此前只显示血条，玩家看不出为什么按 X 不掉血。
+  if (state && !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}|${dist}`)) return;
   setText($("targetText"), target ? target.name : "未锁定目标");
-  setText($("targetHint"), target ? `${Math.max(0, Math.round(target.hp))} / ${target.maxHp} HP` : "靠近怪物开始战斗");
+  if (target) {
+    const inRange = dist <= range;
+    setText(
+      $("targetHint"),
+      `${Math.max(0, Math.round(target.hp))}/${target.maxHp} · 距 ${dist} · ${inRange ? "射程内" : `超射程 ${range}`}`
+    );
+    setStyle($("targetHint"), "color", inRange ? "var(--muted)" : "#e08a72");
+  } else {
+    setText($("targetHint"), "靠近怪物后按 X 攻击");
+    setStyle($("targetHint"), "color", "var(--muted)");
+  }
 }
 export function renderLog() {
   const last = state.logs[state.logs.length - 1];

@@ -595,6 +595,10 @@ p {
   border-color: var(--teal);
   background: rgba(98, 213, 198, 0.08);
 }
+.equipment-slot.confirming {
+  outline: 2px solid var(--amber);
+  box-shadow: 0 0 0 3px rgba(231, 179, 107, 0.25);
+}
 .equipment-slot.filled {
   color: var(--amber);
   border-color: rgba(231, 179, 107, 0.4);
@@ -826,8 +830,8 @@ p {
   background: #2c5460;
 }
 .target-block {
-  width: 150px;
-  flex: 0 0 150px;
+  width: 176px;
+  flex: 0 0 176px;
   min-width: 0;
 }
 .target-block strong {

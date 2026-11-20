@@ -1,9 +1,11 @@
 import { state, keys, joystick, pointer, setMoveTarget, primaryExit, mapProgress, keybindCapture, activeHero } from "./runtime.js";
-import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybindPanel } from "./render.js";
+import { canvas, canvasPoint, showToast, objectiveView, renderAll, renderKeybindPanel, spriteHeight } from "./render.js";
 import { $, distance } from "./util.js";
 import { isMuted, toggleMute, unlockAudio } from "./audio.js";
 import { loadKeybinds, actionForKey, setKeybind, resetKeybinds } from "./keybinds.js";
 import { logDebug, logInfo, logThrottled } from "./logger.js";
+// 0.8.43：装备格改为两段式强化确认，需要报价与部位中文名。
+import { enhanceQuote, EQUIPMENT_SLOTS } from "./config.js";
 import {
   normalAttack,
   collectDrops,
@@ -33,6 +35,15 @@ import {
 
 // 《一刀999》输入层：键盘 / 鼠标 / 触屏（虚拟摇杆）与所有 HUD 按钮的事件绑定。
 // 从 main.js 拆出：与 main 的循环引用只发生在事件回调里（函数声明提升后绑定安全）。
+
+// 0.8.43：立绘是“脚在实体坐标、身体向上延伸”的画法。只按 radius 判点击时，
+// 点头部/胸甲会落到实体坐标上方几十像素，被判成点地走位。这里用一条从脚到
+// 身体 62% 高度的竖直胶囊做命中，点击立绘任何部位都能锁定。
+function entityClickHit(point, entity) {
+  const top = entity.y - spriteHeight(entity) * 0.62;
+  const clampedY = Math.min(entity.y, Math.max(top, point.y));
+  return Math.hypot(point.x - entity.x, point.y - clampedY) < entity.radius + 32;
+}
 
 // 虚拟摇杆：Pointer Events 同时支持触屏与鼠标；超出半径按比例夹紧，抬手 / 取消立即归零。
 // 摇杆只写入 runtime 的 joystick 状态，实际移动仍在 movePlayer 中统一处理。
@@ -175,7 +186,12 @@ export function setupInput() {
     pointer.down = true;
     const point = canvasPoint(event);
     // 友军（骨卫）不参与点击锁定，点击其位置视为走位指令。
-    const target = state?.entities.find((entity) => entity.alive && !entity.friendly && distance(point, entity) < entity.radius + 22);
+    // 0.8.43：点击锁定命中区按立绘包围盒放大（原先 radius+22 只有约 30px，
+    // 实测点立绘边缘会被判成“点地移动”，玩家会直接走进怪堆）。
+    const target = state?.entities
+      .filter((entity) => entity.alive && !entity.friendly)
+      .sort((a, b) => Number(b.boss) - Number(a.boss))
+      .find((entity) => entityClickHit(point, entity));
     if (target) selectTarget(target);
     else {
       logThrottled("click-move", 200, "debug", "input", "moveOrder", { x: Math.round(point.x), y: Math.round(point.y) });
@@ -193,11 +209,14 @@ export function setupInput() {
     const hovered = state.entities
       .filter((entity) => entity.alive && !entity.friendly)
       .sort((a, b) => Number(b.boss) - Number(a.boss))
-      .find((entity) => distance(point, entity) < entity.radius + 18);
+      .find((entity) => entityClickHit(point, entity));
     state.hoveredEntityId = hovered?.id || null;
+    // 0.8.43：悬停可锁定目标时给指针手型，让“这里能点”可见。
+    canvas.style.cursor = hovered ? "pointer" : "crosshair";
   });
   canvas.addEventListener("pointerleave", () => {
     if (state) state.hoveredEntityId = null;
+    canvas.style.cursor = "crosshair";
   });
   $("skillBar").addEventListener("click", (event) => {
     const button = event.target.closest("[data-skill]");
@@ -330,10 +349,38 @@ export function setupInput() {
     if (!button) return;
     equipItem((state.inventory || [])[Number(button.dataset.itemIndex)]);
   });
-  // 装备槽点击 = 尝试强化该部位穿戴的装备
+  // 0.8.43：装备槽不再“点一下就扣钱强化”。首次点击只显示报价，3 秒内再点一次才执行，
+  // 避免玩家想查看装备时误触强化（旧版单击直接扣金币且可能失败）。
   $("equipmentGrid").addEventListener("click", (event) => {
     const button = event.target.closest("[data-equip-slot]");
-    if (button) enhanceItem(button.dataset.equipSlot);
+    if (!button) return;
+    const slot = button.dataset.equipSlot;
+    const item = state?.player?.equipment?.[slot];
+    if (!item) {
+      showToast(`${EQUIPMENT_SLOTS[slot]?.label || slot}部位还没有穿戴装备`);
+      return;
+    }
+    if (button.dataset.confirm !== "1") {
+      const quote = enhanceQuote(item, state.player.gold, state.inventory || []);
+      if (!quote.canEnhance) {
+        showToast(quote.reason);
+        return;
+      }
+      button.dataset.confirm = "1";
+      button.classList.add("confirming");
+      showToast(
+        `再次点击「${EQUIPMENT_SLOTS[slot]?.label || slot}」强化 +${(item.enhance || 0) + 1}：消耗 ${quote.cost} 金币，成功率 ${Math.round(quote.rate * 100)}%`
+      );
+      setTimeout(() => {
+        if (!button.isConnected) return;
+        delete button.dataset.confirm;
+        button.classList.remove("confirming");
+      }, 3000);
+      return;
+    }
+    delete button.dataset.confirm;
+    button.classList.remove("confirming");
+    enhanceItem(slot);
   });
   // 城镇杂货商（0.3.5）：购买与词缀重铸都走事件委托，面板重建不需要重绑。
   $("shopClose").addEventListener("click", closeShop);

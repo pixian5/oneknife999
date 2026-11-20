@@ -183,7 +183,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.42";
+const CURRENT_APP_VERSION = "0.8.43";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -677,19 +677,29 @@ export function normalAttack() {
   const target = findTarget();
   if (!target) {
     logThrottled("attack-notarget", 800, "debug", "input", "attackBlocked", { reason: "noTarget", range: hero.range });
-    showToast("附近没有可攻击目标，点击地图移动或按 Space 搜索");
+    // 0.8.43：不再只弹“附近没有目标”。把最近的敌人距离报出来，玩家才知道该往哪走。
+    const nearest = state.entities
+      .filter((entity) => entity.alive && !entity.friendly && !entity.npc)
+      .sort((a, b) => distance(state.player, a) - distance(state.player, b))[0];
+    if (nearest) {
+      const dist = Math.round(distance(state.player, nearest));
+      showToast(`附近没有可攻击目标：最近的 ${nearest.name} 距离 ${dist}（射程 ${hero.range}），先靠近`);
+    } else {
+      showToast("附近没有可攻击目标：往东侧主路走，或按 Space 搜索");
+    }
     return;
   }
+  const targetDist = Math.round(distance(state.player, target));
   if (distance(state.player, target) > hero.range) {
     state.player.targetId = target.id;
     setMoveTarget({ x: target.x, y: target.y });
     logThrottled("attack-outrange", 400, "debug", "input", "attackBlocked", {
       reason: "outOfRange",
       target: target.id,
-      dist: Math.round(distance(state.player, target)),
+      dist: targetDist,
       range: hero.range
     });
-    showToast(`正在接近 ${target.name}`);
+    showToast(`正在接近 ${target.name}：距离 ${targetDist}，进入 ${hero.range} 内才出手`);
     return;
   }
   const normalAttackCost = state.classId === "mage" ? 8 : 0;
@@ -1113,7 +1123,9 @@ export function defeat(target) {
   target.alive = false;
   // 0.8.26 击败 Boss 后给主角 3 秒胜利动作帧窗口（victory）。
   if (target.boss) state.player.victoryTimer = 3;
-  target.respawn = target.boss ? 42 : target.npc ? 90 : rand(11, 20);
+  // 0.8.43：普通怪 11–20 秒重生太快，玩家刚清掉又看到同一只站起来，清剿进度感混乱。
+  // 放宽到 28–45 秒（首领 42、NPC 90 不变）。
+  target.respawn = target.boss ? 42 : target.npc ? 90 : rand(28, 45);
   target.hp = target.maxHp;
   // 0.8.13 精英死亡词缀：毒爆 / 分裂。必须在 alive=false 之后跑，
   // 否则分裂体可能在目标还没判死时就被同一发伤害波及。
@@ -1173,7 +1185,11 @@ export function defeat(target) {
       state.player.sin = Math.max(0, state.player.sin - PK_RULES.sinDecayPerDangerKill);
   }
   spark(target.x, target.y, target.boss ? "#e7b36b" : "#d8e8dc", target.boss ? 30 : 16);
-  const dropRolls = rollDropCount(target);
+  // 0.8.43：新手引导第 3 步要求“过去拾取”，但普通怪只有 42% 掉落。
+  // 首杀若空手，引导会指向不存在的光柱；这里为首杀保底 1 次掉落。
+  const guideFirstKill = state.player.guideStep === 3 && (state.player.guideKillDrop || 0) < 1;
+  if (guideFirstKill) state.player.guideKillDrop = (state.player.guideKillDrop || 0) + 1;
+  const dropRolls = guideFirstKill ? Math.max(1, rollDropCount(target)) : rollDropCount(target);
   // 0.8.7：击杀结算写日志——「为什么经验 / 金币没涨」时可直接对照 reward 与难度加成。
   logInfo("combat", "kill", {
     target: target.id,
@@ -2390,6 +2406,24 @@ export function loadGame() {
       clearedMaps: MAP_ORDER.filter((id) => state.mapProgress?.[id]?.completed).length
     });
     loadMap(startMap, state.player.x || 480, state.player.y || 780, true);
+    // 0.8.43：地面掉落不跨会话保存。若玩家在引导第 3 步刷新，原掉落已消失，
+    // 引导会永久卡在“去拾取”。这里在角色附近补一件引导补给，走近自动拾取即完成。
+    if (state.player.guideStep === 3 && !state.drops.length) {
+      state.drops.push({
+        id: `guide-drop-${Date.now()}`,
+        name: "回元露",
+        kind: "resource_potion",
+        slot: "consumable",
+        quality: "blue",
+        glyph: "露",
+        color: "#7fb6d9",
+        desc: "拾取后恢复 35% 怒气/法力",
+        x: (state.player.x || 480) + 70,
+        y: state.player.y || 780,
+        source: "引导补给"
+      });
+      log("引导补给已放在角色附近：走近光柱即可拾取。", "loot");
+    }
     $("classModal").classList.add("hidden");
     if (migrated) {
       persistGame();
