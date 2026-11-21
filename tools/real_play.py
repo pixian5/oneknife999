@@ -85,12 +85,12 @@ def click_ent(e, o):
 
 
 def combo(n=2):
+    """近战/道士连招；只在血量低于 35% 时喝一次药，避免低血量职业被误判成一直危险。"""
     for i in range(n):
-        if player()["hp"] < 400:
+        p = player()
+        if p["hp"] < p["maxHp"] * 0.35 and p["potion"] > 0:
             bu.hotkey("q")
             time.sleep(0.18)
-        if i % 2 == 0:
-            bu.hotkey("q")
         for k in ["4", "3", "2", "1", "x", "x"]:
             bu.hotkey(k)
             time.sleep(0.09)
@@ -190,7 +190,7 @@ def clear_stage(n, verbose=True):
     engage = 200 if cls == "mage" else 170 if cls == "taoist" else 58
     deaths = player()["deaths"]
     spend_points()
-    if player()["potion"] < 12 and player()["gold"] >= 600:
+    if player()["potion"] < 10 and player()["gold"] >= 90:
         move(*meta["t"])
         shop_buy(18)
     # 沿主路推进到首领方向，途中优先击杀最近的存活小怪
@@ -209,7 +209,7 @@ def clear_stage(n, verbose=True):
         if p["deaths"] != deaths:
             deaths = p["deaths"]
             print(n, "死亡，回城补给后继续")
-            if p["potion"] < 10 and p["gold"] >= 600:
+            if p["potion"] < 10 and p["gold"] >= 90:
                 move(*meta["t"])
                 shop_buy(18)
             continue
@@ -239,7 +239,7 @@ def clear_stage(n, verbose=True):
         if p["deaths"] != deaths:
             deaths = p["deaths"]
             print(n, "首领战死亡，回城补给后继续")
-            if p["potion"] < 10 and p["gold"] >= 600:
+            if p["potion"] < 10 and p["gold"] >= 90:
                 move(*meta["t"])
                 shop_buy(18)
             continue
