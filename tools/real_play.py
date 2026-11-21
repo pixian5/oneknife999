@@ -172,6 +172,98 @@ def meta_for(n):
     return next(m for m in META if m["n"] == n)
 
 
+# 首领印记过渡套的槽位与名称；按“先武器、再生存件”的顺序兑换。
+MARKS_SET = [
+    ("weapon", "烬誓·过渡长锋"),
+    ("armor", "烬誓·过渡胸甲"),
+    ("helmet", "烬誓·过渡面甲"),
+    ("neck", "烬誓·过渡颈环"),
+    ("boots", "烬誓·过渡战靴"),
+    ("belt", "烬誓·过渡束带"),
+    ("medal", "烬誓·过渡勋章"),
+    ("talisman", "烬誓·过渡玉佩"),
+]
+
+
+def _eval_json(expr):
+    r = bu.cdp("Runtime.evaluate", expression=expr, returnByValue=True)
+    v = r["result"]["value"]
+    return json.loads(v) if isinstance(v, str) else v
+
+
+def _save_raw():
+    return json.loads(bu.cdp("Runtime.evaluate", expression="localStorage.getItem('oneknife999-prototype-save-v4')", returnByValue=True)["result"]["value"])
+
+
+def _click_box(box):
+    """把页面像素矩形中心换算成 0-1000 坐标，发真实鼠标点击。"""
+    if not box or not box.get("width"):
+        return False
+    bu.click_xy(
+        (box["x"] + box["width"] / 2) / 1920 * 1000,
+        (box["y"] + box["height"] / 2) / 993 * 1000,
+    )
+    return True
+
+
+def click_element(selector_js):
+    """先滚到视口内，再按真实矩形点击，避免面板滚动后点到视口外。"""
+    _eval_json(f"(function(){{const e={selector_js}; if(!e)return 'null'; e.scrollIntoView({{block:'center'}}); return JSON.stringify(e.getBoundingClientRect().toJSON());}})()")
+    time.sleep(0.25)
+    box = _eval_json(f"(function(){{const e={selector_js}; return e?JSON.stringify(e.getBoundingClientRect().toJSON()):'null';}})()")
+    return _click_box(box)
+
+
+def buy_marks_gear(meta):
+    """在城镇用真实点击兑换缺失的 800 印记过渡装，并立即穿戴。
+
+    只读 localStorage 判断已拥有；不满足 800 印记或八件齐全时直接返回。
+    """
+    eq = _save_raw().get("equipment", {})
+    missing = [(slot, name) for slot, name in MARKS_SET if (eq.get(slot) or {}).get("id") != f"marks-{slot}"]
+    if not missing or player()["marks"] < 800:
+        return False
+    print("GEAR", "missing", [s for s, _ in missing], "marks", player()["marks"], flush=True)
+    move(*meta["t"], tol=50)
+    if not _eval_json("(function(){return !!document.querySelector('[data-buy-marks]');})()"):
+        bu.hotkey("f")
+        time.sleep(0.5)
+    bought = []
+    for slot, name in missing:
+        if player()["marks"] < 800:
+            break
+        _eval_json(f"(function(){{const e=document.querySelector('button[data-buy-marks=\"{slot}\"]'); if(!e||e.disabled)return 'null'; e.scrollIntoView({{block:'center'}}); return JSON.stringify(e.getBoundingClientRect().toJSON());}})()")
+        time.sleep(0.2)
+        box = _eval_json(f"(function(){{const e=document.querySelector('button[data-buy-marks=\"{slot}\"]'); return e?JSON.stringify(e.getBoundingClientRect().toJSON()):'null';}})()")
+        if not _click_box(box):
+            continue
+        time.sleep(0.4)
+        print("GEAR", slot, name, "marks->", player()["marks"], flush=True)
+        bought.append((slot, name))
+    bu.hotkey("f")
+    time.sleep(0.3)
+    if not bought:
+        return False
+    # 打开背包：若网格高度为 0 则真实点击背包标题。
+    if not _eval_json("(function(){const e=document.querySelector('#inventoryGrid');return !!(e&&e.getBoundingClientRect().height>0);})()"):
+        click_element("document.querySelector('#inventoryHint')")
+        time.sleep(0.3)
+    for slot, name in bought:
+        if (_save_raw().get("equipment", {}).get(slot) or {}).get("id") == f"marks-{slot}":
+            continue
+        _eval_json(f"(function(){{const e=[...document.querySelectorAll('#inventoryGrid .inventory-slot')].find(x=>x.title.includes('{name}')); if(!e)return 'null'; e.scrollIntoView({{block:'center'}}); return JSON.stringify(e.getBoundingClientRect().toJSON());}})()")
+        time.sleep(0.2)
+        box = _eval_json(f"(function(){{const e=[...document.querySelectorAll('#inventoryGrid .inventory-slot')].find(x=>x.title.includes('{name}')); return e?JSON.stringify(e.getBoundingClientRect().toJSON()):'null';}})()")
+        _click_box(box)
+        time.sleep(0.35)
+        now = (_save_raw().get("equipment", {}).get(slot) or {})
+        print("EQUIP", slot, now.get("name"), flush=True)
+    click_element("document.querySelector('#inventoryHint')")
+    time.sleep(0.2)
+    return True
+
+
+
 def save_checkpoint(n):
     r = bu.cdp("Runtime.evaluate", expression="JSON.stringify({s:window.__ONEKNIFE_E2E__.snapshot(),raw:localStorage.getItem('oneknife999-prototype-save-v4')})",
                returnByValue=True)
@@ -190,6 +282,7 @@ def clear_stage(n, verbose=True):
     engage = 200 if cls == "mage" else 170 if cls == "taoist" else 58
     deaths = player()["deaths"]
     spend_points()
+    buy_marks_gear(meta)
     if player()["potion"] < 10 and player()["gold"] >= 90:
         move(*meta["t"])
         shop_buy(18)
