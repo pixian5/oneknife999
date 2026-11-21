@@ -22,5 +22,6 @@
 - 首领战进行中的当前血量不在这份存档里；读档后首领回到满血。已击杀进度、等级、金币、死亡数会保留。
 - 战士全通：`warrior-100-complete.json`，100/100 关完成。
 - 法师全通：`mage-100-complete.json`，100/100 关完成；Lv41、HP1578、死亡132、印记370。
-- 道士进行中：`taoist-progress.json`，逐关覆盖；`real-player-progress.json` 同步为当前操作档。
+- 道士全通：`taoist-100-complete.json`，100/100 关完成；Lv41、HP1583、死亡16、印记300、四技能全10。
+- `taoist-progress.json` 为道士逐关检查点，`real-player-progress.json` 同步为当前操作档。
 - 换云端浏览器或清空 localStorage 后，必须从上述文件恢复，否则会从选职业开始。
