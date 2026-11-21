@@ -299,6 +299,12 @@ export function resolveBossUiPortrait(map) {
 
 // 每图底图：50 张 map-cXX-YY（每章 5 张，按关卡序号循环）。
 export function resolveMapBackgroundName(map) {
+  // 0.8.40 深层专属底图：abyss 层不再轮换百图章节氛围图，按层取深层暗紫/暗青变体——
+  // 给「这是另一个世界」的视觉标识（图由 0.8.40 PIL 从 chapter 底图程序化调色生成）。
+  if (map?.abyssFloor > 0) {
+    const variant = String(((map.abyssFloor - 1) % 2) + 1).padStart(2, "0");
+    return `abyss-bg-${variant}.jpg`;
+  }
   const chapter = Math.max(1, Math.min(10, map?.chapter || 1));
   const stage = Math.max(1, map?.stageNumber || 1);
   return `map-c${String(chapter).padStart(2, "0")}-${String(((stage - 1) % 5) + 1).padStart(2, "0")}.jpg`;
@@ -308,6 +314,9 @@ export function resolveMapBackgroundName(map) {
 
 // 技能名 → 施放特效贴图（fx-skill-*.png，四角透明，目标点一次渐隐闪光）。
 // 12 张全用上：战士震地冲无贴图（保持粒子+震屏），freeze/frost 用于怪物减速/打断命中玩家的被动视觉。
+// 一刀时刻（oneMoment）不走 castSkill 流程，由 main.js 显式以本 key 挂载爆发特效。
+export const ULTIMATE_FX = "ultimate";
+
 export const SKILL_FX = {
   破甲斩: "shield", // 护甲碎裂意象
   旋风扫: "whirlwind",

@@ -156,7 +156,7 @@ import {
   rollElite,
   seededRandom
 } from "./elite.js";
-import { SKILL_FX, PASSIVE_FX } from "./assets.js";
+import { PASSIVE_FX, SKILL_FX, ULTIMATE_FX } from "./assets.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -979,6 +979,8 @@ export function oneMoment() {
   }
   logInfo("skill", "oneMoment", { target: target.id, name: target.name, classId: state.classId });
   state.player.charge = 0;
+  // 0.8.40 一刀时刻专属爆发特效（金色圣剑光柱，0.45s 渐隐——标志性时刻的视觉锚）。
+  fx.skillFx.push({ key: ULTIMATE_FX, x: target.x, y: target.y - 14, life: 0.45, total: 0.45 });
   const firstDisplay = !state.player.oneMomentUsed;
   state.player.oneMomentUsed = true;
   const actual = resolveDamage(target, state.classId === "warrior" ? 3.2 : state.classId === "mage" ? 2.7 : 2.35, "一刀时刻", "爆发");
@@ -3063,6 +3065,7 @@ if (TEST_MODE) {
                   phase: entity.phase || 0,
                   // 0.6.0：暴露行为配置，e2e / 探针可断言「这只怪确实是冲锋形态、确实带首击减伤」。
                   attackShape: entity.abilities?.attack || "normal",
+                  deepTuned: Boolean(entity.deepTuned),
                   passives: (entity.abilities?.passives || []).map((passive) => passive.id),
                   // 0.7.3：亡语也要能被 e2e 观察到，否则 noabideath 的消融没有断言入口。
                   onDeath: entity.abilities?.onDeath || null,
