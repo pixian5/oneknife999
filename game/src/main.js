@@ -1256,11 +1256,18 @@ export function checkMapCompletion() {
   const rule = MAP_CLEAR_RULES[map.id];
   const progress = mapProgress();
   // 0.8.33 深层地图：不走百图通关结算（不发通关文案/奖励、不误报「百图征途完成」）。
-  // 只保留一条轻量清剿提示；首领击杀的 bossDefeated 由 defeat() 正常记录，供锁层判定。
+  // 0.8.59：但仍要返回 true 触发一次 autoSaveProgress，否则首领刚倒下就刷新会丢 bossDefeated。
+  // 深层 completed 只表示“本层可深入”，不参与主线 100/100 计数。
   if (rule?.abyss) {
     if (progress.kills >= progress.need && !progress.killAnnounced) {
       progress.killAnnounced = true;
       if (!progress.bossDefeated) log(`本层清剿完成：按 T 深入下一层，或挑战守门者${rule.boss}。`, "loot");
+    }
+    progress.completed = progress.kills >= progress.need && progress.bossDefeated;
+    if (progress.completed && !progress.completionAnnounced) {
+      progress.completionAnnounced = true;
+      log(`<b>深层第 ${Number(state.abyssFloor) || 0} 层清层</b>：按 T 深入下一层。`, "loot");
+      return true;
     }
     return false;
   }

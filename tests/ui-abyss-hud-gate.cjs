@@ -73,6 +73,24 @@ function abyssSave(completed = false) {
     assert.equal(blocked.map, "abyss-F2", "未完成本层却能按 T 跳层");
     assert.ok(blocked.toast.includes("尚未完成"), `锁层提示缺失：${blocked.toast}`);
 
+    // 0.8.59：持久化必须保留“当前深层”进度，刷新后不能回到 0/5。
+    const persisted = await page.evaluate(async () => {
+      const runtime = await import("/src/runtime.js");
+      const persist = await import("/src/persist.js");
+      const progress = runtime.mapProgress();
+      progress.kills = progress.need;
+      progress.bossDefeated = true;
+      progress.completed = true;
+      persist.persistGame();
+      return JSON.parse(localStorage.getItem("oneknife999-prototype-save-v4")).mapProgress;
+    });
+    assert.equal(persisted["abyss-F2"]?.completed, true, "当前深层进度没有写入存档");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.__ONEKNIFE_E2E__?.snapshot().currentMapId === "abyss-F2");
+    await page.waitForTimeout(180);
+    const afterReload = await page.evaluate(() => window.__ONEKNIFE_E2E__.snapshot().progress["abyss-F2"]);
+    assert.equal(afterReload?.completed, true, "刷新后当前深层进度丢失");
+
     await page.evaluate(
       ({ key, save }) => {
         localStorage.setItem(key, JSON.stringify(save));
