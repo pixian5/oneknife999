@@ -1428,6 +1428,12 @@ export function collectDrops() {
       toggleShop();
       return;
     }
+    // 0.8.57：篝火是「停留被动恢复」，按 F 原本没有任何反馈；补一条明确提示。
+    // 不改变恢复规则，只让玩家知道不需要按键，避免误以为篝火坏了。
+    if (nearRestPoint()) {
+      showToast("篝火：停留即可恢复生命与符力，无需按 F");
+      return;
+    }
     // 0.8.7：拾取失败的现场（附近掉落数、背包格数、是否在城镇）写日志，
     // 排查「按 F 没反应」时不必再复现操作。
     logDebug("drop", "collectMiss", {
