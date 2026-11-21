@@ -2738,13 +2738,25 @@ export function enterAbyss() {
     showToast(`无尽深层需通关百图后解锁（当前 ${cleared}/100）`);
     return;
   }
-  // 0.8.33 首领层锁层：第 10/20/30… 层必须击败本层首领才能继续深入，防止无限跳层。
+  // 0.8.33 深层锁层：必须完成本层目标才能继续深入；首领层包含击破回响。
   if ((state.abyssFloor || 0) > 0 && abyssFloorFromId(state.currentMapId) > 0) {
     const currentRule = MAP_CLEAR_RULES[state.currentMapId];
     const currentProgress = state.mapProgress?.[state.currentMapId];
-    if (currentRule?.abyss && state.abyssFloor % 10 === 0 && !currentProgress?.bossDefeated) {
-      showToast(`第 ${state.abyssFloor} 层为首领层：击败${currentRule.boss}后才能深入`);
-      logInfo("abyss", "gateLocked", { floor: state.abyssFloor });
+    // 0.8.58：深层 HUD 写的是“完成本层目标后按 T”，但 enterAbyss 原先只锁首领层，
+    // 非首领层可以一路按 T 跳过全部普通怪。这里统一按“本层已通关”校验，
+    // 与目标卡、区域导航和任务链三处文案保持一致。
+    if (!currentProgress?.completed) {
+      const bossState = currentProgress?.bossDefeated ? "已击破" : "未击破";
+      showToast(
+        `第 ${state.abyssFloor} 层尚未完成：普通怪 ${currentProgress?.kills || 0}/${currentRule?.kills || 5}，${currentRule?.boss || "本层回响"}${bossState}`
+      );
+      logInfo("abyss", "gateLocked", {
+        reason: "floorIncomplete",
+        floor: state.abyssFloor,
+        kills: currentProgress?.kills || 0,
+        need: currentRule?.kills || 5,
+        bossDefeated: Boolean(currentProgress?.bossDefeated)
+      });
       return;
     }
   }

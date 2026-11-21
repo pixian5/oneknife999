@@ -1866,6 +1866,16 @@ export function objectiveView() {
   const map = activeMap();
   const rule = MAP_CLEAR_RULES[map.id];
   const progress = mapProgress();
+  // 0.8.58：深层没有 next，不能复用主线“百图征途已通关”的终局文案。
+  // 否则清完 F1 后目标卡不提示按 T，玩家会以为深层到此结束。
+  const abyssFloor = Math.max(0, Number(state.abyssFloor) || Number(map.abyssFloor) || 0);
+  if (rule.abyss && abyssFloor && progress.completed)
+    return {
+      step: "步骤 3 / 3",
+      title: `按 T 深入第 ${abyssFloor + 1} 层`,
+      text: `第 ${abyssFloor} 层目标已完成；按 T 继续深入，层数越高怪物越强、掉落越好。`,
+      complete: true
+    };
   if (progress.completed && !rule.next)
     return { step: "全部完成", title: "百图征途已通关", text: "100 张地图与 100 名区域首领均已完成。", complete: true };
   if (progress.completed)
@@ -1895,6 +1905,10 @@ export function renderMapObjective() {
   const rule = MAP_CLEAR_RULES[map.id];
   const progress = mapProgress();
   const view = objectiveView();
+  // 0.8.58：深层任务的标题/描述/第三项都必须走独立文案，不能把“最终结算”和
+  // “击败玄烬帝尊”套到每一层。abyssFloor 同时兼容旧档里 map 自带层数的情况。
+  const abyssFloor = Math.max(0, Number(state.abyssFloor) || Number(map.abyssFloor) || 0);
+  const isAbyss = Boolean(rule.abyss && abyssFloor);
   const signature = [
     map.id,
     progress.kills,
@@ -1903,7 +1917,8 @@ export function renderMapObjective() {
     progress.completed,
     progress.rewardClaimed,
     view.step,
-    view.text
+    view.text,
+    abyssFloor
   ].join("|");
   if (!panelChanged($("mapObjective"), signature)) return;
   setClass($("mapObjective"), "complete", view.complete);
@@ -1913,9 +1928,13 @@ export function renderMapObjective() {
   // 三条勾选项拆成数组拼接，避免单行模板字符串超过 400 字符；输出 HTML 与拆分前一致。
   const killDone = progress.kills >= progress.need;
   const bossClass = progress.bossDefeated ? "done" : killDone ? "current" : "";
+  const abyssNextLabel =
+    abyssFloor % 10 === 0 && !progress.bossDefeated ? `击败回响后按 T 深入第 ${abyssFloor + 1} 层` : `按 T 深入第 ${abyssFloor + 1} 层`;
   const exitCheck = rule.next
     ? { cls: progress.completed ? "current" : "", mark: progress.completed ? "→" : "○", label: rule.exit }
-    : { cls: progress.completed ? "done" : "", mark: progress.completed ? "✓" : "○", label: "最终结算" };
+    : isAbyss
+      ? { cls: progress.completed ? "current" : "", mark: progress.completed ? "→" : "○", label: abyssNextLabel }
+      : { cls: progress.completed ? "done" : "", mark: progress.completed ? "✓" : "○", label: "最终结算" };
   setHtml(
     $("mapObjectiveChecks"),
     [
@@ -1927,11 +1946,24 @@ export function renderMapObjective() {
   setText($("questTitle"), `${map.story.beatTitle} · ${map.name}`);
   setText(
     $("questDescription"),
-    rule.next
-      ? `${map.story.objective}；完成清怪与首领目标后进入${MAPS[rule.next].name}。`
-      : `${map.story.objective}；击败玄烬帝尊，结束第千次轮回。`
+    isAbyss
+      ? `${map.story.objective}；清剿 ${progress.need} 只普通怪并击破回响后，按 T 深入第 ${abyssFloor + 1} 层。`
+      : rule.next
+        ? `${map.story.objective}；完成清怪与首领目标后进入${MAPS[rule.next].name}。`
+        : `${map.story.objective}；击败玄烬帝尊，结束第千次轮回。`
   );
-  setText($("questTag"), progress.completed ? (rule.next ? "出口已开启" : "已通关") : "进行中");
+  setText(
+    $("questTag"),
+    progress.completed
+      ? isAbyss
+        ? "本层已通关"
+        : rule.next
+          ? "出口已开启"
+          : "已通关"
+      : isAbyss && abyssFloor % 10 === 0
+        ? "首领层"
+        : "进行中"
+  );
   setText($("questReward"), progress.rewardClaimed ? "通关奖励已领取" : `通关奖励：${QUEST_REWARD.gold} 金币 · ${QUEST_REWARD.marks} 印记`);
 }
 
@@ -1940,13 +1972,16 @@ export function renderMapHeader() {
   // 区域动态：首领刷新读秒直接取实体 respawn，避免状态副本与实体脱节
   const bossEntity = state.entities.find((entity) => entity.boss);
   const progress = mapProgress();
+  // 0.8.58：深层地图不属于 MAP_ORDER，不能显示“100/100 通关”（深度 100 层也未必到）。
+  const abyssFloor = Math.max(0, Number(state.abyssFloor) || Number(map.abyssFloor) || 0);
   const signature = [
     map.id,
     bossEntity?.alive,
     bossEntity && !bossEntity.alive ? Math.ceil(bossEntity.respawn) : bossEntity?.phase || 1,
     progress.completed,
     progress.siteClaimed,
-    progress.resourceClaimed
+    progress.resourceClaimed,
+    abyssFloor
   ].join("|");
   if (!panelChanged($("mapDynamics"), signature)) return;
   setText($("mapTitle"), `${map.name} · ${map.subtitle}`);
@@ -1956,10 +1991,18 @@ export function renderMapHeader() {
   setClassName(dangerEl, `pill ${map.danger === "safe" ? "safe" : map.danger === "danger" || map.danger === "desolate" ? "danger" : ""}`);
   const dynamics = [];
   if (bossEntity && !bossEntity.alive)
-    dynamics.push(`<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(bossEntity.respawn)}s 后刷新</span>`);
+    dynamics.push(
+      `<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(bossEntity.respawn)}s 后${abyssFloor ? "回响重生" : "刷新"}</span>`
+    );
   else dynamics.push(`<span class="world-event"><i></i> 首领在场 · 阶段 ${bossEntity?.phase || 1}</span>`);
   const rule = MAP_CLEAR_RULES[map.id];
-  if (!rule.next && progress.completed)
+  if (abyssFloor)
+    dynamics.push(
+      `<span class="world-event ${progress.completed ? "ready" : "locked"}"><i class="gold"></i> ${
+        progress.completed ? "本层已通关" : "本层进行中"
+      } · ${progress.completed ? "按 T 深入" : "完成目标后按 T 深入"}第 ${abyssFloor + 1} 层</span>`
+    );
+  else if (!rule.next && progress.completed)
     dynamics.push(`<span class="world-event ready"><i class="gold"></i> 100/100 通关 · 百图征途完成</span>`);
   else if (rule.next)
     dynamics.push(
@@ -2010,6 +2053,40 @@ $("regionList").addEventListener("click", (event) => {
 
 export function renderRegion() {
   const map = activeMap();
+  const abyssFloor = Math.max(0, Number(state.abyssFloor) || Number(map.abyssFloor) || 0);
+  // 0.8.58：深层不在 MAP_ORDER 里，idx=-1 会把“区域导航”算成第 0/100 关。
+  // 这里改成只展示当前层、下一层与最深纪录，不再暴露主线 100 图的错误进度。
+  if (abyssFloor) {
+    const progress = mapProgress();
+    const best = Math.max(abyssFloor, state.abyssBest || 0);
+    const signature = ["abyss", abyssFloor, best, progress.kills, progress.need, progress.bossDefeated, progress.completed].join("|");
+    if (!panelChanged($("regionList"), signature)) return;
+    setText(document.querySelector(".region-tip"), `第 ${abyssFloor} 层 / 最深 ${best} 层`);
+    const nextLabel =
+      abyssFloor % 10 === 0 && !progress.bossDefeated ? "击败本层回响后解锁" : progress.completed ? "按 T 深入" : "完成本层目标后按 T 深入";
+    setHtml(
+      $("regionList"),
+      [
+        `<div class="region-node current" aria-current="true">
+          <span class="region-name">F${String(abyssFloor).padStart(2, "0")} · ${map.name}</span>
+          <span class="region-level">无尽深层 · 当前层</span>
+          <span class="region-danger ${map.danger === "safe" ? "safe" : "danger"}">${map.dangerLabel}</span>
+          <span class="region-progress ${progress.completed ? "done" : ""}">${progress.completed ? "本层已通关" : `进行中 ${progress.kills}/${progress.need}`}</span>
+        </div>`,
+        `<div class="region-node">
+          <span class="region-name">F${String(abyssFloor + 1).padStart(2, "0")} · 下一层</span>
+          <span class="region-level">深层成长 +14% 生命 / +7% 攻击</span>
+          <span class="region-progress">${nextLabel}</span>
+        </div>`,
+        `<div class="region-node">
+          <span class="region-name">最深纪录 F${String(best).padStart(2, "0")}</span>
+          <span class="region-level">存档记录 · 可继续刷新</span>
+          <span class="region-progress">每 10 层为首领层</span>
+        </div>`
+      ].join("")
+    );
+    return;
+  }
   const idx = MAP_ORDER.indexOf(map.id);
   const windowSize = 6;
   const start = clamp(idx - 2, 0, MAP_ORDER.length - windowSize);
@@ -2337,9 +2414,33 @@ export function renderSkillModal() {
 // 状态由 questStatus / chapterStats 从 mapProgress 派生，奖励在通关时自动发放。
 export function renderQuestChain() {
   const map = activeMap();
+  const progress = mapProgress();
+  const abyssFloor = Math.max(0, Number(state.abyssFloor) || Number(map.abyssFloor) || 0);
+  // 0.8.58：deep 地图不属于十章任务链，chapterStats 会算出 0/0。
+  // 改为展示本层击杀、回响状态和下一层入口，保证深层有明确的“当前进度”。
+  if (abyssFloor) {
+    const best = Math.max(abyssFloor, state.abyssBest || 0);
+    const signature = ["abyss-chain", abyssFloor, best, progress.kills, progress.need, progress.bossDefeated, progress.completed].join("|");
+    if (!panelChanged($("questChainList"), signature)) return;
+    setText($("questChainTitle"), `无尽深层 · 第 ${abyssFloor} 层`);
+    setText($("questChainTip"), `最深 ${best} 层`);
+    setHtml(
+      $("questChainList"),
+      `<div class="quest-current">
+        <div class="qc-reward">普通怪 ${progress.kills}/${progress.need} · 回响${progress.bossDefeated ? "已击破" : "未击破"} · ${
+          progress.completed ? `按 T 深入第 ${abyssFloor + 1} 层` : "完成本层目标后开启下一层"
+        }</div>
+      </div>
+      <div class="quest-chain-list">
+        <span class="quest-chain-node ${progress.kills >= progress.need ? "done" : "current"}">${progress.kills >= progress.need ? "✓" : "◉"} 清剿普通怪</span>
+        <span class="quest-chain-node ${progress.bossDefeated ? "done" : progress.kills >= progress.need ? "current" : ""}">${progress.bossDefeated ? "✓" : "○"} 击破回响</span>
+        <span class="quest-chain-node ${progress.completed ? "current" : ""}">${progress.completed ? "◉" : "○"} 深入第 ${abyssFloor + 1} 层</span>
+      </div>`
+    );
+    return;
+  }
   const stats = chapterStats();
   const view = objectiveView();
-  const progress = mapProgress();
   const signature = [
     "v2",
     map.chapter,

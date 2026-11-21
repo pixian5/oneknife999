@@ -24,4 +24,5 @@
 - 法师全通：`mage-100-complete.json`，100/100 关完成；Lv41、HP1578、死亡132、印记370。
 - 道士全通：`taoist-100-complete.json`，100/100 关完成；Lv41、HP1583、死亡16、印记300、四技能全10。
 - `taoist-progress.json` 为道士逐关检查点，`real-player-progress.json` 同步为当前操作档。
+- `abyss-progress.json` 为百关后的无尽深层检查点：道士、`abyss-F3`、最深 3 层；F1/F2 已真实清层。
 - 换云端浏览器或清空 localStorage 后，必须从上述文件恢复，否则会从选职业开始。
