@@ -224,8 +224,8 @@ def buy_marks_gear(meta):
     if not missing or player()["marks"] < 800:
         return False
     print("GEAR", "missing", [s for s, _ in missing], "marks", player()["marks"], flush=True)
-    move(*meta["t"], tol=50)
-    if not _eval_json("(function(){return !!document.querySelector('[data-buy-marks]');})()"):
+    move(*meta["t"], tol=20)
+    if not _eval_json("(function(){return [...document.querySelectorAll('[data-buy-marks]')].some(b=>b.offsetWidth>0);})()"):
         bu.hotkey("f")
         time.sleep(0.5)
     bought = []
