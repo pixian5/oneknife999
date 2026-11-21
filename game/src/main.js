@@ -185,7 +185,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.54";
+const CURRENT_APP_VERSION = "0.8.55";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -1206,7 +1206,7 @@ export function defeat(target) {
     log(`<b>首领击破</b>：${target.name} 倒下，个人获得 ${reward.marksGain} 首领印记。`, "loot");
     showToast("首领结算完成：贡献快照已锁定");
     state.quest.bossDefeated = true;
-    // 0.8.54 真实试玩：首领倒下时玩家只剩 64 HP，残存小怪立刻把玩家打死，胜利结算后多记 1 次死亡。
+    // 0.8.55 真实试玩：首领倒下时玩家只剩 64 HP，残存小怪立刻把玩家打死，胜利结算后多记 1 次死亡。
     // 首领余波清空 260px 内普通怪（不结算经验/金币），避免“刚赢就被杂兵补刀”。
     const arenaAdds = state.entities.filter(
       (entity) =>
@@ -1440,13 +1440,18 @@ export function collectDrops() {
   }
   state.inventory = state.inventory || [];
   let collected = 0;
+  // 0.8.55：12 格只统计装备，材料与魂核不占装备格。
+  // 此前用 inventory.length 判断，材料会把背包塞满，导致玩家站在掉落上按 F
+  // 永远拾取失败，只剩日志里一行“背包已满”。
+  let equipmentCount = state.inventory.filter((item) => item.slot !== "material").length;
   nearby.forEach((drop) => {
-    if (!drop.kind && state.inventory.length >= 12) {
-      log(`<b>${drop.name}</b> 未拾取：背包已满。`, "warn");
+    if (!drop.kind && drop.slot !== "material" && equipmentCount >= 12) {
+      log(`<b>${drop.name}</b> 未拾取：装备栏已满（材料不占格），请先穿戴或整理装备。`, "warn");
       return;
     }
     state.drops = state.drops.filter((entry) => entry.id !== drop.id);
     collected += 1;
+    if (drop.slot !== "material") equipmentCount += 1;
     sfx.pickup();
     const pickup = computePickup(drop, { player: state.player, hero: activeHero() });
     if (pickup.toInventory) {
@@ -1934,12 +1939,9 @@ export function movePlayer(dt) {
   }
   state.player.x = clamp(state.player.x, 55, map.width - 55);
   state.player.y = clamp(state.player.y, 55, map.height - 55);
-  // 出口触发
-  map.exits.forEach((exit) => {
-    if (state.player.x >= exit.x && state.player.x <= exit.x + exit.w && state.player.y >= exit.y && state.player.y <= exit.y + exit.h) {
-      tryTravel(exit);
-    }
-  });
+  // 0.8.55：出口不再自动触发。此前玩家走进出口矩形就会被强制换图，
+  // 与 HUD“按 T 前往目标出口”的提示冲突，首领区东侧误触后还会导致首领回满。
+  // 现在只由 T 键主动换图，避免探索时被意外打断。
 }
 
 export function tryTravel(exit) {
