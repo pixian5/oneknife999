@@ -111,6 +111,7 @@ import {
   computePickup,
   computeSiteEffect,
   stackMaterial,
+  equipmentSlotCount,
   salvageReward,
   normalizeInventory,
   isEquipmentDrop,
@@ -185,7 +186,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.55";
+const CURRENT_APP_VERSION = "0.8.56";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -1443,7 +1444,7 @@ export function collectDrops() {
   // 0.8.55：12 格只统计装备，材料与魂核不占装备格。
   // 此前用 inventory.length 判断，材料会把背包塞满，导致玩家站在掉落上按 F
   // 永远拾取失败，只剩日志里一行“背包已满”。
-  let equipmentCount = state.inventory.filter((item) => item.slot !== "material").length;
+  let equipmentCount = equipmentSlotCount(state.inventory);
   nearby.forEach((drop) => {
     if (!drop.kind && drop.slot !== "material" && equipmentCount >= 12) {
       log(`<b>${drop.name}</b> 未拾取：装备栏已满（材料不占格），请先穿戴或整理装备。`, "warn");
@@ -2837,9 +2838,9 @@ export function buyMarksGood(slotKey) {
     showToast(purchase.reason);
     return;
   }
-  if ((state.inventory || []).length >= 12) {
+  if (equipmentSlotCount(state.inventory) >= 12) {
     logInfo("shop", "marksBlocked", { reason: "inventoryFull", slotKey });
-    showToast("背包已满，无法兑换（先整理或拆解）");
+    showToast("装备栏已满，无法兑换（材料不占格，请拆解或穿戴装备）");
     return;
   }
   state.player.marks = Math.max(0, (state.player.marks || 0) - purchase.price);
@@ -3184,7 +3185,8 @@ if (TEST_MODE) {
                 previewSkill: state.player.previewSkill,
                 castWindup: Math.round((state.player.castWindup || 0) * 100) / 100
               },
-              inventoryCount: (state.inventory || []).length,
+              inventoryCount: equipmentSlotCount(state.inventory),
+              materialKinds: (state.inventory || []).filter((item) => item.slot === "material").length,
               // 0.7.7：地面掉落的位置与槽位（只给测试用）。0.4.4 起装备必须站到 85px 内按 F 才能拾取，
               // 用例需要据此走到掉落点，而不是盲按 F（盲按只会得到「附近没有可拾取物品」）。
               drops: (state.drops || []).map((drop) => ({

@@ -9,6 +9,7 @@ import {
   computePickup,
   computeSiteEffect,
   stackMaterial,
+  equipmentSlotCount,
   salvageReward,
   normalizeInventory
 } from "../../game/src/drops.js";
@@ -226,6 +227,20 @@ test("stackMaterial：不同名材料不合并，装备不受影响直接追加"
   assert.equal(result.length, 2);
   assert.equal(result[1].slot, "armor");
   assert.equal(result[1].count, undefined); // 装备不写 count 字段
+});
+
+test("equipmentSlotCount：材料不占装备容量，仅统计真实装备", () => {
+  const materials = Array.from({ length: 12 }, (_, index) => ({
+    name: `材料-${index}`,
+    slot: "material",
+    id: `m-${index}`,
+    count: 1
+  }));
+  assert.equal(equipmentSlotCount(materials), 0, "12 种材料仍应视为 0 件装备");
+  assert.equal(equipmentSlotCount([...materials, { name: "锁子甲", slot: "armor", id: "a1" }]), 1);
+  assert.equal(equipmentSlotCount(Array.from({ length: 12 }, (_, i) => ({ slot: "weapon", id: `w${i}` }))), 12);
+  assert.equal(equipmentSlotCount([]), 0);
+  assert.equal(equipmentSlotCount(null), 0);
 });
 
 test("salvageReward：装备拆解返还 1 基础材料与 10% 价值金币", () => {
