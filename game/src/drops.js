@@ -90,6 +90,12 @@ export function computePickup(drop, { player, hero }) {
   return { toInventory: true, log: { type: "equipment" } };
 }
 
+// 装备栏实际占用：材料是堆叠资源，不占 12 格装备容量。
+// 背包上限、拾取判定、商店兑换与 UI 计数必须共用这一个口径，避免材料把装备挤成“不可见”。
+export function equipmentSlotCount(inventory) {
+  return (inventory || []).filter((entry) => entry && entry.slot !== "material").length;
+}
+
 // 材料堆叠：同类材料（同名同品质）进背包时合并 count，避免基础材料占满 12 格背包。
 // 返回新 inventory（纯函数，可单测）；仅对 slot === "material" 的掉落生效。
 export function stackMaterial(inventory, drop) {

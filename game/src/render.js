@@ -27,6 +27,7 @@ import { routePoint } from "./geometry.js";
 import { $, clamp, rand, formatNumber, distance } from "./util.js";
 import { KEYBIND_ACTIONS, keyLabel } from "./keybinds.js";
 import { SHOP_GOODS, reforgeQuote, MARKS_SET_ID } from "./shop.js";
+import { equipmentSlotCount } from "./drops.js";
 import { computeDamage } from "./combat.js";
 import { logDebug } from "./logger.js";
 import {
@@ -2166,14 +2167,21 @@ export function renderInventory() {
   }).join("|");
   const signature = `${equippedSignature}||${inventory.map((item) => `${item.id}:${item.count || 1}:${item.enhance || 0}`).join(",")}`;
   if (!panelChanged($("inventoryGrid"), signature)) return;
-  // 0.8.16：材料自动拾取可越过 12 格上限，而下方网格只渲染前 12 件——超出部分
-  // 真实存在却不可见。计数改为「12/12 +N」，如实暴露溢出件数。
-  setText($("inventoryCount"), inventory.length > 12 ? `12/12 +${inventory.length - 12}` : `${inventory.length}/12`);
+  // 0.8.56：材料不占装备容量，但旧渲染仍按原数组取前 12 件——12 种材料会把新装备挤到
+  // 不可见的第 13 格。现在先排装备、再排材料，并把计数改为“装备 N/12 · 材料 M 种”。
+  const gearSlots = equipmentSlotCount(inventory);
+  const materialKinds = inventory.length - gearSlots;
+  setText($("inventoryCount"), materialKinds ? `${gearSlots}/12 装 · 材料 ${materialKinds} 种` : `${gearSlots}/12`);
+  const visibleEntries = [
+    ...inventory.map((item, index) => ({ item, index })).filter((entry) => entry.item.slot !== "material"),
+    ...inventory.map((item, index) => ({ item, index })).filter((entry) => entry.item.slot === "material")
+  ].slice(0, 12);
   setHtml(
     $("inventoryGrid"),
-    Array.from({ length: 12 }, (_, index) => {
-      const item = inventory[index];
-      if (!item) return `<div class="inventory-slot empty" data-item-index="${index}"></div>`;
+    Array.from({ length: 12 }, (_, slotIndex) => {
+      const entry = visibleEntries[slotIndex];
+      if (!entry) return `<div class="inventory-slot empty" data-item-index="${slotIndex}" data-slot-index="${slotIndex}"></div>`;
+      const { item, index } = entry;
       if (item.slot === "material") {
         // 材料格：只显示数量（×N）与品质点，不显示战力（材料 power 0 无意义）。
         const count = item.count || 1;

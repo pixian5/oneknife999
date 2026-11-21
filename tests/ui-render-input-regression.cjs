@@ -200,7 +200,8 @@ async function verifyBossRespawnCountdown(page) {
       if (!e2e) return false;
       const modal = document.querySelector("#classModal");
       const count = document.querySelector("#inventoryCount");
-      return Boolean(modal) && modal.classList.contains("hidden") && Boolean(count) && count.textContent === "2/12";
+      // 0.8.56：材料不再计入装备格容量；两件材料应显示 0/12 装与材料种类数。
+      return Boolean(modal) && modal.classList.contains("hidden") && Boolean(count) && count.textContent === "0/12 装 · 材料 2 种";
     },
     { timeout: 15000 }
   );
@@ -218,7 +219,7 @@ async function verifyBossRespawnCountdown(page) {
   });
   assert.equal(restore.map, "ash_outskirts", "存档恢复地图错误");
   assert.ok(restore.modalHidden, "存档恢复后职业弹窗应关闭");
-  assert.equal(restore.invCount, "2/12", "背包数量应为 2/12");
+  assert.equal(restore.invCount, "0/12 装 · 材料 2 种", "背包应显示 0 件装备与 2 种材料");
   assert.equal(restore.gridSlots, 12, "背包应渲染 12 个格位");
   assert.ok(restore.slotFilled, "首个背包格应显示预置物品");
 
