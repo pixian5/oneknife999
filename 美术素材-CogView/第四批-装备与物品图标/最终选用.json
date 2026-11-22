@@ -1,0 +1,117 @@
+{
+  "note": "第四批最终选用：12 装备槽 + 4 物品；08/11/12/14/15 使用补拍版本",
+  "items": [
+    {
+      "index": "01",
+      "category": "武器",
+      "name": "深渊战刃",
+      "file": "01-武器-深渊战刃.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "02",
+      "category": "头盔",
+      "name": "深渊战盔",
+      "file": "02-头盔-深渊战盔.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "03",
+      "category": "项链",
+      "name": "深渊颈环",
+      "file": "03-项链-深渊颈环.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "04",
+      "category": "衣服",
+      "name": "深渊战甲",
+      "file": "04-衣服-深渊战甲.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "05",
+      "category": "左手镯",
+      "name": "深渊锁腕",
+      "file": "05-左手镯-深渊锁腕.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "06",
+      "category": "右手镯",
+      "name": "深渊龙腕",
+      "file": "06-右手镯-深渊龙腕.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "07",
+      "category": "左戒指",
+      "name": "紫晶戒",
+      "file": "07-左戒指-紫晶戒.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "08",
+      "category": "右戒指",
+      "name": "黑金戒",
+      "file": "补拍/08c-右戒指-黑金戒-纯黑印记.jpg",
+      "source": "补拍C：改为狼首黑铁印记，避免与07紫晶戒重复"
+    },
+    {
+      "index": "09",
+      "category": "腰带",
+      "name": "深渊束带",
+      "file": "09-腰带-深渊束带.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "10",
+      "category": "靴子",
+      "name": "深渊战靴",
+      "file": "10-靴子-深渊战靴.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "11",
+      "category": "勋章",
+      "name": "回响勋章",
+      "file": "补拍/11b-勋章-回响勋章-紫焰纹章.jpg",
+      "source": "补拍B：中央补紫焰纹章，去掉空心"
+    },
+    {
+      "index": "12",
+      "category": "玉佩",
+      "name": "回响玉佩",
+      "file": "补拍/12c-玉佩-回响玉佩-悬空青玉.jpg",
+      "source": "补拍C：改青玉璧，避免与03项链重复"
+    },
+    {
+      "index": "13",
+      "category": "药水",
+      "name": "生命药水",
+      "file": "13-药水-生命药水.jpg",
+      "source": "主图"
+    },
+    {
+      "index": "14",
+      "category": "材料",
+      "name": "黑铁矿石",
+      "file": "补拍/14b-材料-黑铁矿石-碎块.jpg",
+      "source": "补拍B：改不规则矿石，去掉方块与青色"
+    },
+    {
+      "index": "15",
+      "category": "卷轴",
+      "name": "词缀重铸卷",
+      "file": "补拍/15d-卷轴-词缀重铸卷-写实单卷.jpg",
+      "source": "补拍D：写实单卷，去掉卡通描边"
+    },
+    {
+      "index": "16",
+      "category": "货币",
+      "name": "首领印记",
+      "file": "16-货币-首领印记.jpg",
+      "source": "主图"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "count": 16,
+  "contact_sheet": "美术素材-CogView/第四批-装备与物品图标/总览-16张.jpg",
+  "actual_size_sheet": "美术素材-CogView/第四批-装备与物品图标/实际尺寸对照.jpg",
+  "actual_sizes": {
+    "desktop_equipment_slot": 46,
+    "mobile_equipment_slot": 29,
+    "zoom_reference": 92
+  },
+  "items": [
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/01-武器-深渊战刃.jpg",
+      "name": "深渊战刃",
+      "category": "武器",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/02-头盔-深渊战盔.jpg",
+      "name": "深渊战盔",
+      "category": "头盔",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/03-项链-深渊颈环.jpg",
+      "name": "深渊颈环",
+      "category": "项链",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/04-衣服-深渊战甲.jpg",
+      "name": "深渊战甲",
+      "category": "衣服",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/05-左手镯-深渊锁腕.jpg",
+      "name": "深渊锁腕",
+      "category": "左手镯",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/06-右手镯-深渊龙腕.jpg",
+      "name": "深渊龙腕",
+      "category": "右手镯",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/07-左戒指-紫晶戒.jpg",
+      "name": "紫晶戒",
+      "category": "左戒指",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/补拍/08c-右戒指-黑金戒-纯黑印记.jpg",
+      "name": "黑金戒",
+      "category": "右戒指",
+      "source": "补拍C：改为狼首黑铁印记，避免与07紫晶戒重复"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/09-腰带-深渊束带.jpg",
+      "name": "深渊束带",
+      "category": "腰带",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/10-靴子-深渊战靴.jpg",
+      "name": "深渊战靴",
+      "category": "靴子",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/补拍/11b-勋章-回响勋章-紫焰纹章.jpg",
+      "name": "回响勋章",
+      "category": "勋章",
+      "source": "补拍B：中央补紫焰纹章，去掉空心"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/补拍/12c-玉佩-回响玉佩-悬空青玉.jpg",
+      "name": "回响玉佩",
+      "category": "玉佩",
+      "source": "补拍C：改青玉璧，避免与03项链重复"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/13-药水-生命药水.jpg",
+      "name": "生命药水",
+      "category": "药水",
+      "source": "主图"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/补拍/14b-材料-黑铁矿石-碎块.jpg",
+      "name": "黑铁矿石",
+      "category": "材料",
+      "source": "补拍B：改不规则矿石，去掉方块与青色"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/补拍/15d-卷轴-词缀重铸卷-写实单卷.jpg",
+      "name": "词缀重铸卷",
+      "category": "卷轴",
+      "source": "补拍D：写实单卷，去掉卡通描边"
+    },
+    {
+      "file": "美术素材-CogView/第四批-装备与物品图标/16-货币-首领印记.jpg",
+      "name": "首领印记",
+      "category": "货币",
+      "source": "主图"
+    }
+  ]
+}
