@@ -66,3 +66,7 @@ game/assets/_cutout_report.json
 
 # 真人试玩临时检查点，仅用于浏览器读取，不提交
 game/_checkpoint.json
+
+# Python 编译缓存
+__pycache__/
+*.pyc

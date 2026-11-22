@@ -10,7 +10,7 @@
 // 更新语义：index.html 里 SW 地址带版本查询串（?v=0.8.38），版本变更触发浏览器重新安装
 // SW → activate 清旧缓存 → 壳与素材按需重取。e2e/探针（?e2e=1）由 main.js 侧不注册，互不影响。
 
-const CACHE_VERSION = "oneknife999-v0.8.61";
+const CACHE_VERSION = "oneknife999-v0.8.62";
 // 0.8.39：应用壳必须包含全部 ES 模块。此前只缓存 index.html/game.css/manifest，
 // 而 SW 注册发生在整张模块图加载完之后——首次会话的 src/*.js 全绕过缓存，
 // 离线再开时 main.js 取不到，启动画面（z-index 99）永久停留。
