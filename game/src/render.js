@@ -1696,15 +1696,26 @@ export function renderTarget() {
   const target = state?.entities.find((entity) => entity.id === state.player.targetId && entity.alive);
   const range = activeHero().range;
   const dist = target ? Math.round(distance(state.player, target)) : null;
+  // 0.8.67：深层清层后场上已没有敌怪，目标栏若继续写“未锁定目标 / 靠近怪物后按 X 攻击”，
+  // 会把“本层已通关、按 T 深入”的下一步藏起来。这里优先切成清层态提示。
+  const map = activeMap();
+  const abyssCleared = Boolean(map?.abyssFloor) && mapProgress().completed;
+  const nextFloor = abyssCleared ? Number(map.abyssFloor) + 1 : null;
   // 0.8.43：目标栏补“距离 / 是否在射程内”。此前只显示血条，玩家看不出为什么按 X 不掉血。
   const autoApproach = Boolean(target && state.player.autoAttackId === target.id);
   if (
     state &&
-    !panelChanged($("targetText"), `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}|${dist}|${autoApproach ? 1 : 0}`)
+    !panelChanged(
+      $("targetText"),
+      `${state.player.targetId}|${target ? Math.ceil(target.hp) : 0}|${dist}|${autoApproach ? 1 : 0}|${abyssCleared ? nextFloor : 0}`
+    )
   )
     return;
-  setText($("targetText"), target ? target.name : "未锁定目标");
-  if (target) {
+  setText($("targetText"), abyssCleared ? "本层已通关" : target ? target.name : "未锁定目标");
+  if (abyssCleared) {
+    setText($("targetHint"), `按 T 深入第 ${nextFloor} 层`);
+    setStyle($("targetHint"), "color", "var(--teal)");
+  } else if (target) {
     const inRange = dist <= range;
     setText(
       $("targetHint"),

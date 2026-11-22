@@ -137,12 +137,17 @@ function abyssSave(completed = false) {
       tag: document.querySelector("#questTag")?.textContent,
       dynamics: document.querySelector("#mapDynamics")?.textContent,
       reward: document.querySelector("#questReward")?.textContent,
+      target: document.querySelector("#targetText")?.textContent,
+      targetHint: document.querySelector("#targetHint")?.textContent,
       bossAlertHidden: document.querySelector("#bossAlert")?.classList.contains("hidden")
     }));
     assert.equal(cleared.title, "按 T 深入第 3 层", `清层后目标标题错误：${cleared.title}`);
     assert.ok(cleared.text.includes("第 2 层目标已完成"), `清层后目标描述错误：${cleared.text}`);
     assert.ok(cleared.text.includes("不再重生"), `清层后未说明怪物不再重生：${cleared.text}`);
     assert.equal(cleared.tag, "本层已通关", `清层后关卡标签错误：${cleared.tag}`);
+    // 0.8.67：清层后左下目标栏必须切到“本层已通关 / 按 T 深入”，不能继续提示找怪。
+    assert.equal(cleared.target, "本层已通关", `清层后左下目标栏错误：${cleared.target}`);
+    assert.equal(cleared.targetHint, "按 T 深入第 3 层", `清层后左下目标提示错误：${cleared.targetHint}`);
     assert.ok(!cleared.dynamics.includes("100/100 通关"), `深层错误显示百图通关：${cleared.dynamics}`);
     assert.ok(cleared.dynamics.includes("不再重生"), `清层后动态栏仍在倒计时重生：${cleared.dynamics}`);
     assert.ok(!cleared.reward.includes("60 金币"), `深层错误显示主线固定通关奖励：${cleared.reward}`);
