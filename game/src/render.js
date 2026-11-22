@@ -2369,10 +2369,14 @@ export function renderShopPanel() {
 }
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
+  const map = activeMap();
+  // 0.8.66：深层刚清层时死亡首领实体仍留在场景里，但已不再重生；
+  // 必须同步收起首领情报卡，否则会显示“已击破 · 0 秒后刷新”，和“本层已通关、不再重生”矛盾。
+  const abyssCleared = Boolean(map?.abyssFloor) && mapProgress(map.id).completed;
   // 0.8.60：已通关深层读档后没有首领实体，必须收起首领情报卡；
   // 否则静态占位会留下“裂碑领主正在苏醒”，和“本层已通关”互相矛盾。
   const alert = $("bossAlert");
-  if (!boss) {
+  if (!boss || abyssCleared) {
     alert?.classList.add("hidden");
     return;
   }

@@ -70,3 +70,6 @@ game/_checkpoint.json
 # Python 编译缓存
 __pycache__/
 *.pyc
+
+# 真人试玩截图（本地产物，按需重新截取，不入库）
+试玩截图-*.png
