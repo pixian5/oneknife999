@@ -57,7 +57,8 @@ import {
   setBonuses,
   pauseState,
   fx,
-  clearHostileStatus
+  clearHostileStatus,
+  abyssCachePotionGain
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
 import {
@@ -1430,10 +1431,12 @@ export function collectDrops() {
     if (cache && !progress.resourceClaimed) {
       progress.resourceClaimed = true;
       const gold = 80 + activeMap().stageNumber * 4;
+      // 0.8.65：深层 F31 以后补给箱给 2 瓶，缓解回响战的药水缺口；普通图仍 1 瓶。
+      const potions = abyssCachePotionGain(state.currentMapId, state.abyssFloor);
       state.player.gold += gold;
-      state.player.potion += 1;
+      state.player.potion += potions;
       state.player.marks += 2;
-      log(`<b>${cache.name}</b>已搜索：生命药水 +1、金币 +${gold}、首领印记 +2。`, "loot");
+      log(`<b>${cache.name}</b>已搜索：生命药水 +${potions}、金币 +${gold}、首领印记 +2。`, "loot");
       showToast(`${cache.name}已开启，奖励已自动保存`);
       persistGame();
       renderAll();

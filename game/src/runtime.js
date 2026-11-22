@@ -292,3 +292,12 @@ export function clearHostileStatus(player) {
   player.attackTimer = 0;
   return player;
 }
+
+// 0.8.65：深层 F31 以后补给箱给 2 瓶药水，F1–F30 仍保持 1 瓶。
+// 背景：F38/F39 各死 4 次，单层 1 瓶补给不够覆盖回响战的容错；
+// 只改深层补给，不动普通关卡与主线经济。
+export function abyssCachePotionGain(mapId, floor) {
+  const isDeepAbyss = typeof mapId === "string" && mapId.startsWith("abyss-F");
+  const depth = Math.max(0, Math.floor(Number(floor) || 0));
+  return isDeepAbyss && depth >= 31 ? 2 : 1;
+}
