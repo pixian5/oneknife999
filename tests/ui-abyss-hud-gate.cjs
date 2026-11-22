@@ -64,6 +64,34 @@ function abyssSave(completed = false) {
     assert.equal(hud.tag, "进行中", `深层未完成标签错误：${hud.tag}`);
     assert.equal(hud.chain, "无尽深层 · 第 2 层", `深层任务链标题错误：${hud.chain}`);
 
+    // 0.8.60：本层 completion 为 true 时，已死首领不能倒计时复活。
+    // 在未完成档上临时改 completed，跑一次 updateEntities 后恢复，避免污染后续门禁测试。
+    const respawn = await page.evaluate(async () => {
+      const runtime = await import("/src/runtime.js");
+      const main = await import("/src/main.js");
+      const progress = runtime.mapProgress();
+      const oldCompleted = progress.completed;
+      const boss = runtime.state.entities.find((entity) => entity.boss);
+      if (!boss) return { skipped: true };
+      const oldKills = progress.kills;
+      const oldBoss = progress.bossDefeated;
+      progress.kills = progress.need;
+      progress.bossDefeated = true;
+      boss.alive = false;
+      boss.respawn = 0.1;
+      main.updateEntities(0.2);
+      const aliveAfterTick = boss.alive;
+      progress.kills = oldKills;
+      progress.bossDefeated = oldBoss;
+      progress.completed = oldCompleted;
+      boss.alive = true;
+      boss.hp = boss.maxHp;
+      boss.respawn = 0;
+      return { skipped: false, alive: aliveAfterTick };
+    });
+    assert.equal(respawn.skipped, false, "深层测试层没有首领实体");
+    assert.equal(respawn.alive, false, "已通关深层首领仍然复活");
+
     await page.keyboard.press("t");
     await page.waitForTimeout(220);
     const blocked = await page.evaluate(() => ({
@@ -100,20 +128,70 @@ function abyssSave(completed = false) {
     );
     await page.waitForFunction(() => window.__ONEKNIFE_E2E__?.snapshot().currentMapId === "abyss-F2");
     await page.waitForTimeout(180);
+    // 0.8.60：已通关深层读档后不应再生成任何敌怪。
     const cleared = await page.evaluate(() => ({
       title: document.querySelector("#mapObjectiveTitle")?.textContent,
       text: document.querySelector("#mapObjectiveText")?.textContent,
       tag: document.querySelector("#questTag")?.textContent,
-      dynamics: document.querySelector("#mapDynamics")?.textContent
+      dynamics: document.querySelector("#mapDynamics")?.textContent,
+      reward: document.querySelector("#questReward")?.textContent,
+      bossAlertHidden: document.querySelector("#bossAlert")?.classList.contains("hidden")
     }));
     assert.equal(cleared.title, "按 T 深入第 3 层", `清层后目标标题错误：${cleared.title}`);
     assert.ok(cleared.text.includes("第 2 层目标已完成"), `清层后目标描述错误：${cleared.text}`);
+    assert.ok(cleared.text.includes("不再重生"), `清层后未说明怪物不再重生：${cleared.text}`);
     assert.equal(cleared.tag, "本层已通关", `清层后关卡标签错误：${cleared.tag}`);
     assert.ok(!cleared.dynamics.includes("100/100 通关"), `深层错误显示百图通关：${cleared.dynamics}`);
+    assert.ok(cleared.dynamics.includes("不再重生"), `清层后动态栏仍在倒计时重生：${cleared.dynamics}`);
+    assert.ok(!cleared.reward.includes("60 金币"), `深层错误显示主线固定通关奖励：${cleared.reward}`);
+    assert.equal(cleared.bossAlertHidden, true, `清层读档后首领情报卡未收起`);
+
+    const hostiles = await page.evaluate(() =>
+      window.__ONEKNIFE_E2E__
+        .snapshot()
+        .entities.filter((entity) => !entity.friendly && !entity.npc)
+        .map((entity) => entity.name)
+    );
+    assert.deepEqual(hostiles, [], `已通关深层仍生成敌怪：${hostiles.join("、")}`);
 
     await page.keyboard.press("t");
     await page.waitForFunction(() => window.__ONEKNIFE_E2E__?.snapshot().currentMapId === "abyss-F3");
     assert.deepEqual(errors, [], "深层 HUD 测试期间页面异常");
+
+    // 0.8.60：第 10 层里程碑文案与深层专属奖励说明。
+    const milestoneSave = abyssSave(true);
+    milestoneSave.currentMapId = "abyss-F10";
+    milestoneSave.abyssFloor = 10;
+    milestoneSave.abyssBest = 10;
+    milestoneSave.mapProgress["abyss-F10"] = { ...milestoneSave.mapProgress["abyss-F2"] };
+    await page.evaluate(
+      ({ key, save }) => {
+        localStorage.setItem(key, JSON.stringify(save));
+        location.reload();
+      },
+      { key: SAVE_KEY, save: milestoneSave }
+    );
+    await page.waitForFunction(() => window.__ONEKNIFE_E2E__?.snapshot().currentMapId === "abyss-F10");
+    await page.waitForTimeout(180);
+    const milestone = await page.evaluate(() => ({
+      region: document.querySelector(".region-tip")?.textContent,
+      nodes: document.querySelector("#regionList")?.textContent,
+      text: document.querySelector("#mapObjectiveText")?.textContent,
+      reward: document.querySelector("#questReward")?.textContent
+    }));
+    assert.equal(milestone.region, "第 10 层 / 最深 10 层", `里程碑区域导航错误：${milestone.region}`);
+    assert.ok(milestone.nodes.includes("里程碑 F10"), `里程碑卡片缺失：${milestone.nodes}`);
+    assert.ok(milestone.text.includes("里程碑已达成"), `里程碑目标描述错误：${milestone.text}`);
+    assert.ok(!milestone.reward.includes("60 金币"), `里程碑仍在显示主线奖励：${milestone.reward}`);
+
+    const milestoneToast = await page.evaluate(async () => {
+      const runtime = await import("/src/runtime.js");
+      const main = await import("/src/main.js");
+      runtime.mapProgress().completionAnnounced = false;
+      main.checkMapCompletion();
+      return document.querySelector("#toast")?.textContent || "";
+    });
+    assert.ok(milestoneToast.includes("深层里程碑"), `第 10 层里程碑没有播报：${milestoneToast}`);
 
     // 0.8.58 深层 HUD 在窄屏同样不能把页面撑出纵向滚动条。
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });

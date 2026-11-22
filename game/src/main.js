@@ -419,6 +419,11 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
   state.player.attackGate = 0;
   state.entities = createEntities(map);
+  // 0.8.60：已通关的深层读档时不再生成敌怪。否则 HUD 写着“本层已通关”，
+  // 场景里却站着满血回响和普通怪，玩家停在原地会被直接击杀。
+  if (map.id.startsWith(ABYSS_MAP_PREFIX) && mapProgress(map.id).completed) {
+    state.entities = state.entities.filter((entity) => entity.friendly || entity.npc);
+  }
   // 0.4.2：同图复活时回填受伤首领的生命（普通怪仍满血重置），阶段由 updateBoss 重新判定。
   if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
   state.drops = [];
@@ -1266,7 +1271,13 @@ export function checkMapCompletion() {
     progress.completed = progress.kills >= progress.need && progress.bossDefeated;
     if (progress.completed && !progress.completionAnnounced) {
       progress.completionAnnounced = true;
-      log(`<b>深层第 ${Number(state.abyssFloor) || 0} 层清层</b>：按 T 深入下一层。`, "loot");
+      const floor = Math.max(0, Number(state.abyssFloor) || 0);
+      log(`<b>深层第 ${floor} 层清层</b>：本层已锁定，怪物不再重生；按 T 深入下一层。`, "loot");
+      // 0.8.60：每 10 层为首领层，清层时给一次首通里程碑反馈；不做额外经济奖励，避免深层通胀。
+      if (floor > 0 && floor % 10 === 0) {
+        log(`<b>深层里程碑</b>：第 ${floor} 层首通，最深纪录 ${state.abyssBest || floor} 层。`, "loot");
+        showToast(`深层里程碑：第 ${floor} 层首通`);
+      }
       return true;
     }
     return false;
@@ -2051,6 +2062,12 @@ export function updateEntities(dt) {
       // boss 召唤物尸体（0.4.4）：无复活周期，跳过 respawn 计时（undefined 递减为 NaN），
       // 由 updateEntities 末尾的过滤统一回收。
       if (entity.summonedMob) return;
+      // 0.8.60：深层本层已通关后，残星回响与普通怪都不再重生。
+      // 否则玩家停在已清层等按 T 的几十秒里会被重生首领再次击杀，且 HUD 会误报“回响重生”。
+      if (map.id.startsWith(ABYSS_MAP_PREFIX) && mapProgress(map.id).completed) {
+        entity.respawn = 0;
+        return;
+      }
       // 0.8.53：首领交战中，首领 260px 内的普通怪尸体不再倒计时复活；
       // 等首领死亡或脱战后自然恢复，避免首领战越打小怪越多。
       if (

@@ -1873,7 +1873,10 @@ export function objectiveView() {
     return {
       step: "步骤 3 / 3",
       title: `按 T 深入第 ${abyssFloor + 1} 层`,
-      text: `第 ${abyssFloor} 层目标已完成；按 T 继续深入，层数越高怪物越强、掉落越好。`,
+      text:
+        abyssFloor % 10 === 0
+          ? `第 ${abyssFloor} 层里程碑已达成；本层怪物不再重生，按 T 继续深入。`
+          : `第 ${abyssFloor} 层目标已完成；本层怪物不再重生，按 T 继续深入。`,
       complete: true
     };
   if (progress.completed && !rule.next)
@@ -1964,7 +1967,16 @@ export function renderMapObjective() {
         ? "首领层"
         : "进行中"
   );
-  setText($("questReward"), progress.rewardClaimed ? "通关奖励已领取" : `通关奖励：${QUEST_REWARD.gold} 金币 · ${QUEST_REWARD.marks} 印记`);
+  setText(
+    $("questReward"),
+    isAbyss
+      ? progress.completed
+        ? "本层首通已记录 · 回响掉落已结算"
+        : "深层奖励：回响掉落 · 层数越高品质越高"
+      : progress.rewardClaimed
+        ? "通关奖励已领取"
+        : `通关奖励：${QUEST_REWARD.gold} 金币 · ${QUEST_REWARD.marks} 印记`
+  );
 }
 
 export function renderMapHeader() {
@@ -1990,7 +2002,9 @@ export function renderMapHeader() {
   setText(dangerEl, map.dangerLabel);
   setClassName(dangerEl, `pill ${map.danger === "safe" ? "safe" : map.danger === "danger" || map.danger === "desolate" ? "danger" : ""}`);
   const dynamics = [];
-  if (bossEntity && !bossEntity.alive)
+  if (abyssFloor && progress.completed)
+    dynamics.push('<span class="world-event ready"><i class="gold"></i> 本层已通关 · 首领与怪物不再重生</span>');
+  else if (bossEntity && !bossEntity.alive)
     dynamics.push(
       `<span class="world-event"><i></i> 首领已击破 · ${Math.ceil(bossEntity.respawn)}s 后${abyssFloor ? "回响重生" : "刷新"}</span>`
     );
@@ -1999,8 +2013,8 @@ export function renderMapHeader() {
   if (abyssFloor)
     dynamics.push(
       `<span class="world-event ${progress.completed ? "ready" : "locked"}"><i class="gold"></i> ${
-        progress.completed ? "本层已通关" : "本层进行中"
-      } · ${progress.completed ? "按 T 深入" : "完成目标后按 T 深入"}第 ${abyssFloor + 1} 层</span>`
+        progress.completed ? "按 T 深入" : "本层进行中 · 完成目标后按 T 深入"
+      }第 ${abyssFloor + 1} 层</span>`
     );
   else if (!rule.next && progress.completed)
     dynamics.push(`<span class="world-event ready"><i class="gold"></i> 100/100 通关 · 百图征途完成</span>`);
@@ -2081,7 +2095,7 @@ export function renderRegion() {
         `<div class="region-node">
           <span class="region-name">最深纪录 F${String(best).padStart(2, "0")}</span>
           <span class="region-level">存档记录 · 可继续刷新</span>
-          <span class="region-progress">每 10 层为首领层</span>
+          <span class="region-progress">${best >= 10 ? `每 10 层首领 · 里程碑 F${Math.floor(best / 10) * 10}` : "每 10 层为首领层"}</span>
         </div>`
       ].join("")
     );
@@ -2355,7 +2369,14 @@ export function renderShopPanel() {
 }
 export function renderBoss() {
   const boss = state.entities.find((entity) => entity.boss);
-  if (!boss) return;
+  // 0.8.60：已通关深层读档后没有首领实体，必须收起首领情报卡；
+  // 否则静态占位会留下“裂碑领主正在苏醒”，和“本层已通关”互相矛盾。
+  const alert = $("bossAlert");
+  if (!boss) {
+    alert?.classList.add("hidden");
+    return;
+  }
+  alert?.classList.remove("hidden");
   // 首领立绘按 Boss 名映射（assets/boss-{名字}.jpg）；无对应美术时保留默认裂碑领主图
   const portrait = $("bossPortrait");
   if (portrait) {
