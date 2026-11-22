@@ -1278,6 +1278,8 @@ export function checkMapCompletion() {
         log(`<b>深层里程碑</b>：第 ${floor} 层首通，最深纪录 ${state.abyssBest || floor} 层。`, "loot");
         showToast(`深层里程碑：第 ${floor} 层首通`);
       }
+      // 首领死亡时可能仍有召唤物 / 远处小怪 / 毒池；清层后统一收尾。
+      clearAbyssResiduals();
       return true;
     }
     return false;
@@ -2041,8 +2043,22 @@ export function cancelTravel() {
   showToast("已取消进入");
 }
 
+// 0.8.60：深层清层后清空残余。首领的召唤物、远处未死的小怪、地面 Hazard
+// 不会随着 bossDefeated 自动消失；玩家停在“本层已通关”的场景里仍会被追打。
+function clearAbyssResiduals() {
+  for (const entity of state.entities) {
+    if (entity.friendly || entity.npc || entity.summoned) continue;
+    entity.alive = false;
+    entity.hp = entity.maxHp;
+    entity.respawn = 0;
+  }
+  state.hazards = [];
+}
+
 export function updateEntities(dt) {
   const map = activeMap();
+  const abyssFloorCleared = map.id.startsWith(ABYSS_MAP_PREFIX) && mapProgress(map.id).completed;
+  if (abyssFloorCleared) clearAbyssResiduals();
   // 0.8.53：首领战期间冻结首领周围普通怪的复活计时。
   // 真人试玩清完小怪后，28–45s 的重生周期会在首领战中途重新塞回 1–2 只小怪，
   // 玩家刚把首领打掉一点血又被围死。首领未交战（满血且未仇恨）时不冻结。

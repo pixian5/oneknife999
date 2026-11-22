@@ -81,16 +81,18 @@ function abyssSave(completed = false) {
       boss.respawn = 0.1;
       main.updateEntities(0.2);
       const aliveAfterTick = boss.alive;
+      const residualAlive = runtime.state.entities.filter((entity) => !entity.friendly && !entity.npc && entity.alive).length;
       progress.kills = oldKills;
       progress.bossDefeated = oldBoss;
       progress.completed = oldCompleted;
       boss.alive = true;
       boss.hp = boss.maxHp;
       boss.respawn = 0;
-      return { skipped: false, alive: aliveAfterTick };
+      return { skipped: false, alive: aliveAfterTick, residualAlive };
     });
     assert.equal(respawn.skipped, false, "深层测试层没有首领实体");
     assert.equal(respawn.alive, false, "已通关深层首领仍然复活");
+    assert.equal(respawn.residualAlive, 0, `已通关深层仍残留 ${respawn.residualAlive} 只敌怪`);
 
     await page.keyboard.press("t");
     await page.waitForTimeout(220);
