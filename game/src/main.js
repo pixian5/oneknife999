@@ -3219,6 +3219,17 @@ if (TEST_MODE) {
             JSON.stringify({
               currentMapId: state.currentMapId,
               stageNumber: MAP_CLEAR_RULES[state.currentMapId].stageNumber,
+              // 0.8.69：把当前图的战术点（篝火 / 补给箱 / 路标）暴露给只读探针。
+              // run_abyss 据此真实走到秘藏补给箱并按 F，不再靠硬编码坐标或盲按。
+              tacticalPoints: (activeMap().tacticalPoints || []).map((point) => ({
+                id: point.id,
+                kind: point.kind,
+                route: point.route || "main",
+                x: point.x,
+                y: point.y,
+                radius: point.radius,
+                name: point.name
+              })),
               classId: state.classId,
               travelPrompt: pendingTravel ? pendingTravel.target : null,
               player: {

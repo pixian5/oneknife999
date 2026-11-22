@@ -76,3 +76,6 @@ __pycache__/
 
 # run_abyss 单实例锁（运行时生成，不入库）
 saves/.run_abyss.lock
+
+# 深层逐层死亡诊断（运行时生成，不入库）
+saves/abyss-floor-deaths.jsonl

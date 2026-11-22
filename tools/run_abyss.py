@@ -22,6 +22,8 @@ SAVE_PATH = Path("/home/user/repo-local/saves/abyss-progress.json")
 # 0.8.68：单实例锁。此前误开两个 run_abyss 进程同时操作同一页面，
 # 键盘/鼠标事件互相打断，日志重复且层数据失真。启动时占用锁，退出自动释放。
 LOCK_PATH = Path("/home/user/repo-local/saves/.run_abyss.lock")
+# 0.8.69：每层完成时把当层诊断落盘，按 T 进下一层后就看不到上一层死因了。
+DEATH_LOG_PATH = Path("/home/user/repo-local/saves/abyss-floor-deaths.jsonl")
 
 
 def _pid_alive(pid: int) -> bool:
@@ -89,10 +91,65 @@ def press_t():
     )
 
 
+def claim_resource_cache(floor, verbose=True):
+    """真实走到秘藏补给箱并按 F，拿到 0.8.65 的 +2 药水。
+
+    只读 snapshot 的 tacticalPoints（0.8.69 新字段），不硬编码坐标；
+    已经领过就跳过。返回是否本次新领到。
+    """
+    s = snapshot()
+    key = f"abyss-F{floor}"
+    if s["progress"].get(key, {}).get("resourceClaimed"):
+        return False
+    point = next((p for p in s.get("tacticalPoints", []) if p.get("kind") == "resource"), None)
+    if not point:
+        if verbose:
+            print(f"F{floor} 未找到秘藏补给箱点位，跳过", flush=True)
+        return False
+    p = s["player"]
+    if verbose:
+        print(f"F{floor} 前往补给箱 {point['name']} ({point['x']},{point['y']}) 药水 {p['potion']}", flush=True)
+    rp.move(point["x"], point["y"], tol=35)
+    time.sleep(0.2)
+    rp.bu.hotkey("f")
+    time.sleep(0.8)
+    s = snapshot()
+    ok = bool(s["progress"].get(key, {}).get("resourceClaimed"))
+    if not ok:
+        # 落点被撞偏或距离差一点时，再靠近一次按 F；仍失败就交给后续战斗，不卡层。
+        rp.move(point["x"], point["y"], tol=25)
+        time.sleep(0.15)
+        rp.bu.hotkey("f")
+        time.sleep(0.8)
+        s = snapshot()
+        ok = bool(s["progress"].get(key, {}).get("resourceClaimed"))
+    if verbose:
+        print(f"F{floor} 补给箱 {'已领取' if ok else '领取失败'} 药水 {s['player']['potion']} 金币 {s['player']['gold']}", flush=True)
+    return ok
+
+
+def record_floor_deaths(floor, start_deaths, elapsed, s):
+    """把本层死亡诊断追加到 JSONL；diagnostics 在 loadMap 后会重置，必须先存。"""
+    p = s["player"]
+    entry = {
+        "at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "floor": floor,
+        "elapsed": elapsed,
+        "deathsStart": start_deaths,
+        "deathsEnd": p["deaths"],
+        "deathsDelta": p["deaths"] - start_deaths,
+        "diagnostics": s.get("diagnostics"),
+    }
+    DEATH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with DEATH_LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
 def clear_current_floor(floor, verbose=True):
     """清当前层：先 5 只普通怪，再回响；死亡后自动从安全营地继续。"""
     key = f"abyss-F{floor}"
     deaths = rp.player()["deaths"]
+    start_deaths = deaths
     t0 = time.time()
     # 普通怪阶段
     for guard in range(45):
@@ -121,6 +178,9 @@ def clear_current_floor(floor, verbose=True):
         rp.click_ent(tgt[0], rp.snap())
         time.sleep(0.08)
         rp.combo(3)
+
+    # 0.8.69：小怪清完后先开秘藏补给箱，再打回响；补给箱是 F31+ 的主要药水来源。
+    claim_resource_cache(floor, verbose)
 
     # 首领阶段
     for guard in range(80):
@@ -151,6 +211,7 @@ def clear_current_floor(floor, verbose=True):
     s = snapshot()
     elapsed = round(time.time() - t0, 1)
     print(f"F{floor} 完成：{json.dumps(s['progress'].get(key, {}), ensure_ascii=False)} 用时 {elapsed}s", flush=True)
+    record_floor_deaths(floor, start_deaths, elapsed, s)
     save_raw()
     return s["progress"].get(key, {})
 
