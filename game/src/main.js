@@ -56,7 +56,8 @@ import {
   isRedName,
   setBonuses,
   pauseState,
-  fx
+  fx,
+  clearHostileStatus
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
 import {
@@ -2053,6 +2054,9 @@ function clearAbyssResiduals() {
     entity.respawn = 0;
   }
   state.hazards = [];
+  // 0.8.64：只清怪和地面危险区还不够。F35 实测清层后毒层仍在，玩家在“已通关”
+  // 场景里继续每秒掉血并死亡；清层时同步清掉玩家身上的中毒/减速/眩晕节奏。
+  clearHostileStatus(state.player);
 }
 
 export function updateEntities(dt) {

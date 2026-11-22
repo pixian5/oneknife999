@@ -279,3 +279,16 @@ export function nearTown() {
     state.player.y <= town.y + town.h - 28
   );
 }
+
+// 0.8.64：清层/复活时清掉玩家身上的敌方持续状态。
+// 深层 F35 实测：completed=true 后残留中毒仍按每秒结算，玩家在“已通关”场景里被毒死；
+// 清层即视为脱离战斗，毒层、减速与眩晕节奏都必须归零。
+export function clearHostileStatus(player) {
+  if (!player) return player;
+  player.poison = 0;
+  player.poisonTimer = 0;
+  player.slowTimer = 0;
+  player.slowFactor = 1;
+  player.attackTimer = 0;
+  return player;
+}
