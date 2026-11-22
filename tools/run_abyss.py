@@ -4,7 +4,9 @@
 用法：python3 tools/run_abyss.py --start 3 --end 10
 """
 import argparse
+import atexit
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,6 +19,41 @@ sys.modules.setdefault("seed_browser_use", local_cdp)
 import real_play as rp  # noqa: E402
 
 SAVE_PATH = Path("/home/user/repo-local/saves/abyss-progress.json")
+# 0.8.68：单实例锁。此前误开两个 run_abyss 进程同时操作同一页面，
+# 键盘/鼠标事件互相打断，日志重复且层数据失真。启动时占用锁，退出自动释放。
+LOCK_PATH = Path("/home/user/repo-local/saves/.run_abyss.lock")
+
+
+def _pid_alive(pid: int) -> bool:
+    """判断锁里的进程是否仍存活。"""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def acquire_lock() -> None:
+    """占用单实例锁；已有存活实例时拒绝启动。"""
+    if LOCK_PATH.exists():
+        try:
+            old = int(LOCK_PATH.read_text(encoding="utf-8").strip())
+        except ValueError:
+            old = 0
+        if old and old != os.getpid() and _pid_alive(old):
+            raise SystemExit(f"已有 run_abyss 在运行（PID {old}），拒绝重复启动")
+        LOCK_PATH.unlink(missing_ok=True)
+    LOCK_PATH.write_text(str(os.getpid()), encoding="utf-8")
+
+    def release():
+        """仅删除自己持有的锁，避免误删后来实例的锁。"""
+        try:
+            if LOCK_PATH.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                LOCK_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    atexit.register(release)
 
 
 def snapshot():
@@ -123,6 +160,7 @@ def main():
     ap.add_argument("--start", type=int, default=3)
     ap.add_argument("--end", type=int, default=10)
     args = ap.parse_args()
+    acquire_lock()
     s = snapshot()
     cur = s["currentMapId"]
     if not cur.startswith("abyss-F"):
