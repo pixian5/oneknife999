@@ -4,6 +4,8 @@
 # Local environments and secrets
 .env
 .env.*
+zhipu.env
+*apikey*
 .venv/
 venv/
 *.secret
