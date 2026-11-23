@@ -184,11 +184,10 @@ import {
 } from "./logger.js";
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
-// 0.8.7 构建版本：与仓库根目录 VERSION 文件保持同步，启动横幅会写进诊断日志。
-const BUILD_VERSION = "0.8.7";
-
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.78";
+const CURRENT_APP_VERSION = "0.8.79";
+// 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
+const BUILD_VERSION = CURRENT_APP_VERSION;
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -267,7 +266,11 @@ export function createEntities(map) {
     if (eliteCount > ELITE_TUNING.maxPerMap) eliteFlags[index] = null;
   });
   map.monsterSpawns.forEach((spawn, index) => {
-    const baseType = map.monsterTypes[spawn[2]];
+    // 0.8.79：生成图只实际派出 4~6 种怪；spawn[2] 仍是布局档位（0..8），
+    // 这里映射到本图阵容，档位继续用于等级差，不会把 9 种全放出来。
+    const roster = map.monsterRoster;
+    const typeIndex = roster ? roster[spawn[2] % roster.length] : spawn[2];
+    const baseType = map.monsterTypes[typeIndex];
     const scaled = scaleForDifficulty({ hp: baseType.hp * abyss.hp, attack: baseType.attack * abyss.attack }, difficulty);
     const type = { ...baseType, hp: scaled.hp, attack: scaled.attack };
     const level = clamp(map.levelMin + spawn[2] * 2 + (index % 3), map.levelMin, map.levelMax);

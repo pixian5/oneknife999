@@ -1377,6 +1377,53 @@ export function generatedAbyssLayout(floor, chapter) {
   return buildLayout(floor * 2654435761 + 977, (floor * 3 + 4) % 10, chapter, 320, true);
 }
 
+// 0.8.79：每张生成图从本章 9 种怪里确定性取 4~6 种，相邻图重叠不超过较小阵容的一半。
+// 只返回类型索引，不直接裁剪 monsterTypes：精英/召唤/图鉴仍共用完整章节数值表。
+function shuffledIndices(seed, source) {
+  const random = seededRandom(seed);
+  const out = [...source];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export function generatedMonsterRoster(stageNumber) {
+  const stage = Math.max(5, Math.floor(Number(stageNumber) || 5));
+  const chapterIndex = Math.floor((stage - 1) / 10);
+  const firstGeneratedStage = chapterIndex === 0 ? 5 : chapterIndex * 10 + 1;
+  const size = 4 + ((stage + chapterIndex * 2) % 3);
+  const source = Array.from({ length: 9 }, (_, index) => index);
+  if (stage === firstGeneratedStage) {
+    return shuffledIndices(`roster:${stage}`, source)
+      .slice(0, size)
+      .sort((a, b) => a - b);
+  }
+  const previous = generatedMonsterRoster(stage - 1);
+  // 重叠预算取「本图一半」与「上一图一半」的较小值，保证相对两张图都不超过 50%。
+  const keepCount = Math.min(Math.floor(size / 2), Math.floor(previous.length / 2));
+  const keep = shuffledIndices(`roster:${stage}:keep`, previous).slice(0, keepCount);
+  // 新怪只能从上一图没有的物种里取；否则 freshPool 仍可能抽到上一图的其他怪，重叠会超标。
+  const freshPool = source.filter((index) => !previous.includes(index));
+  const fresh = shuffledIndices(`roster:${stage}:fresh`, freshPool).slice(0, size - keep.length);
+  return [...keep, ...fresh].sort((a, b) => a - b);
+}
+
+export const MAP_THREATS = [
+  { id: "dust", label: "矿尘", desc: "细碎矿尘遮蔽远处目标" },
+  { id: "heat", label: "灼热", desc: "地面余温持续烘烤" },
+  { id: "rot", label: "腐雾", desc: "腐化雾气压低恢复" },
+  { id: "storm", label: "雷暴", desc: "短促雷击打断走位" },
+  { id: "tide", label: "潮汐", desc: "水位反复冲刷路径" }
+];
+
+export function mapThreatFor(stageNumber) {
+  const chapterIndex = Math.floor((stageNumber - 1) / 10);
+  const slot = (stageNumber - 1) % 10;
+  return MAP_THREATS[(chapterIndex * 2 + Math.floor(slot / 2)) % MAP_THREATS.length];
+}
+
 export function generatedMap(stageNumber) {
   const chapterIndex = Math.floor((stageNumber - 1) / 10);
   const chapter = CHAPTERS[chapterIndex];
@@ -1392,6 +1439,8 @@ export function generatedMap(stageNumber) {
   const difficulty = mapDifficultyOverride(stageNumber);
   const attackMult = difficulty?.attackMult || 1;
   const hazardMult = difficulty?.hazardMult || 1;
+  const monsterRoster = generatedMonsterRoster(stageNumber);
+  const threat = mapThreatFor(stageNumber);
   const monsterTypes = chapter.monsters.map((name, typeIndex) => {
     // 9 档步长 2.785：第 8 档（最强）在第 100 关仍等于旧曲线峰值的 123。
     const attack = Math.round(anchored(70 + typeIndex * 2.785, 0.32) * attackMult);
@@ -1424,6 +1473,7 @@ export function generatedMap(stageNumber) {
     levelMax: expectedLevel + 1,
     danger: chapter.danger,
     dangerLabel: chapter.dangerLabel,
+    threat,
     layoutId: layout.layoutId,
     width: 2400,
     height: 1500,
@@ -1452,6 +1502,9 @@ export function generatedMap(stageNumber) {
       { text: `${bossName}领域`, x: layout.boss.x - 80, y: layout.boss.y + 95 }
     ],
     monsterTypes,
+    // 0.8.79：实际出场阵容（长度为 4~6 的 typeIndex 数组）。布局仍产 0..8 档，
+    // createEntities 用 spawn[2] % roster.length 映射到本图阵容，保留原档位用于等级差。
+    monsterRoster,
     monsterSpawns: layout.monsterSpawns,
     // 0.7.7：局部难度修正记录在关卡对象上，单测据此确认「只作用于登记过的关卡」。
     difficulty: { attackMult, hazardMult, aggroMult: difficulty?.aggroMult || 1, reason: difficulty?.reason || null },

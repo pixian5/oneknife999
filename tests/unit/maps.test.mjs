@@ -6,6 +6,8 @@ import {
   MAP_ORDER,
   CHAPTERS,
   MAP_DIFFICULTY_OVERRIDES,
+  MAP_THREATS,
+  mapThreatFor,
   hexToRgba,
   mapDifficultyOverride,
   aggroRangeFor,
@@ -287,4 +289,44 @@ test("aggroRangeFor：烬火章仇恨半径 190→120，未登记关卡保持 19
   assert.equal(aggroRangeFor(mapDifficultyOverride(41)), 120, "第 41 关应按 aggroMult 0.63 缩到 120");
   assert.equal(aggroRangeFor(undefined), 190, "未登记关卡保持基准 190");
   assert.equal(aggroRangeFor({ aggroMult: 1 }), 190);
+});
+
+test("0.8.79：生成图阵容 4~6 种、相邻重叠 ≤50%、同章至少 5 种组合", () => {
+  const stageId = (stage) => `stage_${String(stage).padStart(3, "0")}`;
+  for (let chapter = 0; chapter < 10; chapter += 1) {
+    const first = chapter === 0 ? 5 : chapter * 10 + 1;
+    const last = (chapter + 1) * 10;
+    const rosters = [];
+    for (let stage = first; stage <= last; stage += 1) {
+      const map = MAPS[stageId(stage)];
+      const roster = map.monsterRoster;
+      assert.ok(Array.isArray(roster), `${map.id} 缺少 monsterRoster`);
+      assert.ok(roster.length >= 4 && roster.length <= 6, `${map.id} 阵容应为 4~6 种，实际 ${roster.length}`);
+      assert.equal(new Set(roster).size, roster.length, `${map.id} 阵容有重复类型`);
+      const used = new Set(map.monsterSpawns.map(([, , tier]) => roster[tier % roster.length]));
+      assert.equal(used.size, roster.length, `${map.id} 有阵容物种未实际出场`);
+      if (rosters.length) {
+        const previous = rosters[rosters.length - 1];
+        const overlap = roster.filter((index) => previous.includes(index)).length;
+        const limit = Math.floor(Math.min(roster.length, previous.length) / 2);
+        assert.ok(overlap <= limit, `${map.id} 与上一图重叠 ${overlap} 超过一半（上限 ${limit}）`);
+      }
+      rosters.push(roster);
+    }
+    assert.ok(new Set(rosters.map((roster) => roster.join(","))).size >= 5, `第 ${chapter + 1} 章阵容组合少于 5 种`);
+  }
+});
+
+test("0.8.79：每张生成图带威胁标签，且同章每两张图轮换", () => {
+  for (let stage = 5; stage <= 100; stage += 1) {
+    const map = MAPS[`stage_${String(stage).padStart(3, "0")}`];
+    assert.ok(map.threat, `${map.id} 缺少 threat`);
+    assert.ok(
+      MAP_THREATS.some((threat) => threat.id === map.threat.id),
+      `${map.id} threat id 不在池内`
+    );
+    assert.equal(map.threat, mapThreatFor(stage), `${map.id} threat 与 mapThreatFor 不一致`);
+  }
+  const chapterTwo = Array.from({ length: 5 }, (_, pair) => MAPS[`stage_${String(11 + pair * 2).padStart(3, "0")}`].threat.id);
+  assert.ok(new Set(chapterTwo).size >= 3, "同一章前五组威胁没有轮换");
 });

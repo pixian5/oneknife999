@@ -1978,7 +1978,7 @@ export function renderMapObjective() {
   setClass($("mapObjective"), "complete", view.complete);
   setText($("mapObjectiveState"), view.step);
   setText($("mapObjectiveTitle"), view.title);
-  setText($("mapObjectiveText"), view.text);
+  setText($("mapObjectiveText"), map.threat ? `${view.text}（地图威胁：${map.threat.label}）` : view.text);
   // 三条勾选项拆成数组拼接，避免单行模板字符串超过 400 字符；输出 HTML 与拆分前一致。
   const killDone = progress.kills >= progress.need;
   const bossClass = progress.bossDefeated ? "done" : killDone ? "current" : "";
