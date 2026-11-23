@@ -72,6 +72,21 @@ def save_raw():
     return raw
 
 
+def save_manual():
+    """点游戏内“保存”再读 localStorage。
+
+    0.8.70：清层日志里的 HP 与 autoSave 落盘 HP 可能差一段自然回血；
+    截图/存档要以手动保存后的值为准，否则 HUD 981、存档 600。
+    """
+    local_cdp.cdp(
+        "Runtime.evaluate",
+        expression="document.querySelector('#saveBtn')?.click(); 'clicked'",
+        returnByValue=True,
+    )
+    time.sleep(0.5)
+    return save_raw()
+
+
 def press_t():
     local_cdp.cdp(
         "Input.dispatchKeyEvent",
@@ -91,21 +106,27 @@ def press_t():
     )
 
 
-def claim_resource_cache(floor, verbose=True):
+def claim_resource_cache(floor, cache_policy="all", verbose=True):
     """真实走到秘藏补给箱并按 F，拿到 0.8.65 的 +2 药水。
 
     只读 snapshot 的 tacticalPoints（0.8.69 新字段），不硬编码坐标；
-    已经领过就跳过。返回是否本次新领到。
+    已经领过就跳过。cache_policy=main 时只开主线箱，跳过支路箱；
+    返回 {claimed, route, name}，供逐层日志记录补给成本。
     """
     s = snapshot()
     key = f"abyss-F{floor}"
     if s["progress"].get(key, {}).get("resourceClaimed"):
-        return False
-    point = next((p for p in s.get("tacticalPoints", []) if p.get("kind") == "resource"), None)
-    if not point:
+        return {"claimed": False, "route": None, "name": None}
+    if cache_policy == "none":
+        return {"claimed": False, "route": None, "name": None}
+    points = [p for p in s.get("tacticalPoints", []) if p.get("kind") == "resource"]
+    if cache_policy == "main":
+        points = [p for p in points if p.get("route", "main") == "main"]
+    if not points:
         if verbose:
-            print(f"F{floor} 未找到秘藏补给箱点位，跳过", flush=True)
-        return False
+            print(f"F{floor} 未找到可开的秘藏补给箱（{cache_policy}），跳过", flush=True)
+        return {"claimed": False, "route": None, "name": None}
+    point = points[0]
     p = s["player"]
     if verbose:
         print(f"F{floor} 前往补给箱 {point['name']} ({point['x']},{point['y']}) 药水 {p['potion']}", flush=True)
@@ -124,20 +145,25 @@ def claim_resource_cache(floor, verbose=True):
         s = snapshot()
         ok = bool(s["progress"].get(key, {}).get("resourceClaimed"))
     if verbose:
-        print(f"F{floor} 补给箱 {'已领取' if ok else '领取失败'} 药水 {s['player']['potion']} 金币 {s['player']['gold']}", flush=True)
-    return ok
+        print(f"F{floor} 补给箱 {'已领取' if ok else '领取失败'} 路线 {point.get('route', 'main')} 药水 {s['player']['potion']} 金币 {s['player']['gold']}", flush=True)
+    return {"claimed": ok, "route": point.get("route", "main"), "name": point.get("name")}
 
 
-def record_floor_deaths(floor, start_deaths, elapsed, s):
-    """把本层死亡诊断追加到 JSONL；diagnostics 在 loadMap 后会重置，必须先存。"""
+def record_floor_deaths(floor, start_deaths, elapsed, s, start_hp, start_potion, cache, cache_timing):
+    """把本层死亡、HP、药水、补给箱路线与开箱时机追加到 JSONL；diagnostics 在 loadMap 后会重置，必须先存。"""
     p = s["player"]
     entry = {
         "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "floor": floor,
         "elapsed": elapsed,
+        "hpStart": start_hp,
+        "hpEnd": p["hp"],
+        "potionStart": start_potion,
+        "potionEnd": p["potion"],
         "deathsStart": start_deaths,
         "deathsEnd": p["deaths"],
         "deathsDelta": p["deaths"] - start_deaths,
+        "cache": {**cache, "timing": cache_timing},
         "diagnostics": s.get("diagnostics"),
     }
     DEATH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -145,12 +171,20 @@ def record_floor_deaths(floor, start_deaths, elapsed, s):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-def clear_current_floor(floor, verbose=True):
+def clear_current_floor(floor, cache_policy="all", cache_timing="after-clear", verbose=True):
     """清当前层：先 5 只普通怪，再回响；死亡后自动从安全营地继续。"""
     key = f"abyss-F{floor}"
-    deaths = rp.player()["deaths"]
+    start = rp.player()
+    deaths = start["deaths"]
     start_deaths = deaths
+    start_hp = start["hp"]
+    start_potion = start["potion"]
+    cache = {"claimed": False, "route": None, "name": None}
     t0 = time.time()
+    # 0.8.70：entry 在清小怪之前开箱，避开清完后 28–45 秒重生的小怪；
+    # 支路箱的守怪仍在，但不会叠加“清完 5 只后回头跑图”的二次风险。
+    if cache_timing == "entry":
+        cache = claim_resource_cache(floor, cache_policy, verbose)
     # 普通怪阶段
     for guard in range(45):
         s = snapshot()
@@ -179,8 +213,9 @@ def clear_current_floor(floor, verbose=True):
         time.sleep(0.08)
         rp.combo(3)
 
-    # 0.8.69：小怪清完后先开秘藏补给箱，再打回响；补给箱是 F31+ 的主要药水来源。
-    claim_resource_cache(floor, verbose)
+    # 0.8.70：小怪清完后按 cache_policy 开秘藏补给箱；main 跳过有守怪的支路箱。
+    if cache_timing == "after-clear":
+        cache = claim_resource_cache(floor, cache_policy, verbose)
 
     # 首领阶段
     for guard in range(80):
@@ -208,11 +243,17 @@ def clear_current_floor(floor, verbose=True):
         time.sleep(0.08)
         rp.combo(5)
 
+    # 0.8.70：打完 boss 再开箱，路线绝对安全，但药水只能留给下一层。
+    if cache_timing == "after-boss" and not cache.get("claimed"):
+        cache = claim_resource_cache(floor, cache_policy, verbose)
+
     s = snapshot()
     elapsed = round(time.time() - t0, 1)
-    print(f"F{floor} 完成：{json.dumps(s['progress'].get(key, {}), ensure_ascii=False)} 用时 {elapsed}s", flush=True)
-    record_floor_deaths(floor, start_deaths, elapsed, s)
-    save_raw()
+    p = s["player"]
+    print(f"F{floor} 完成：{json.dumps(s['progress'].get(key, {}), ensure_ascii=False)} 用时 {elapsed}s HP {start_hp}->{p['hp']} 药水 {start_potion}->{p['potion']} 死亡 {start_deaths}->{p['deaths']}", flush=True)
+    record_floor_deaths(floor, start_deaths, elapsed, s, start_hp, start_potion, cache, cache_timing)
+    # 0.8.70：清层完成先点“保存”，把自然回血后的 HP 落盘，避免 HUD 与存档不一致。
+    save_manual()
     return s["progress"].get(key, {})
 
 
@@ -220,6 +261,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", type=int, default=3)
     ap.add_argument("--end", type=int, default=10)
+    ap.add_argument("--cache-policy", choices=["all", "main", "none"], default="all",
+                    help="all=开所有可开箱；main=只开主线箱；none=不开箱")
+    ap.add_argument("--cache-timing", choices=["entry", "after-clear", "after-boss"], default="after-clear",
+                    help="entry=进层先开箱；after-clear=清完小怪开箱；after-boss=打完 boss 开箱")
     args = ap.parse_args()
     acquire_lock()
     s = snapshot()
@@ -234,7 +279,7 @@ def main():
         floor = int(s["currentMapId"].split("F")[1])
         if floor != target:
             raise SystemExit(f"期望 F{target}，实际 F{floor}")
-        pr = clear_current_floor(target)
+        pr = clear_current_floor(target, args.cache_policy, args.cache_timing)
         if not pr.get("completed"):
             raise SystemExit(f"F{target} 未完成，停止")
         if target == args.end:
