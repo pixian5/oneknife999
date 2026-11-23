@@ -1,0 +1,14 @@
+{
+  "contact_sheet": "总览-12张.jpg",
+  "actual_size_sheet": "实际尺寸对照.jpg",
+  "sizes_px": [
+    64,
+    32,
+    16
+  ],
+  "note": "尺寸是预期用途参考，不是页面实测。",
+  "selected_candidates": {
+    "07": "补拍/07a-品质-白-原版细环.jpg（弃用）",
+    "09": "补拍/09a-品质-紫-原版暗晶.jpg（弃用）"
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "model": "seedream_5.5",
+  "generated_at": "2026-11-23 14:56 +08:00",
+  "note": "原图 1536×1536；已统一缩放为 1024×1024 JPEG，质量 92。无水印，无 alpha。",
+  "items": [
+    {
+      "index": "01",
+      "name": "边境·苍狼徽记",
+      "file": "01-套装-边境-苍狼徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/5Bihj27R3M",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "b83b60ec006178e933038740da757bcb3624e54a750b0450a7663d3c5ca2a96c",
+      "watermark": false
+    },
+    {
+      "index": "02",
+      "name": "苍月·潮月徽记",
+      "file": "02-套装-苍月-潮月徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/OZj7jULVeP",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "379ae7e9dab82edb25643c6ec140db7a215593b5d8fbe67df83a46e2dde2f12b",
+      "watermark": false
+    },
+    {
+      "index": "03",
+      "name": "龙脉·龙脊徽记",
+      "file": "03-套装-龙脉-龙脊徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/VwTUHNncDP",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "9b1f33c99d8f4ea2652278f44f4804361fcb2598696adac7a3049c05405b922e",
+      "watermark": false
+    },
+    {
+      "index": "04",
+      "name": "冰封·霜冠徽记",
+      "file": "04-套装-冰封-霜冠徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/yQDWpejVrk",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "b0046b6c569ce20c409b5498a8da75c13e15c6ee56ad5aef2f28bd20ad141ee7",
+      "watermark": false
+    },
+    {
+      "index": "05",
+      "name": "烬火·焚心徽记",
+      "file": "05-套装-烬火-焚心徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/MHmt2cIo7d",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "1c589dcab895967ec0a5256c6402129b5fa20542e2561008db1c4e41a5cc2000",
+      "watermark": false
+    },
+    {
+      "index": "06",
+      "name": "帝陵·帝玺徽记",
+      "file": "06-套装-帝陵-帝玺徽记.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/lGD9Vk1Zrl",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "358a23bd903f16341661a663fbb8375c25ff528214f7434c386dd898a4e00923",
+      "watermark": false
+    },
+    {
+      "index": "07",
+      "name": "白·素纹徽章",
+      "file": "07-品质-白-素纹徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/zfIK2IgyPD",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "5e47d7c525fa1171b4e6399d0b1e67e7ea30b5f305823e42f2066c1a974c1b71",
+      "watermark": false
+    },
+    {
+      "index": "08",
+      "name": "蓝·澄辉徽章",
+      "file": "08-品质-蓝-澄辉徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/5BVUpZsUtt",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "9d09f65ea4ab9df6ea535ad6087ea8f8ce87178e7bc676e2ea3060c46eebae2b",
+      "watermark": false
+    },
+    {
+      "index": "09",
+      "name": "紫·渊晶徽章",
+      "file": "09-品质-紫-渊晶徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/7bE5yaVk2m",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "c0f84fda0f6f3e506743344d442f82e30406236d1d89ab999fa5a3de77497449",
+      "watermark": false
+    },
+    {
+      "index": "10",
+      "name": "橙·熔金徽章",
+      "file": "10-品质-橙-熔金徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/m8Nd2CyOL6",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "e35310059d928b1cf2d2156d80099b54d91ef2c2e4c9f444919ef1974164c989",
+      "watermark": false
+    },
+    {
+      "index": "11",
+      "name": "红·赤煞徽章",
+      "file": "11-品质-红-赤煞徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/JoU9qE31hC",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "f118dd711e5441c0b6dee249df5682f0d11922e955812befa3c21ca9eb15859c",
+      "watermark": false
+    },
+    {
+      "index": "12",
+      "name": "金·天冕徽章",
+      "file": "12-品质-金-天冕徽章.jpg",
+      "source_url": "https://aka.doubaocdn.com/s/Y4GVzabCVi",
+      "source_size": "1536x1536",
+      "final_size": "1024x1024",
+      "sha256": "c32916e5cd7bac6bf9304e48049c2aa869167215c49440279df3073db08cfa68",
+      "watermark": false
+    }
+  ]
+}
