@@ -1,0 +1,233 @@
+{
+  "model": "cogview-3-flash",
+  "items": [
+    {
+      "slug": "status-poison",
+      "name": "中毒",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心浮起一颗墨绿色毒液骷髅头，毒液沿下颌滴落，微弱黄绿色毒雾，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/01-状态-中毒.jpg",
+      "request_id": "202611231621243b86b761d7a24ba9",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:21:37"
+    },
+    {
+      "slug": "status-slow",
+      "name": "减速",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一只被蓝白冰霜锁链缠住的铁靴，靴底拖出冰冷霜痕，冷蓝色冰晶点缀，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/02-状态-减速.jpg",
+      "request_id": "20261123162207b9f6ffd9d0d04459",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:22:17"
+    },
+    {
+      "slug": "status-stun",
+      "name": "眩晕",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一顶被重击凹陷的银色战盔，战盔上方环绕三颗旋转的金色眩晕星，星芒拖出弧线，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/03-状态-眩晕.jpg",
+      "request_id": "2026112316224751342b2413dc4d14",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:23:00"
+    },
+    {
+      "slug": "status-blind",
+      "name": "致盲",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一只被黑色布带横向遮住的赤红眼睛，布带边缘渗出暗红微光，眼睛下方有一滴黑色泪痕，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/04-状态-致盲.jpg",
+      "request_id": "20261123162330e4db1556c3554466",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:23:39"
+    },
+    {
+      "slug": "status-armor-break",
+      "name": "破甲",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一面被斜向劈裂的厚重铁盾，裂缝中透出橙红色熔光，碎铁片向外飞散，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/05-状态-破甲.jpg",
+      "request_id": "20261123162409a76575a1f05b4287",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:24:18"
+    },
+    {
+      "slug": "status-burn",
+      "name": "灼烧",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一团从铁环中腾起的橙红火焰，火焰内部有白热核心，底部飘散火星，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/06-状态-灼烧.jpg",
+      "request_id": "20261123162448371f3c7e2c704334",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:24:59"
+    },
+    {
+      "slug": "status-bleed",
+      "name": "流血",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一把向下滴血的弯曲匕首，血滴呈鲜红色并拖出细长血线，刀身有暗红裂纹，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/07-状态-流血.jpg",
+      "request_id": "20261123162529b88c758de0d54487",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:25:41"
+    },
+    {
+      "slug": "status-freeze",
+      "name": "冰冻",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一枚巨大的六角冰晶，冰晶内部有层层冻结裂纹，边缘泛出青蓝色寒气，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/08-状态-冰冻.jpg",
+      "request_id": "20261123162611dc1541e9c9344814",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:26:26"
+    },
+    {
+      "slug": "status-shield",
+      "name": "护盾",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一面完好的金色塔盾，盾面刻有抽象狮首浮雕，盾沿泛出温暖金光，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/09-状态-护盾.jpg",
+      "request_id": "20261123162656b1f35df0808f40e0",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:27:05"
+    },
+    {
+      "slug": "status-heal",
+      "name": "治疗",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一枚由两根绿色藤蔓缠绕而成的生命十字，十字中心嵌着一颗温润绿宝石，周围漂浮细小光点，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/10-状态-治疗.jpg",
+      "request_id": "20261123162735d33ec1c999de42b8",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:27:43"
+    },
+    {
+      "slug": "status-enrage",
+      "name": "狂暴",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一只怒目而视的赤红兽首，头顶一对折断的黑色牛角，口鼻喷出红色热气，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/11-状态-狂暴.jpg",
+      "request_id": "20261123162813e6774e1f647d4992",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:28:22"
+    },
+    {
+      "slug": "status-haste",
+      "name": "疾行",
+      "size": "1024x1024",
+      "prompt": "暗黑传奇风格 UI 状态图标，纯黑背景，中央一枚直径约占画面 64% 的暗铁圆形徽章，徽章边缘有粗糙铆钉与磨损，中心是一只长着银色羽翼的轻便铁靴，靴后拖出三道青色风痕，翅膀张开，强轮廓、强对比、金属浮雕质感，适合缩小到 32 像素仍能辨认，主体完整居中，四周留出干净黑边，画面无文字、无字母、无数字、无边框、无水印",
+      "file": "美术素材-CogView/第六批-状态效果图标/12-状态-疾行.jpg",
+      "request_id": "20261123162852864ac433684e4328",
+      "url_expires_hint": "临时下载地址，已本地保存；不要用远程 URL 做稳定引用",
+      "watermark": "已去除（自动检测修补）",
+      "watermark_region": [
+        837,
+        941,
+        1022,
+        1017
+      ],
+      "watermark_detected": true,
+      "watermark_method": "edge-interpolation",
+      "created_at": "2026-11-23T16:29:01"
+    }
+  ]
+}
