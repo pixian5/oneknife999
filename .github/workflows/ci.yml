@@ -36,7 +36,8 @@ jobs:
       fail-fast: false
       matrix:
         # 0.8.78：把状态条、真实状态、移动端点击、HUD 血量、死亡存档纳入每次 push；
-        # 全量 UI 仍由本地/夜间任务跑，当前矩阵 20 项，避免每次矩阵过宽。
+        # 0.8.81：新增 F90 回响 B / 入口补给（ui:echo）与死亡保留 A/B（ui:preserve）。
+        # 全量 UI 仍由本地/夜间任务跑，当前矩阵 22 项，避免每次矩阵过宽。
         test:
           [
             ui,
@@ -58,7 +59,9 @@ jobs:
             ui:status-real,
             ui:touch,
             ui:hud-health,
-            ui:death-save
+            ui:death-save,
+            ui:echo,
+            ui:preserve
           ]
     steps:
       - uses: actions/checkout@v4

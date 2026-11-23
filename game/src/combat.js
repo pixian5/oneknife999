@@ -80,7 +80,10 @@ export function computeIncomingDamage({ attack, attackerLevel = 1, defense }) {
 // - 普通怪按 100 经验 / 本关目标数折算并向上取整：第 1 关 8 只怪即可在见到首领前升到 2 级。
 // - 首领重复击杀同样给 50%，升级上限由调用方按关卡曲线封顶，不会无限刷级。
 export function computeKillReward({ target, quest, rule }) {
-  const firstProgressKill = target.boss ? !quest.bossDefeated : quest.kills < quest.need;
+  // 0.8.81 F90 回响 B：提前击破（echoEarlyDefeated）不算通关，经验按半额，
+  // 且不发首领印记；等清完 5 只普通怪后重生再击杀，才按“首次首领击破”结算。
+  const echoEarly = target.boss && Boolean(quest.echoEarlyDefeated);
+  const firstProgressKill = target.boss ? !quest.bossDefeated && !echoEarly : quest.kills < quest.need;
   const baseExp = target.boss
     ? Math.max(1, Math.round(30 / rule.mapsPerLevel))
     : Math.max(1, Math.ceil(100 / rule.mapsPerLevel / rule.kills));
@@ -88,7 +91,8 @@ export function computeKillReward({ target, quest, rule }) {
   return {
     firstProgressKill,
     expGain,
-    marksGain: target.boss ? 35 : 0,
+    // 首领印记一局只发一次：提前击破不发，最终击破发；旧档没有这两个字段时按旧规则发。
+    marksGain: target.boss && !quest.echoEarlyDefeated && !quest.bossMarksAwarded ? 35 : 0,
     chargeGain: target.boss ? 32 : 12,
     resourceGainRatio: 0.08
   };

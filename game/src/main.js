@@ -58,7 +58,8 @@ import {
   pauseState,
   fx,
   clearHostileStatus,
-  abyssCachePotionGain
+  abyssCachePotionGain,
+  restoreDamagedAbyssMonsters
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
 import {
@@ -130,7 +131,10 @@ import {
   abyssMultipliers,
   abyssQualityBonus,
   isAbyssBossFloor,
-  abyssProgress
+  abyssProgress,
+  abyssEntrySupplyGain,
+  shouldDeferAbyssBossVictory,
+  ABYSS_DEATH_RULES
 } from "./endgame.js";
 import {
   resolveAbilities,
@@ -186,7 +190,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.80";
+const CURRENT_APP_VERSION = "0.8.81";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -195,6 +199,22 @@ let lastTime = 0;
 // 0.8.43：实际喝药次数（只统计成功扣药；与库存净变化分开，供 run-full-playthrough 记录）
 let potionsUsed = 0;
 let pendingTravel = null;
+// 0.8.81 A/B 开关：B 组默认开启，死亡复活时只保留普通怪已损生命的 50%。
+// F91 实测 A 组 10 死/185.2s，B 组 6 死/140.6s；F92 B 组也显著更低，因此不再让玩家默认吃满血重建。
+// 想回到旧 A 组：URL 加 ?abyssPreserve=0（优先级最高）；localStorage 仍可写 0/1 覆盖默认。
+const ABYSS_PRESERVE_NORMAL_HP = (() => {
+  try {
+    const search = globalThis.location?.search || "";
+    const param = new URLSearchParams(search).get("abyssPreserve");
+    if (param === "0") return false;
+    if (param === "1") return true;
+    const stored = globalThis.localStorage?.getItem("oneknife999-abyss-preserve");
+    if (stored === "0") return false;
+    return true;
+  } catch {
+    return true;
+  }
+})();
 // 0.3.4 围攻上限：同一时刻只允许 1 只怪蓄力。旧实现每帧只判定「最近的一只」敌人，
 // 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
 const MAX_WINDUP_ATTACKERS = 1;
@@ -456,8 +476,13 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   if (map.id.startsWith(ABYSS_MAP_PREFIX) && mapProgress(map.id).completed) {
     state.entities = state.entities.filter((entity) => entity.friendly || entity.npc);
   }
-  // 0.4.2：同图复活时回填受伤首领的生命（普通怪仍满血重置），阶段由 updateBoss 重新判定。
+  // 0.4.2：同图复活时回填受伤首领的生命（普通怪默认满血重置），阶段由 updateBoss 重新判定。
   if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
+  // 0.8.81 A/B：B 组默认开启，保留普通怪已损生命的 50%，只对深层；A 组用 ?abyssPreserve=0 回退。
+  if (keepBossHp && ABYSS_PRESERVE_NORMAL_HP && map.id.startsWith(ABYSS_MAP_PREFIX)) {
+    const restored = restoreDamagedAbyssMonsters(state.entities, previousEntities, ABYSS_DEATH_RULES.preserveNormalHpOnDeath);
+    logInfo("abyss", "preserveNormalHp", { mapId, restored, ratio: ABYSS_DEATH_RULES.preserveNormalHpOnDeath });
+  }
   state.drops = [];
   state.particles = [];
   state.texts = [];
@@ -479,7 +504,17 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   fx.shake = 0;
   fx.levelUp = 0;
   state.quest = mapProgress(mapId);
+  // 0.8.81：深层每层入口一次性补给。必须在写 visitedMaps 之前判断首访；
+  // 死亡复活（keepBossHp=true）不会重新领，刷新 / 重进也不重复领。
+  const abyssEntryFirstVisit = map.id.startsWith(ABYSS_MAP_PREFIX) && !keepBossHp && !state.player.visitedMaps[mapId];
   state.player.visitedMaps[mapId] = true;
+  if (abyssEntryFirstVisit) {
+    const supply = abyssEntrySupplyGain(mapId, map.abyssFloor, true);
+    if (supply > 0) {
+      state.player.potion += supply;
+      log(`深层入口补给：生命药水 +${supply}（每层首次进入只发一次，死亡保留）。`, "loot");
+    }
+  }
   if (!silent) {
     log(`进入 <b>${map.name} · ${map.subtitle}</b>：推荐等级 Lv.${map.levelMin}-${map.levelMax}，${map.dangerLabel}。`, "loot");
     log(`<b>${map.story.chapterTitle} · ${map.story.beatTitle}</b>：${map.story.summary}`, "loot");
@@ -1217,6 +1252,12 @@ export function defeat(target) {
   }
   if (target.boss) sfx.bossKill();
   else sfx.kill();
+  // 0.8.81 F90 回响 B：先判定这次死亡是“提前击破”还是“最终击破”，
+  // 奖励结算必须看到 echoEarlyDefeated，才能避免提前击破发一次印记、最终击破又发一次。
+  const echoDeferred = Boolean(
+    target.boss && shouldDeferAbyssBossVictory(activeMap().echoVictoryRule, state.quest.kills, state.quest.need)
+  );
+  if (target.boss) state.quest.echoEarlyDefeated = echoDeferred;
   const hero = activeHero();
   const reward = computeKillReward({ target, quest: state.quest, rule: MAP_CLEAR_RULES[state.currentMapId] });
   // 0.3.2：经验真实结算并可升级（本关上限 = 主线等级 +1），不再把经验截断在 99。
@@ -1248,21 +1289,35 @@ export function defeat(target) {
     fx.shake = 0.32;
     fx.shakePower = 7;
     state.player.marks += reward.marksGain;
-    log(`<b>首领击破</b>：${target.name} 倒下，个人获得 ${reward.marksGain} 首领印记。`, "loot");
-    showToast("首领结算完成：贡献快照已锁定");
-    state.quest.bossDefeated = true;
-    // 0.8.55 真实试玩：首领倒下时玩家只剩 64 HP，残存小怪立刻把玩家打死，胜利结算后多记 1 次死亡。
-    // 首领余波清空 260px 内普通怪（不结算经验/金币），避免“刚赢就被杂兵补刀”。
-    const arenaAdds = state.entities.filter(
-      (entity) =>
-        entity.alive && !entity.boss && !entity.friendly && !entity.npc && Math.hypot(entity.x - target.x, entity.y - target.y) < 260
-    );
-    for (const add of arenaAdds) {
-      add.alive = false;
-      add.hp = add.maxHp;
-      add.respawn = Math.max(add.respawn || 0, 42);
+    if (reward.marksGain > 0) {
+      log(`<b>首领击破</b>：${target.name} 倒下，个人获得 ${reward.marksGain} 首领印记。`, "loot");
     }
-    if (arenaAdds.length) log(`首领余波清空附近 ${arenaAdds.length} 只小怪。`, "loot");
+    // 0.8.81：F90 提前击破不置 bossDefeated，也不清空周边小怪。
+    // 否则玩家 AOE 先杀回响，系统再把 5 只“击杀数”清掉，B 方案会变成无解。
+    if (echoDeferred) {
+      state.quest.bossDefeated = false;
+      state.quest.bossMarksAwarded = false;
+      state.quest.completionAnnounced = false;
+      log(`<b>回响提前击破</b>：${target.name} 将在 42 秒后重生；先清完 5 只普通怪，再击破回响才算通关。`, "warn");
+      showToast("回响提前击破：先清完普通怪，回响会重生再战");
+    } else {
+      state.quest.bossDefeated = true;
+      // 只有 F90 的 clear-first 回响需要“印记一局一次”；普通图 / 旧整十层保持旧规则（重复击杀仍给印记）。
+      if (activeMap().echoVictoryRule === "clear-first") state.quest.bossMarksAwarded = true;
+      showToast("首领结算完成：贡献快照已锁定");
+      // 0.8.55 真实试玩：首领倒下时玩家只剩 64 HP，残存小怪立刻把玩家打死，胜利结算后多记 1 次死亡。
+      // 首领余波清空 260px 内普通怪（不结算经验/金币），避免“刚赢就被杂兵补刀”。
+      const arenaAdds = state.entities.filter(
+        (entity) =>
+          entity.alive && !entity.boss && !entity.friendly && !entity.npc && Math.hypot(entity.x - target.x, entity.y - target.y) < 260
+      );
+      for (const add of arenaAdds) {
+        add.alive = false;
+        add.hp = add.maxHp;
+        add.respawn = Math.max(add.respawn || 0, 42);
+      }
+      if (arenaAdds.length) log(`首领余波清空附近 ${arenaAdds.length} 只小怪。`, "loot");
+    }
   } else {
     log(`${target.name} 被击败，获得 ${reward.expGain} 经验与 ${target.gold} 金币。`);
     advanceGuide(3);

@@ -13,6 +13,12 @@ import {
   isAbyssBossFloor,
   abyssQualityBonus,
   abyssProgress,
+  abyssGrowthText,
+  abyssRelativeHpGain,
+  abyssEntrySupplyGain,
+  shouldDeferAbyssBossVictory,
+  preservedAbyssNormalHp,
+  ABYSS_DEATH_RULES,
   recordBestiary,
   bestiaryStats,
   SET_BONUSES,
@@ -240,4 +246,46 @@ test("bestiaryChapterProgress：空章组与空图鉴安全", () => {
   assert.deepEqual(bestiaryChapterProgress([], {}), { perChapter: [], doneChapters: 0, totalChapters: 0, title: "" });
   const weird = bestiaryChapterProgress([{ name: "空章", names: [] }], {});
   assert.equal(weird.perChapter[0].done, false, "空章节不算完成");
+});
+
+// ============ 0.8.81 深层终局修复 ============
+test("abyssGrowthText：文案写“基础值加法”，不再暗示每层复利", () => {
+  const text = abyssGrowthText();
+  assert.match(text, /基础生命/);
+  assert.match(text, /基础攻击/);
+  assert.match(text, /10 层换章/);
+  assert.doesNotMatch(text, /深层成长 \+14%/);
+});
+
+test("abyssRelativeHpGain：F80→F90 约 +11.5%，不是 +140%", () => {
+  const gain = abyssRelativeHpGain(80, 90);
+  assert.ok(gain > 11.4 && gain < 11.6, `F80→F90 实际相对增幅 ${gain}%`);
+  assert.equal(Math.round(abyssRelativeHpGain(0, 0)), 0);
+  assert.equal(Math.round(abyssRelativeHpGain(90, 90)), 0);
+});
+
+test("shouldDeferAbyssBossVictory：仅 clear-first 规则且未清完普通怪时延后通关", () => {
+  assert.equal(shouldDeferAbyssBossVictory("clear-first", 0, 5), true);
+  assert.equal(shouldDeferAbyssBossVictory("clear-first", 4, 5), true);
+  assert.equal(shouldDeferAbyssBossVictory("clear-first", 5, 5), false);
+  assert.equal(shouldDeferAbyssBossVictory("legacy", 0, 5), false, "旧整十层不受 B 方案影响");
+  assert.equal(shouldDeferAbyssBossVictory(null, 0, 5), false);
+  assert.equal(shouldDeferAbyssBossVictory("clear-first", 0, 0), true, "need 兜底为 1");
+});
+
+test("abyssEntrySupplyGain：每层首次进入 +1，重进 / 死亡 / 普通图不给", () => {
+  assert.equal(abyssEntrySupplyGain("abyss-F91", 91, true), 1);
+  assert.equal(abyssEntrySupplyGain("abyss-F91", 91, false), 0, "死亡重进不能重复领");
+  assert.equal(abyssEntrySupplyGain("abyss-F1", 1, true), 1);
+  assert.equal(abyssEntrySupplyGain("stage_100", 100, true), 0, "百图不给深层补给");
+  assert.equal(abyssEntrySupplyGain("abyss-F0", 0, true), 0);
+});
+
+test("preservedAbyssNormalHp：ratio=0 满血重置，0.5 保留一半伤害，下限 1", () => {
+  assert.equal(preservedAbyssNormalHp(1000, 600, 0), 1000, "A 组旧行为");
+  assert.equal(preservedAbyssNormalHp(1000, 600, 0.5), 800, "已损 400，保留一半伤害");
+  assert.equal(preservedAbyssNormalHp(1000, 1, 0.5), 501);
+  assert.equal(preservedAbyssNormalHp(1, 0, 0.5), 1);
+  assert.equal(preservedAbyssNormalHp(1000, 1000, 0.5), 1000, "满血怪不变");
+  assert.equal(ABYSS_DEATH_RULES.preserveNormalHpOnDeath, 0.5);
 });

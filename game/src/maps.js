@@ -207,6 +207,10 @@ export function buildAbyssMap(floor) {
     landmarks: layout.landmarks,
     tacticalPoints: layout.tacticalPoints,
     siteStyle: layout.siteStyle,
+    // 0.8.81：回响层通关顺序规则。F90 采用 B 方案：必须先清 5 只普通怪，再击破回响；
+    // 提前用 AOE 把回响打死只算“提前击破”，回响 42 秒后重生，且不会清空周边小怪。
+    // 其他整十层保持 legacy，避免重玩 F10–F80 的节奏被一次改动整体改写。
+    echoVictoryRule: f === 90 ? "clear-first" : "legacy",
     routePlan: layout.routePlan,
     encounterBands: layout.routePlan.encounterBands,
     landmarkLabels: [

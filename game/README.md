@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.80。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.81。
 
 ## 启动
 
@@ -147,11 +147,15 @@ npm run test:ui:status        # 状态 HUD 四视口渲染回归（直接写字�
 npm run test:ui:status-real   # 五类状态真实战斗触发回归（需要先 npm run serve）
 npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
 npm run test:ui:threats       # 五类地图威胁 + 专属精英回归（需要先 npm run serve）
+npm run test:ui:echo          # F90 回响 B / 重构重生 / 入口补给一次性（需要先 npm run serve）
+npm run test:ui:preserve      # 死亡保留普通怪已损生命 A/B（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
 npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）
 npm run balance               # 真实速度数值模拟（三职业百图，无需浏览器，输出 tests/balance-out.csv）
 ```
+
+0.8.81 的死亡保留默认启用 B 组：死亡复活只保留普通怪一半已损生命；`?abyssPreserve=0` 或 `localStorage.oneknife999-abyss-preserve=0` 回退 A 组（普通怪满血重建，旧行为）。F91 实测 A=10 死/185.2s，B=6 死/140.6s。F90 回响改为“先清 5 只普通怪，再击破回响”；提前 AOE 击杀只算提前击破，42 秒后重生且不清周边小怪。
 
 真实浏览器验收会使用真实鼠标、键盘和浏览器时钟完成 100 图。默认 URL 含 `e2e=1&fast=1`：该模式仅在本机地址生效，快进只把伤害放大 25 倍，Boss 单次伤害限制为最大生命的 18%，不直接修改玩家、怪物或关卡状态。每一关都清怪、验证 Boss 完整阶段和危险技能、读取自动存档、刷新页面、验证恢复，然后走出口进入下一关。
 

@@ -81,6 +81,59 @@ export function abyssMultipliers(floor) {
   };
 }
 
+// 深层死亡 / 入口补给规则（0.8.81）。
+// 注意：这里只放“可被单元测试的纯数值”，真正的开关与场景重建由 main.js 决定。
+export const ABYSS_DEATH_RULES = {
+  // 死亡复活保留普通怪已损生命的比例。0 = 完全重置（旧行为），0.5 = 只保留一半伤害。
+  // 0.8.81 默认走 A 组（0，旧行为）；加 ?abyssPreserve=1 或写 localStorage 才启用 B 组。
+  preserveNormalHpOnDeath: 0.5
+};
+
+// 深层成长文案：old 版写“每层 +14%”，会被误读成复利；实际公式是相对基础值加法。
+// 同一章内（F1–F10、F11–F20…）每层累加 14% 基础生命，换章后基础值提升。
+export function abyssGrowthText() {
+  const hp = Math.round(ABYSS_RULES.hpGrowthPerFloor * 100);
+  const attack = Math.round(ABYSS_RULES.attackGrowthPerFloor * 100);
+  return `同章每层 +${hp}% 基础生命 / +${attack}% 基础攻击，10 层换章`;
+}
+
+// 任意两层之间的“相对生命增幅”，用于解释为什么 F80→F90 不是 +140%。
+export function abyssRelativeHpGain(fromFloor, toFloor) {
+  const from = abyssMultipliers(fromFloor).hp;
+  const to = abyssMultipliers(toFloor).hp;
+  if (from <= 0) return 0;
+  return (to / from - 1) * 100;
+}
+
+// 深层每层入口一次性补给：只有第一次进入该深层才给 1 瓶。
+// 用 visitedMaps 作为“已领过”的持久标记；死亡重进 / 刷新都不会重复领。
+export function abyssEntrySupplyGain(mapId, floor, firstVisit) {
+  if (!firstVisit) return 0;
+  if (!String(mapId || "").startsWith("abyss-F")) return 0;
+  if (Math.max(0, Math.floor(Number(floor) || 0)) <= 0) return 0;
+  return 1;
+}
+
+// F90 回响 B 方案：只有“先清 5 只普通怪、再击破回响”才算通关。
+// rule=clear-first 且 kills<need 时，首领死亡当帧不置 bossDefeated，等 42 秒重生后再杀。
+// 其他整十层保持旧行为（rule=legacy），避免一次改动影响 F10–F80 的复玩节奏。
+export function shouldDeferAbyssBossVictory(rule, kills, need) {
+  if (rule !== "clear-first") return false;
+  const targetKills = Math.max(1, Math.floor(Number(need) || 0));
+  const currentKills = Math.max(0, Math.floor(Number(kills) || 0));
+  return currentKills < targetKills;
+}
+
+// 死亡保留普通怪已损生命的纯计算：新血量 = 新上限 - 已损生命 * 保留比例。
+// ratio=0 时返回满血（旧行为），ratio=0.5 时保留一半伤害；下限 1，避免怪物直接被打死。
+export function preservedAbyssNormalHp(maxHp, hp, ratio = ABYSS_DEATH_RULES.preserveNormalHpOnDeath) {
+  const cap = Math.max(1, Math.round(Number(maxHp) || 0));
+  const current = Math.max(1, Math.min(cap, Number(hp) || cap));
+  const lost = Math.max(0, cap - current);
+  const keep = Math.max(0, Math.min(1, Number(ratio) || 0));
+  return Math.max(1, Math.min(cap, Math.round(cap - lost * keep)));
+}
+
 // 该层是否为 Boss 层；每 10 层一次。
 export function isAbyssBossFloor(floor) {
   return Math.max(1, Math.floor(Number(floor) || 1)) % ABYSS_RULES.bossEvery === 0;

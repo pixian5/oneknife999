@@ -18,6 +18,7 @@ import {
   mapsPerLevel,
   generatedLayout,
   mapLayoutSignature,
+  buildAbyssMap,
   siteNodeDefinition,
   SITE_NODE_EFFECTS
 } from "../../game/src/maps.js";
@@ -362,4 +363,10 @@ test("0.8.80：每章 3 张图有专属精英，名称唯一、词缀合法且�
     const stage = Number(map.id.slice(6));
     assert.equal(EXCLUSIVE_ELITE_SLOTS.includes((stage - 1) % 10), false, `${map.id} 空专属图落在专属槽位`);
   }
+});
+
+test("buildAbyssMap：F90 回响采用 clear-first，其他整十层保持 legacy", () => {
+  assert.equal(buildAbyssMap(90).echoVictoryRule, "clear-first");
+  assert.equal(buildAbyssMap(80).echoVictoryRule, "legacy");
+  assert.equal(buildAbyssMap(91).echoVictoryRule, "legacy");
 });

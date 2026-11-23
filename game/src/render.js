@@ -21,6 +21,7 @@ import {
   setCounts,
   nextSetTier,
   abyssProgress,
+  abyssGrowthText,
   bestiaryChapterProgress
 } from "./endgame.js";
 import { routePoint } from "./geometry.js";
@@ -2147,7 +2148,7 @@ export function renderRegion() {
         </div>`,
         `<div class="region-node">
           <span class="region-name">F${String(abyssFloor + 1).padStart(2, "0")} · 下一层</span>
-          <span class="region-level">深层成长 +14% 生命 / +7% 攻击</span>
+          <span class="region-level" title="深层倍率按基础值加法，不是每层复利">深层成长·${abyssGrowthText()}</span>
           <span class="region-progress">${nextLabel}</span>
         </div>`,
         `<div class="region-node">
