@@ -104,36 +104,42 @@ async function prepareMonster(page, { mapId, monsterName }) {
 
 // 轮询真实战斗结果；命中后立即暂停，避免 0.5 秒眩晕在断言/截图前自然结束。
 // 暂停只冻结后续帧，不修改任何状态值。
-async function waitForStatus(page, kind, timeoutMs = 6000) {
+async function waitForStatus(page, kind, expectedName, timeoutMs = 6000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const hit = await page.evaluate(async (statusKind) => {
-      const main = window.__ONEKNIFE_E2E__.testApi;
-      const state = main.state();
-      if (!state?.player) return null;
-      const player = state.player;
-      const matched =
-        statusKind === "poison"
-          ? (player.poison || 0) > 0
-          : statusKind === "slow"
-            ? (player.slowTimer || 0) > 0
-            : statusKind === "stun"
-              ? (player.stunTimer || 0) > 0
-              : (player.blindTimer || 0) > 0;
-      if (!matched) return null;
-      main.setPaused(true, "status-real-combat");
-      main.renderAll();
-      return {
-        poison: player.poison || 0,
-        slow: player.slowTimer || 0,
-        slowFactor: player.slowFactor || 1,
-        stun: player.stunTimer || 0,
-        blind: player.blindTimer || 0,
-        blindMissChance: player.blindMissChance || 0,
-        hp: player.hp,
-        lastKiller: player.lastKiller || null
-      };
-    }, kind);
+    const hit = await page.evaluate(
+      async ({ statusKind, expectedName }) => {
+        const main = window.__ONEKNIFE_E2E__.testApi;
+        const state = main.state();
+        if (!state?.player) return null;
+        const player = state.player;
+        // 状态必须和本次命中者同时成立：避免上一场残留计时或旧 lastKiller 造成假阳性。
+        const fromExpected = player.lastKiller === expectedName;
+        const matched =
+          fromExpected &&
+          (statusKind === "poison"
+            ? (player.poison || 0) > 0
+            : statusKind === "slow"
+              ? (player.slowTimer || 0) > 0
+              : statusKind === "stun"
+                ? (player.stunTimer || 0) > 0
+                : (player.blindTimer || 0) > 0);
+        if (!matched) return null;
+        main.setPaused(true, "status-real-combat");
+        main.renderAll();
+        return {
+          poison: player.poison || 0,
+          slow: player.slowTimer || 0,
+          slowFactor: player.slowFactor || 1,
+          stun: player.stunTimer || 0,
+          blind: player.blindTimer || 0,
+          blindMissChance: player.blindMissChance || 0,
+          hp: player.hp,
+          lastKiller: player.lastKiller || null
+        };
+      },
+      { statusKind: kind, expectedName }
+    );
     if (hit) return hit;
     await sleep(20);
   }
@@ -258,7 +264,7 @@ async function runDesktop(browser, catalog) {
     // 1) 中毒：黑岩矿坑的腐毒僵尸（毒液 + 资源压制）。
     const poisonTarget = await prepareMonster(page, { mapId: "black_rock_mine", monsterName: "腐毒僵尸" });
     assert.ok(poisonTarget.passives.includes("poison"), `腐毒僵尸必须带 poison 被动，实际 ${poisonTarget.passives.join(",")}`);
-    const poisonState = await waitForStatus(page, "poison");
+    const poisonState = await waitForStatus(page, "poison", poisonTarget.name);
     const poisonHud = await readHud(page);
     assert.equal(poisonState.lastKiller, poisonTarget.name, `中毒必须来自真实命中（lastKiller=${poisonState.lastKiller}）`);
     assert.equal(poisonState.poison, 1, `腐毒僵尸一次命中应叠 1 层毒，实际 ${poisonState.poison}`);
@@ -272,7 +278,7 @@ async function runDesktop(browser, catalog) {
     // 2) 眩晕：黑岩矿坑的矿脉蝙蝠（冲锋 + 眩晕）。
     const stunTarget = await prepareMonster(page, { mapId: "black_rock_mine", monsterName: "矿脉蝙蝠" });
     assert.ok(stunTarget.passives.includes("stun"), `矿脉蝙蝠必须带 stun 被动，实际 ${stunTarget.passives.join(",")}`);
-    const stunState = await waitForStatus(page, "stun");
+    const stunState = await waitForStatus(page, "stun", stunTarget.name);
     const stunHud = await readHud(page);
     assert.ok(stunState.stun > 0, `眩晕计时必须为正，实际 ${stunState.stun}`);
     assert.equal(stunState.lastKiller, stunTarget.name, `眩晕必须来自真实命中（lastKiller=${stunState.lastKiller}）`);
@@ -287,7 +293,7 @@ async function runDesktop(browser, catalog) {
     assert.ok(snowMap, "关卡目录里找不到含霜牙狼的冰封地图");
     const slowTarget = await prepareMonster(page, { mapId: snowMap.id, monsterName: "霜牙狼" });
     assert.ok(slowTarget.passives.includes("slow"), `霜牙狼必须带 slow 被动，实际 ${slowTarget.passives.join(",")}`);
-    const slowState = await waitForStatus(page, "slow");
+    const slowState = await waitForStatus(page, "slow", slowTarget.name);
     const slowHud = await readHud(page);
     assert.ok(slowState.slow > 0, `减速计时必须为正，实际 ${slowState.slow}`);
     assert.equal(slowState.lastKiller, slowTarget.name, `减速必须来自真实命中（lastKiller=${slowState.lastKiller}）`);
@@ -300,7 +306,7 @@ async function runDesktop(browser, catalog) {
     // 4) 致盲：冰封北境的雪原猎手（远程 + 致盲）。
     const blindTarget = await prepareMonster(page, { mapId: snowMap.id, monsterName: "雪原猎手" });
     assert.ok(blindTarget.passives.includes("blind"), `雪原猎手必须带 blind 被动，实际 ${blindTarget.passives.join(",")}`);
-    const blindState = await waitForStatus(page, "blind");
+    const blindState = await waitForStatus(page, "blind", blindTarget.name);
     const blindHud = await readHud(page);
     assert.ok(blindState.blind > 0, `致盲计时必须为正，实际 ${blindState.blind}`);
     assert.equal(blindState.lastKiller, blindTarget.name, `致盲必须来自真实命中（lastKiller=${blindState.lastKiller}）`);
@@ -349,8 +355,8 @@ async function runMobile(browser) {
     const target = await prepareMonster(page, { mapId: "pine_forest", monsterName: "林皮蛛" });
     assert.ok(target.passives.includes("poison"), "林皮蛛必须带 poison 被动");
     assert.ok(target.passives.includes("slow"), "林皮蛛必须带 slow 被动");
-    await waitForStatus(page, "poison");
-    await waitForStatus(page, "slow");
+    await waitForStatus(page, "poison", target.name);
+    await waitForStatus(page, "slow", target.name);
     const hud = await readHud(page);
     assert.equal(hud.stripVisible, true, "移动端真实状态条未显示");
     assert.equal(hud.stripClipped, false, "移动端真实状态条被滚动容器裁切");

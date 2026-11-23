@@ -161,7 +161,7 @@ import {
   rollElite,
   seededRandom
 } from "./elite.js";
-import { SKILL_FX, PASSIVE_FX } from "./assets.js";
+import { PASSIVE_FX, SKILL_FX, ULTIMATE_FX } from "./assets.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
 import { keyLabel } from "./keybinds.js";
@@ -188,10 +188,12 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.76";
+const CURRENT_APP_VERSION = "0.8.77";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
+// 0.8.43：实际喝药次数（只统计成功扣药；与库存净变化分开，供 run-full-playthrough 记录）
+let potionsUsed = 0;
 let pendingTravel = null;
 // 0.3.4 围攻上限：同一时刻只允许 1 只怪蓄力。旧实现每帧只判定「最近的一只」敌人，
 // 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
@@ -425,6 +427,8 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   state.player.stunTimer = 0;
   state.player.blindTimer = 0;
   state.player.blindMissChance = 0;
+  // 换图 / 复活清空上一场伤害来源，避免 state 快照把旧命中者误当成本场命中。
+  state.player.lastKiller = null;
   // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
   state.player.attackGate = 0;
   state.entities = createEntities(map);
@@ -1032,6 +1036,8 @@ export function oneMoment() {
   }
   logInfo("skill", "oneMoment", { target: target.id, name: target.name, classId: state.classId });
   state.player.charge = 0;
+  // 0.8.40 一刀时刻专属爆发特效（金色圣剑光柱，0.45s 渐隐——标志性时刻的视觉锚）。
+  fx.skillFx.push({ key: ULTIMATE_FX, x: target.x, y: target.y - 14, life: 0.45, total: 0.45 });
   const firstDisplay = !state.player.oneMomentUsed;
   state.player.oneMomentUsed = true;
   const actual = resolveDamage(target, state.classId === "warrior" ? 3.2 : state.classId === "mage" ? 2.7 : 2.35, "一刀时刻", "爆发");
@@ -2663,6 +2669,7 @@ export function usePotion() {
     return;
   }
   state.player.potion -= 1;
+  if (TEST_MODE) potionsUsed += 1;
   const restore = Math.round(maxHp * 0.32);
   const before = state.player.hp;
   state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
@@ -3264,6 +3271,7 @@ if (TEST_MODE) {
                 exp: state.player.exp,
                 nextExp: state.player.nextExp,
                 potion: state.player.potion,
+                potionsUsed,
                 gold: state.player.gold,
                 marks: state.player.marks,
                 deaths: state.player.deaths || 0,
@@ -3307,6 +3315,7 @@ if (TEST_MODE) {
                   phase: entity.phase || 0,
                   // 0.6.0：暴露行为配置，e2e / 探针可断言「这只怪确实是冲锋形态、确实带首击减伤」。
                   attackShape: entity.abilities?.attack || "normal",
+                  deepTuned: Boolean(entity.deepTuned),
                   passives: (entity.abilities?.passives || []).map((passive) => passive.id),
                   // 0.7.3：亡语也要能被 e2e 观察到，否则 noabideath 的消融没有断言入口。
                   onDeath: entity.abilities?.onDeath || null,

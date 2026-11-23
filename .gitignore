@@ -84,3 +84,6 @@ saves/abyss-floor-deaths.jsonl
 
 # 本地临时目录（测试中间产物，不入库）
 tmp/
+
+# Trae 误入的分享包目录（历史上出现过，忽略）
+.trae-html-share-packages/

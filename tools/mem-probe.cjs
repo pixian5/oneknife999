@@ -13,7 +13,7 @@ function rssMB() {
   try {
     return Math.round(Number(fs.readFileSync("/sys/fs/cgroup/memory.current", "utf8")) / 1048576);
   } catch {
-    return -1;
+    return null;
   }
 }
 
@@ -26,8 +26,8 @@ function rssMB() {
   await page.locator('[data-class="warrior"]').click();
   await page.clock.runFor(900);
   const start = rssMB();
-  process.stdout.write(`模式 ${MODE} 起始内存 ${start}MB\n`);
-  const samples = [];
+  const size = (mb) => mb === null ? "未测得" : `${mb}MB`;
+  process.stdout.write(`模式 ${MODE} 起始内存 ${size(start)}\n`);
   const totalMs = MINUTES * 60 * 1000;
   for (let t = 0; t < totalMs; t += 5000) {
     await page.clock.runFor(5000);
@@ -37,12 +37,12 @@ function rssMB() {
     }
     if (t % 30000 === 0) {
       const mb = rssMB();
-      samples.push(mb);
-      process.stdout.write(`t=${t / 1000}s 内存 ${mb}MB 增量 ${mb - start}MB\n`);
+      process.stdout.write(`t=${(t + 5000) / 1000}s 内存 ${size(mb)} 增量 ${size(start === null || mb === null ? null : mb - start)}\n`);
     }
   }
-  const end = samples.at(-1);
-  process.stdout.write(`\n结论 ${MODE}: 起始 ${start}MB 结束 ${end}MB 增量 ${end - start}MB，平均每虚拟分钟 ${((end - start) / MINUTES).toFixed(0)}MB\n`);
+  const end = rssMB();
+  const change = start === null || end === null ? null : end - start;
+  process.stdout.write(`\n结论 ${MODE}: 起始 ${size(start)} 结束 ${size(end)} 增量 ${size(change)}，平均每虚拟分钟 ${size(change === null ? null : Math.round(change / MINUTES))}\n`);
   await browser.close();
 })().catch((e) => {
   process.stdout.write(`FATAL ${e.message}\n`);

@@ -1256,6 +1256,16 @@ export function drawEntity(entity) {
     ctx.arc(entity.x, entity.y, ringR + 10 + ratio * 26, 0, Math.PI * 2);
     ctx.stroke();
   }
+  // 0.8.40 深渊化怪：紫色光环标识（deepTuned 由 buildAbyssMap 标记），一眼区分深层强化变体。
+  if (entity.deepTuned) {
+    ctx.strokeStyle = "rgba(168, 140, 227, .75)";
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, (sprH || entity.radius * 2) / 2 + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   // 召唤物（骨卫）：青色虚线环标识友军，避免误认为可攻击怪物。
   if (entity.friendly) {
     ctx.strokeStyle = "rgba(98, 213, 198, .6)";

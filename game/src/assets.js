@@ -75,7 +75,27 @@ export const ACTION_MONSTERS = new Set([
   "火岩巨魔",
   "火花精灵",
   "灰烬侦察者",
-  "灰烬秃鹫"
+  "灰烬秃鹫",
+  // 2026-11-22：灰鬃狼 / 沙盗斥候 的缺失帧用同源帧派生补齐
+  // （idle 复制 walk；attack/hit 由相对动作镜像缩放而来），属临时占位，
+  // 真实原画到位后覆盖同名文件并删掉本注释即可。
+  "灰鬃狼",
+  "沙盗斥候",
+  // 2026-11-22：前 4 关 12 种「只有静态单帧」的普通怪，用静态图派生四帧
+  // （idle 归一化；walk/attack/hit 为小幅旋转/位移/缩放），属临时占位，
+  // 真实原画到位后覆盖同名文件并删掉本注释即可。
+  "腐烬矿工",
+  "赤牙猎犬",
+  "裂脊尸卫",
+  "林皮蛛",
+  "松鸦盗",
+  "枯木菇人",
+  "黑岩矿工",
+  "落石魔",
+  "矿脉蝙蝠",
+  "腐毒僵尸",
+  "赤砂蝎",
+  "枯骨游魂"
 ]);
 
 // 40 个旧「章节前缀」生成怪 → 已有动作帧的物种。
@@ -279,6 +299,12 @@ export function resolveBossUiPortrait(map) {
 
 // 每图底图：50 张 map-cXX-YY（每章 5 张，按关卡序号循环）。
 export function resolveMapBackgroundName(map) {
+  // 0.8.40 深层专属底图：abyss 层不再轮换百图章节氛围图，按层取深层暗紫/暗青变体——
+  // 给「这是另一个世界」的视觉标识（图由 0.8.40 PIL 从 chapter 底图程序化调色生成）。
+  if (map?.abyssFloor > 0) {
+    const variant = String(((map.abyssFloor - 1) % 2) + 1).padStart(2, "0");
+    return `abyss-bg-${variant}.jpg`;
+  }
   const chapter = Math.max(1, Math.min(10, map?.chapter || 1));
   const stage = Math.max(1, map?.stageNumber || 1);
   return `map-c${String(chapter).padStart(2, "0")}-${String(((stage - 1) % 5) + 1).padStart(2, "0")}.jpg`;
@@ -288,6 +314,9 @@ export function resolveMapBackgroundName(map) {
 
 // 技能名 → 施放特效贴图（fx-skill-*.png，四角透明，目标点一次渐隐闪光）。
 // 12 张全用上：战士震地冲无贴图（保持粒子+震屏），freeze/frost 用于怪物减速/打断命中玩家的被动视觉。
+// 一刀时刻（oneMoment）不走 castSkill 流程，由 main.js 显式以本 key 挂载爆发特效。
+export const ULTIMATE_FX = "ultimate";
+
 export const SKILL_FX = {
   破甲斩: "shield", // 护甲碎裂意象
   旋风扫: "whirlwind",
