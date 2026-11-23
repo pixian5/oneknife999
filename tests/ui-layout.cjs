@@ -11,6 +11,7 @@
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const { browserLaunchOptions } = require("./browser-options.cjs");
+const { enterGame } = require("./game-entry.cjs");
 
 const BASE_URL = process.env.ONEKNIFE_URL || "http://127.0.0.1:4174/?e2e=1";
 
@@ -31,8 +32,7 @@ async function audit(browser, viewport) {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-  await page.locator('[data-class="warrior"]').click();
+  await enterGame(page, BASE_URL);
   await page.waitForTimeout(400);
 
   const data = await page.evaluate(() => {

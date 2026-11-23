@@ -81,3 +81,6 @@ saves/.run_abyss.lock
 
 # 深层逐层死亡诊断（运行时生成，不入库）
 saves/abyss-floor-deaths.jsonl
+
+# 本地临时目录（测试中间产物，不入库）
+tmp/

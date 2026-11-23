@@ -188,7 +188,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.75";
+const CURRENT_APP_VERSION = "0.8.76";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -3158,6 +3158,10 @@ if (TEST_MODE) {
     // 0.8.41：贴图缓存占用探针，回归时核对「连跑多关内存不涨」
     spriteStats: () => spriteCacheStats(),
     clearTimeline: () => clearTraceEvents(),
+    // 0.8.76：真实战斗回归需要在地图切换 / 暂停 / 施法之间调用生产函数。
+    // 只挂在 TEST_MODE 下，正式构建不暴露；测试直接复用页面已载入的模块实例，
+    // 不再二次 import（macOS Chrome 上动态 import 偶发拿不到已缓存的模块图）。
+    testApi: { loadMap, setPaused, castSkill, renderAll, state: () => state },
     // 0.8.13：仅 e2e 使用——对指定实体直接扣血，用于验证精英死亡词缀（分裂 / 毒爆）。
     // 走 defeat() 的完整死亡流程，但不经过玩家伤害公式，测试才能精确控制击杀时机。
     strike: (id, damage = 99999) => {

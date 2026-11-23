@@ -142,6 +142,8 @@ npm run test:ui               # 桌面 + 移动视口冒烟测试（需要先 np
 npm run test:ui:levelup       # 首关击杀升级回归（需要先 npm run serve）
 npm run test:ui:regression    # 界面渲染与输入回归（需要先 npm run serve）
 npm run test:ui:blind         # 致盲被动端到端回归（需要先 npm run serve）
+npm run test:ui:status        # 状态 HUD 四视口渲染回归（直接写字段，需要先 npm run serve）
+npm run test:ui:status-real   # 五类状态真实战斗触发回归（需要先 npm run serve）
 npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
@@ -156,6 +158,8 @@ npm run balance               # 真实速度数值模拟（三职业百图，无
 非快进难度探针（`npm run test:difficulty`，0.3.6 / 0.3.9）用于补上百图 e2e 的盲区：e2e 的 `fast=1` 把玩家伤害放大 25 倍，怪物常在前摇期间被击杀，死亡数不能代表真实难度。探针用 `page.clock` 只快进虚拟时间、请求不带 `fast`，玩家按主线等级 + 均分技能点 + 本关掉落基线装备出战，抽样关卡（默认第 5、15 关，可用 `ONEKNIFE_PROBE_STAGES=5,15,25` 扩面）按正式数值打完。0.3.9 起每关默认重复 3 次（`ONEKNIFE_PROBE_RUNS`）取死亡数与耗时中位数，单次超限只告警、中位数超限才失败；喝药阈值提前到 65%，避免「喝晚 → 死亡 → 首领回血重置」的自放大。同一关卡必须新建页签（同页连跑会因虚拟时钟与自动推进累积而污染死亡数）。
 
 界面冒烟测试检查桌面（1440×900）、移动（390×844）与窄屏（360×640）三个视口无纵向滚动、Canvas 非空、底部技能栏不越界、技能说明悬停、范围技能预览，以及虚拟摇杆拖拽移动与松开复位。
+
+状态 HUD 回归分两层：`test:ui:status` 直接写状态字段，验证 `renderStatusIcons()` 的显隐 / 角标 / 四视口裁切；`test:ui:status-real` 载入真实地图，让腐毒僵尸、霜牙狼、矿脉蝙蝠、雪原猎手真实命中玩家，分别写入中毒、减速、眩晕、致盲，再用真实破甲斩命中首领验证目标减益。`test:ui:status-real` 会把 `Math.random` 固定为 0，让被动必定触发；它验证的是“命中后链路 + HUD”，不是真实触发概率。
 
 界面渲染与输入回归测试检查首领刷新读秒随实体递减（不再固定 0s）、技能/背包/装备/导航/日志/关卡卡在静止帧内不被每帧重建、Shift/CapsLock 状态下大写按键仍可移动，以及真实拾取后面板按需刷新。
 
