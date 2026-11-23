@@ -118,7 +118,9 @@ const emptySlots = () => ({
   st = await state();
   assert.equal(st.map, "abyss-F10", `首领未杀时 T 不得深入，实际 ${st.map}`);
   const toast = await page.evaluate(() => document.getElementById("toast")?.textContent || "");
-  assert.ok(toast.includes("首领层"), `应提示首领层锁层，实际「${toast}」`);
+  // 0.8.58 起锁层文案统一为「第 N 层尚未完成：普通怪 x/y，首领未击破」；不再写死「首领层」字样。
+  assert.ok(toast.includes("尚未完成") && toast.includes("第 10 层"), `应提示第 10 层未完成，实际「${toast}」`);
+  assert.ok(toast.includes("未击破"), `应提示回响未击破，实际「${toast}」`);
   console.log("回归10a PASS：首领层未杀被拦截（提示：「" + toast + "」）");
 
   // 10b) 首领已杀 → T 深入 F11
