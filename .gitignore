@@ -87,3 +87,6 @@ tmp/
 
 # Trae 误入的分享包目录（历史上出现过，忽略）
 .trae-html-share-packages/
+
+# 旧版原图归档（保留本地，不进入运行包）
+art-source/monster-legacy/

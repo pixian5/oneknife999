@@ -26,7 +26,7 @@ for (const id of MAP_ORDER) {
       name: type.name,
       maps: new Set(),
       actions: {},
-      resolved: {},
+      resolved: {}
     };
     rec.maps.add(`${map.id}(第${map.chapter}章)`);
     for (const action of ACTIONS) {
@@ -55,7 +55,7 @@ const rows = [...byName.values()].map((rec) => {
     species,
     whitelisted: Boolean(species),
     ownFrames: ACTIONS.filter((a) => exists(`monster-full-${base}-${a}.png`)).length,
-    staticFrame: exists(`monster-full-${base}.png`),
+    staticFrame: exists(`monster-full-${base}.png`)
   };
 });
 
@@ -78,18 +78,28 @@ const summary = {
   aliasReusedNames: rows.filter((r) => r.species && r.species !== r.name).length,
   partialOwnFrames: rows.filter((r) => r.ownFrames > 0 && r.ownFrames < 4).length,
   staticOnly: rows.filter((r) => r.ownFrames === 0 && r.staticFrame).length,
-  noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).length,
+  noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).length
 };
 
 const report = {
   summary,
   partialFrames: rows
     .filter((r) => r.ownFrames > 0 && r.ownFrames < 4)
-    .map((r) => ({ name: r.name, base: r.base, have: ACTIONS.filter((a) => exists(`monster-full-${r.base}-${a}.png`)), missing: ACTIONS.filter((a) => !exists(`monster-full-${r.base}-${a}.png`)), whitelisted: r.whitelisted, maps: r.maps })),
+    .map((r) => ({
+      name: r.name,
+      base: r.base,
+      have: ACTIONS.filter((a) => exists(`monster-full-${r.base}-${a}.png`)),
+      missing: ACTIONS.filter((a) => !exists(`monster-full-${r.base}-${a}.png`)),
+      whitelisted: r.whitelisted,
+      maps: r.maps
+    })),
   aliasReused: rows.filter((r) => r.species && r.species !== r.name).map((r) => ({ name: r.name, species: r.species, maps: r.maps })),
   noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).map((r) => ({ name: r.name, base: r.base, maps: r.maps })),
-  unresolved: rows.filter((r) => r.okCount < 4).map((r) => ({ name: r.name, missing: r.missing, resolved: r.resolved })),
+  unresolved: rows.filter((r) => r.okCount < 4).map((r) => ({ name: r.name, missing: r.missing, resolved: r.resolved }))
 };
+
+// 门禁：任何怪物出现四帧缺失或完全无素材，都让 CI 失败；仅静态原画属于质量提示，不阻断。
+if (summary.resolvedWithMissing || summary.noOwnArt) process.exitCode = 1;
 
 if (process.argv.includes("--json")) {
   process.stdout.write(JSON.stringify(report, null, 1));
@@ -98,10 +108,13 @@ if (process.argv.includes("--json")) {
   p(`素材审计（${ROOT}）`);
   p(`地图怪物名 ${summary.monsterNames} 个：四帧解析成功 ${summary.resolvedAllFrames}，有缺失 ${summary.resolvedWithMissing}`);
   p(`白名单/别名覆盖 ${summary.whitelistedNames} 个；素材库独立物种（有动作帧）${summary.ownFrameSpecies} 个`);
-  p(`复用别名（外观与别的怪相同）${summary.aliasReusedNames} 个；部分帧未接入 ${summary.partialOwnFrames} 个；仅静态图 ${summary.staticOnly} 个；完全无自有素材 ${summary.noOwnArt} 个`);
+  p(
+    `复用别名（外观与别的怪相同）${summary.aliasReusedNames} 个；部分帧未接入 ${summary.partialOwnFrames} 个；仅静态图 ${summary.staticOnly} 个；完全无自有素材 ${summary.noOwnArt} 个`
+  );
   if (report.partialFrames.length) {
     p("\n[部分帧未接入]");
-    for (const r of report.partialFrames) p(`- ${r.name}（${r.base}）有 ${r.have.join("/")}，缺 ${r.missing.join("/")}，白名单=${r.whitelisted}`);
+    for (const r of report.partialFrames)
+      p(`- ${r.name}（${r.base}）有 ${r.have.join("/")}，缺 ${r.missing.join("/")}，白名单=${r.whitelisted}`);
   }
   if (report.aliasReused.length) {
     p("\n[复用别名（需独立原画才能去重）]");

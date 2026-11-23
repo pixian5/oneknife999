@@ -1,14 +1,14 @@
 # 《一刀999》CI：push / PR 自动回归。
-# 两段式——verify（语法 + prettier + 200 单测，无浏览器）与 ui（7 项浏览器回归矩阵）。
+# 两段式——verify（语法 + 版本/素材门禁 + prettier + 单测，无浏览器）与 ui（关键浏览器回归矩阵）。
 # 浏览器统一用 playwright 自带 chromium（ONEKNIFE_CHANNEL=chromium），
 # 避免宿主 Chrome 版本漂移；静态服务按 tests/ 默认约定起在 4174 端口。
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, work]
   pull_request:
-    branches: [main]
+    branches: [main, work]
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
           cache: npm
       - name: 安装依赖
         run: npm ci
-      - name: 语法 / 格式 / 单测
+      - name: 语法 / 版本 / 素材 / 格式 / 单测
         run: npm run verify
 
   ui:
@@ -35,9 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 0.8.36 补全：全部 14 个 UI 回归进 CI（此前 matrix 落后于测试资产，
-        # abyss/abyss-terrain/cast/blind/timeline/summon/fixes0831 仅本地跑，WorkBuddy 改坏无法第一时间发现）。
-        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite, ui:blind, ui:timeline, ui:summon, ui:fixes0831, ui:abyss, ui:abyss-terrain, ui:cast]
+        # 0.8.78：把状态条、真实状态、移动端点击、HUD 血量、死亡存档纳入每次 push；
+        # 全量 30 项 UI 仍由本地/夜间任务跑，避免每次矩阵过宽。
+        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite, ui:blind, ui:timeline, ui:summon, ui:fixes0831, ui:abyss, ui:abyss-terrain, ui:cast, ui:status, ui:status-real, ui:touch, ui:hud-health, ui:death-save]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
