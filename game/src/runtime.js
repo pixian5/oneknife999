@@ -130,6 +130,8 @@ export function createState(classId) {
     diagnostics: createDiagnostics(),
     // 生息法阵（0.3.4）：瞬态区域，不写入存档；换图 / 死亡复活时清空。
     healZones: [],
+    // 0.8.80 地图威胁运行时：只在本场有效，不写入存档。
+    threat: null,
     // 城镇杂货商面板开关（0.3.5）：瞬态 UI 状态，不写入存档；离开城镇时自动关闭。
     shopOpen: false,
     hoveredEntityId: null,

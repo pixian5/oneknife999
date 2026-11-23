@@ -36,8 +36,30 @@ jobs:
       fail-fast: false
       matrix:
         # 0.8.78：把状态条、真实状态、移动端点击、HUD 血量、死亡存档纳入每次 push；
-        # 全量 30 项 UI 仍由本地/夜间任务跑，避免每次矩阵过宽。
-        test: [ui, ui:layout, ui:levelup, ui:regression, ui:nameplate, ui:abilities, ui:elite, ui:blind, ui:timeline, ui:summon, ui:fixes0831, ui:abyss, ui:abyss-terrain, ui:cast, ui:status, ui:status-real, ui:touch, ui:hud-health, ui:death-save]
+        # 全量 UI 仍由本地/夜间任务跑，当前矩阵 20 项，避免每次矩阵过宽。
+        test:
+          [
+            ui,
+            ui:layout,
+            ui:levelup,
+            ui:regression,
+            ui:nameplate,
+            ui:abilities,
+            ui:elite,
+            ui:threats,
+            ui:blind,
+            ui:timeline,
+            ui:summon,
+            ui:fixes0831,
+            ui:abyss,
+            ui:abyss-terrain,
+            ui:cast,
+            ui:status,
+            ui:status-real,
+            ui:touch,
+            ui:hud-health,
+            ui:death-save
+          ]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

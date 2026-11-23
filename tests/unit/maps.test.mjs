@@ -8,6 +8,9 @@ import {
   MAP_DIFFICULTY_OVERRIDES,
   MAP_THREATS,
   mapThreatFor,
+  EXCLUSIVE_ELITE_SLOTS,
+  CHAPTER_ELITES,
+  EXCLUSIVE_ELITE_AFFIXES,
   hexToRgba,
   mapDifficultyOverride,
   aggroRangeFor,
@@ -18,6 +21,7 @@ import {
   siteNodeDefinition,
   SITE_NODE_EFFECTS
 } from "../../game/src/maps.js";
+import { ELITE_AFFIXES, ELITE_MUTEX } from "../../game/src/elite.js";
 
 const ALL_MAPS = MAP_ORDER.map((id) => MAPS[id]);
 
@@ -329,4 +333,33 @@ test("0.8.79：每张生成图带威胁标签，且同章每两张图轮换", ()
   }
   const chapterTwo = Array.from({ length: 5 }, (_, pair) => MAPS[`stage_${String(11 + pair * 2).padStart(3, "0")}`].threat.id);
   assert.ok(new Set(chapterTwo).size >= 3, "同一章前五组威胁没有轮换");
+});
+
+test("0.8.80：每章 3 张图有专属精英，名称唯一、词缀合法且不互斥", () => {
+  const owned = ALL_MAPS.filter((map) => map.exclusiveElite);
+  assert.equal(owned.length, 30, "应有 10 章 × 3 张专属精英图");
+  const names = new Set();
+  for (const map of owned) {
+    const stage = Number(map.id.slice(6));
+    assert.ok(EXCLUSIVE_ELITE_SLOTS.includes((stage - 1) % 10), `${map.id} 不在专属精英槽位`);
+    const elite = map.exclusiveElite;
+    assert.ok(CHAPTER_ELITES.flat().includes(elite.name), `${map.id} 专属名不在章节表`);
+    assert.equal(names.has(elite.name), false, `${map.id} 专属名重复：${elite.name}`);
+    names.add(elite.name);
+    assert.equal(elite.affixes.length, 2, `${map.id} 专属精英应有两条词缀`);
+    for (const id of elite.affixes) {
+      assert.ok(ELITE_AFFIXES[id], `${map.id} 非法词缀 ${id}`);
+      assert.ok(!ELITE_MUTEX.some(([a, b]) => a === id && elite.affixes.includes(b)), `${map.id} 词缀互斥 ${id}`);
+    }
+    assert.ok(Number.isInteger(elite.spawnIndex), `${map.id} spawnIndex 非整数`);
+    assert.ok(elite.spawnIndex >= 0 && elite.spawnIndex < map.monsterSpawns.length, `${map.id} spawnIndex 越界`);
+    assert.equal(EXCLUSIVE_ELITE_AFFIXES.flat(2).includes(elite.affixes[0]), true, `${map.id} 词缀不在章节配置`);
+  }
+  assert.equal(new Set(owned.map((map) => map.chapter)).size, 10, "十章都应覆盖专属精英");
+  const without = ALL_MAPS.filter((map) => !map.exclusiveElite);
+  assert.equal(without.length, 70, "其余 70 张不应有专属精英");
+  for (const map of without) {
+    const stage = Number(map.id.slice(6));
+    assert.equal(EXCLUSIVE_ELITE_SLOTS.includes((stage - 1) % 10), false, `${map.id} 空专属图落在专属槽位`);
+  }
 });

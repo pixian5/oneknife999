@@ -161,6 +161,7 @@ import {
   rollElite,
   seededRandom
 } from "./elite.js";
+import { createThreatRuntime, advanceThreat, threatDamageMultiplier, threatPotionMultiplier, threatHealMultiplier } from "./threat.js";
 import { PASSIVE_FX, SKILL_FX, ULTIMATE_FX } from "./assets.js";
 import { sfx, unlockAudio } from "./audio.js";
 import { setupInput } from "./input.js";
@@ -185,7 +186,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.79";
+const CURRENT_APP_VERSION = "0.8.80";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -259,11 +260,22 @@ export function createEntities(map) {
       force: true
     });
   }
-  let eliteCount = 0;
+  // 0.8.80：地图专属精英强制占据本图最高档刷怪点；先放它，再压普通精英数量。
+  if (map.exclusiveElite?.spawnIndex != null && map.monsterSpawns[map.exclusiveElite.spawnIndex]) {
+    const index = map.exclusiveElite.spawnIndex;
+    eliteFlags[index] = {
+      affixes: [...map.exclusiveElite.affixes],
+      reward: map.exclusiveElite.reward || "material",
+      exclusive: true,
+      title: map.exclusiveElite.name
+    };
+  }
+  const normalEliteCap = map.exclusiveElite ? ELITE_TUNING.maxPerMap - 1 : ELITE_TUNING.maxPerMap;
+  let normalEliteCount = 0;
   eliteFlags.forEach((flag, index) => {
-    if (!flag) return;
-    eliteCount += 1;
-    if (eliteCount > ELITE_TUNING.maxPerMap) eliteFlags[index] = null;
+    if (!flag || flag.exclusive) return;
+    normalEliteCount += 1;
+    if (normalEliteCount > normalEliteCap) eliteFlags[index] = null;
   });
   map.monsterSpawns.forEach((spawn, index) => {
     // 0.8.79：生成图只实际派出 4~6 种怪；spawn[2] 仍是布局档位（0..8），
@@ -279,11 +291,14 @@ export function createEntities(map) {
       type.hp = Math.round(type.hp * ELITE_TUNING.hpMult);
       type.attack = Math.round(type.attack * ELITE_TUNING.attackMult);
     }
+    // 0.8.80：专属精英只改铭牌称号，不改 entity.name / 行为解析 / 图鉴键，
+    // 避免新名字绕过 resolveAbilities 和全图鉴统计。
+    const eliteTitle = elite?.title || null;
     result.push({
       id: `mob-${index}`,
       ...type,
       level,
-      elite,
+      elite: elite ? { ...elite, title: eliteTitle } : null,
       exp: elite ? Math.round((type.exp || 0) * ELITE_TUNING.expMult) : type.exp,
       gold: elite ? Math.round((type.gold || 0) * ELITE_TUNING.goldMult) : type.gold,
       x: spawn[0],
@@ -434,6 +449,7 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   state.player.lastKiller = null;
   // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
   state.player.attackGate = 0;
+  state.threat = createThreatRuntime(map.threat);
   state.entities = createEntities(map);
   // 0.8.60：已通关的深层读档时不再生成敌怪。否则 HUD 写着“本层已通关”，
   // 场景里却站着满血回响和普通怪，玩家停在原地会被直接击杀。
@@ -467,6 +483,7 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   if (!silent) {
     log(`进入 <b>${map.name} · ${map.subtitle}</b>：推荐等级 Lv.${map.levelMin}-${map.levelMax}，${map.dangerLabel}。`, "loot");
     log(`<b>${map.story.chapterTitle} · ${map.story.beatTitle}</b>：${map.story.summary}`, "loot");
+    if (map.threat) log(`地图威胁 <b>${map.threat.label}</b>：${map.threat.desc}。`, "warn");
     log(`${map.story.speaker}：${map.story.dialogue}`);
     showToast(`${map.name} · ${map.subtitle}（Lv.${map.levelMin}-${map.levelMax}）`);
     if (map.danger === "danger" || map.danger === "desolate")
@@ -543,8 +560,9 @@ export function selectTarget(entity) {
       dist: Math.round(distance(state.player, entity)),
       hp: Math.round(entity.hp)
     });
-    log(`锁定目标：<b>${entity.name}</b>${entity.boss ? ` · 阶段 ${entity.phase}/${activeMap().boss.phases}` : ""}`);
-    showToast(`${entity.name} 已锁定，按 ${keyLabel("attack")} 或点击普攻攻击`);
+    const targetLabel = entity.elite?.title ? `${entity.elite.title}·${entity.name}` : entity.name;
+    log(`锁定目标：<b>${targetLabel}</b>${entity.boss ? ` · 阶段 ${entity.phase}/${activeMap().boss.phases}` : ""}`);
+    showToast(`${targetLabel} 已锁定，按 ${keyLabel("attack")} 或点击普攻攻击`);
   } else {
     logDebug("input", "clearTarget");
   }
@@ -556,6 +574,9 @@ export function selectTarget(entity) {
 export function resolveDamage(target, multiplier, skillName, kind, fxKey = null) {
   const hero = activeHero();
   if (target.npc) target.hostile = true;
+  // 0.8.80 矿尘：野外玩家造成的伤害 -8%，安全区不受影响。
+  const threatDamageMult = threatDamageMultiplier(state.threat, nearTown() || nearWaterWell() || nearRestPoint());
+  if (threatDamageMult < 1) logThrottled("threat-dust", 5000, "debug", "threat", "dustDamage", { mult: threatDamageMult });
   // 0.7.1 致盲（无名雾 / 雪隐）：被致盲期间玩家出手按 missChance 落空，不结算伤害。
   if (rollBlindMiss({ blindTimer: state.player.blindTimer, missChance: state.player.blindMissChance })) {
     sfx.hit();
@@ -571,7 +592,7 @@ export function resolveDamage(target, multiplier, skillName, kind, fxKey = null)
     target,
     hero,
     player: state.player,
-    multiplier,
+    multiplier: multiplier * threatDamageMult,
     kind,
     fastForward: FAST_FORWARD,
     setAttack: setBonuses().attack
@@ -2371,6 +2392,57 @@ export function spawnHazard(boss) {
   if (Math.random() < 0.6) log(`<b>${boss.name}</b> 蓄力中：地面危险区即将爆发，离开红圈！`, "warn");
 }
 
+// 0.8.80 地图威胁结算：纯计时事件在这里落成实际扣血 / 减速 / 危险区。
+// 安全区内不产生伤害，但仍推进计时，离开营地后立即进入节奏。
+export function updateThreat(dt) {
+  const runtime = state.threat;
+  if (!runtime) return;
+  const safe = nearTown() || nearWaterWell() || nearRestPoint();
+  const events = advanceThreat(runtime, dt, {
+    safe,
+    maxHp: playerMaxHp(),
+    playerX: state.player.x,
+    playerY: state.player.y
+  });
+  for (const event of events) {
+    if (event.kind === "heat") {
+      const before = state.player.hp;
+      state.player.hp = Math.max(1, state.player.hp - event.amount);
+      const actual = Math.max(0, Math.round(before - state.player.hp));
+      if (actual > 0) {
+        recordDamage("threat-heat", actual);
+        textAt(`-${actual}`, state.player.x, floatYAbovePlayer(6), "#f0a35e", 13);
+      }
+      logThrottled("threat-heat", 4000, "debug", "threat", "heatTick", { amount: actual, hp: Math.round(state.player.hp) });
+      continue;
+    }
+    if (event.kind === "storm") {
+      state.hazards.push({
+        x: event.x,
+        y: event.y,
+        r: event.radius,
+        damage: event.damage,
+        life: 1.2,
+        snap: false,
+        fade: 0.5,
+        attackerLevel: state.player.level,
+        kind: "storm"
+      });
+      state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
+      recordHazard("storm", "spawned", 1);
+      textAt("雷暴", event.x, event.y - 20, "#f0d29a", 14);
+      logThrottled("threat-storm", 3000, "warn", "threat", "stormSpawn", { x: Math.round(event.x), y: Math.round(event.y) });
+      continue;
+    }
+    if (event.kind === "tide") {
+      state.player.slowTimer = Math.max(state.player.slowTimer || 0, event.duration);
+      state.player.slowFactor = Math.min(state.player.slowFactor || 1, event.factor);
+      textAt("潮汐", state.player.x, floatYAbovePlayer(28), "#6fa8b6", 13);
+      logThrottled("threat-tide", 3000, "debug", "threat", "tideSlow", { duration: event.duration, factor: event.factor });
+    }
+  }
+}
+
 // 生息法阵结算（0.3.4）：站在阵中每秒回 8% 最大生命，离开立即失效，4 秒后自然结束。
 export function updateHealZones(dt) {
   if (!state?.healZones?.length) return;
@@ -2384,8 +2456,12 @@ export function updateHealZones(dt) {
     zone.life = result.life;
     zone.tick = result.tick;
     if (result.heal > 0) {
-      state.player.hp = clamp(state.player.hp + result.heal, 0, playerMaxHp());
-      textAt(`+${result.heal}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 15);
+      const heal = Math.max(
+        1,
+        Math.round(result.heal * threatHealMultiplier(state.threat, nearTown() || nearWaterWell() || nearRestPoint()))
+      );
+      state.player.hp = clamp(state.player.hp + heal, 0, playerMaxHp());
+      textAt(`+${heal}`, state.player.x, floatYAbovePlayer(6), "#a88ce3", 15);
       spark(state.player.x, state.player.y, "#a88ce3", 5);
     }
     return result.active;
@@ -2459,6 +2535,7 @@ export function update(dt) {
   if (state.shopOpen && !nearTown()) state.shopOpen = false;
   updateEntities(dt);
   tickAutoAttack(); // 0.8.47：射程外点普攻的自动接近，到此检查是否进入射程
+  updateThreat(dt);
   updateHealZones(dt);
   playerDamage(dt);
   state.particles.forEach((particle) => {
@@ -2673,7 +2750,7 @@ export function usePotion() {
   }
   state.player.potion -= 1;
   if (TEST_MODE) potionsUsed += 1;
-  const restore = Math.round(maxHp * 0.32);
+  const restore = Math.round(maxHp * 0.32 * threatPotionMultiplier(state.threat, nearTown() || nearWaterWell() || nearRestPoint()));
   const before = state.player.hp;
   state.player.hp = clamp(state.player.hp + restore, 0, maxHp);
   logInfo("item", "potion", {
@@ -3323,7 +3400,14 @@ if (TEST_MODE) {
                   // 0.7.3：亡语也要能被 e2e 观察到，否则 noabideath 的消融没有断言入口。
                   onDeath: entity.abilities?.onDeath || null,
                   // 0.8.13：精英词缀与裂生体标记，供精英 e2e 断言（普通怪为 null / false）。
-                  elite: entity.elite ? { affixes: [...entity.elite.affixes], reward: entity.elite.reward } : null,
+                  elite: entity.elite
+                    ? {
+                        affixes: [...entity.elite.affixes],
+                        reward: entity.elite.reward,
+                        title: entity.elite.title || null,
+                        exclusive: Boolean(entity.elite.exclusive)
+                      }
+                    : null,
                   splitling: Boolean(entity.splitling),
                   shield: entity.shieldValue || 0
                 })),

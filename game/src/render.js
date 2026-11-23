@@ -1346,20 +1346,25 @@ export function drawNameplate(entity, topOverride) {
   ctx.fillStyle = entity.elite ? "#f0d29a" : entity.npc ? "#eef4ef" : entity.boss ? "#f3b1a8" : "#c7d2cb";
   ctx.font = `${entity.boss || entity.npc ? 11 : 9}px sans-serif`;
   ctx.textAlign = "center";
+  // 0.8.80：专属精英把唯一称号放等级行，基础怪名留给目标栏 / tooltip；这样 118px 名牌不压缩。
+  const displayName = entity.elite?.title || entity.name;
+  // 专属精英的称号与普通怪名都可能接近 118px 名牌宽度；maxWidth 让 Canvas 自动横向压缩，
+  // 不截断名字，也不会压出名牌外。
   ctx.fillText(
-    `Lv.${entity.level} ${entity.elite ? "◆ " : ""}${entity.name}${entity.npc ? " · 玩家" : ""}${entity.boss ? ` · P${entity.phase}` : ""}`,
+    `Lv.${entity.level} ${entity.elite ? "◆ " : ""}${displayName}${entity.npc ? " · 玩家" : ""}${entity.boss ? ` · P${entity.phase}` : ""}`,
     entity.x,
-    top + 11
+    top + 11,
+    width - 8
   );
   if (entity.elite) {
-    const label = (entity.elite.affixes || [])
-      .map((id) => ELITE_AFFIXES[id]?.name)
+    // 0.8.80：词缀行只放「专属 + 词缀」；称号已经在等级行，避免重复导致两行都过长。
+    const label = [entity.elite.exclusive ? "专属" : null, ...(entity.elite.affixes || []).map((id) => ELITE_AFFIXES[id]?.name)]
       .filter(Boolean)
       .join(" · ");
     if (label) {
       ctx.fillStyle = "#e7b36b";
       ctx.font = "9px sans-serif";
-      ctx.fillText(label, entity.x, top - 4);
+      ctx.fillText(label, entity.x, top - 4, width + 30);
     }
   }
   ctx.fillStyle = "#8d9ca0";
@@ -1399,7 +1404,8 @@ export function drawMonsterTooltip(view, viewWidth, viewHeight) {
   ctx.stroke();
   ctx.fillStyle = entity.boss ? "#f3b1a8" : "#eef3f4";
   ctx.font = "600 11px sans-serif";
-  ctx.fillText(`Lv.${entity.level} ${entity.name}${entity.boss ? " · 区域首领" : ""}`, x + 11, y + 17);
+  const displayName = entity.elite?.title ? `${entity.elite.title}·${entity.name}` : entity.name;
+  ctx.fillText(`Lv.${entity.level} ${displayName}${entity.boss ? " · 区域首领" : ""}`, x + 11, y + 17);
   ctx.fillStyle = "#e7b36b";
   ctx.font = "9px sans-serif";
   ctx.fillText(`生命 ${Math.ceil(entity.hp)}/${entity.maxHp} · 攻击 ${entity.attack} · 防御 ${entity.defense}`, x + 11, y + 33);
@@ -1721,7 +1727,8 @@ export function renderTarget() {
     )
   )
     return;
-  setText($("targetText"), abyssCleared ? "本层已通关" : target ? target.name : "未锁定目标");
+  const targetName = target?.elite?.title ? `${target.elite.title}·${target.name}` : target?.name;
+  setText($("targetText"), abyssCleared ? "本层已通关" : target ? targetName : "未锁定目标");
   if (abyssCleared) {
     setText($("targetHint"), `按 T 深入第 ${nextFloor} 层`);
     setStyle($("targetHint"), "color", "var(--teal)");

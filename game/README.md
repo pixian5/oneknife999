@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.78。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.80。
 
 ## 启动
 
@@ -16,25 +16,26 @@ npm run serve
 
 原型入口为 `index.html`，逻辑拆分为 `src/` 下的 ES Modules：
 
-| 文件 | 职责 |
-|---|---|
-| [src/main.js](src/main.js) | 入口与主逻辑：地图流程、主循环与 E2E 接口（战斗/掉落为薄封装，调用纯逻辑模块） |
-| [src/maps.js](src/maps.js) | 4 张手工地图 + 96 张确定性生成地图、关卡顺序与通关规则 |
-| [src/config.js](src/config.js) | 职业、怪物资料、掉落池、运行环境标记，以及 0.2.5 装备/强化/词缀/技能升级/PK 规则常量 |
-| [src/geometry.js](src/geometry.js) | 确定性随机、贝塞尔采样与路径计算（纯函数） |
-| [src/combat.js](src/combat.js) | 伤害结算与击杀收益（纯函数，随机数参数注入；装备战力按有效值计入） |
-| [src/drops.js](src/drops.js) | 掉落掷点、词缀滚动、拾取结算与场景节点效果（纯函数，随机数 / 时间参数注入） |
-| [src/feedback.js](src/feedback.js) | 打击感与目标指引纯逻辑：连击计时/奖励、三阶段指引目标（纯函数可单测） |
-| [src/skills.js](src/skills.js) | 技能语义纯逻辑：破甲破防、冲锋位移/击退、直线穿透选敌、骨卫召唤与生息法阵（纯函数可单测） |
-| [src/shop.js](src/shop.js) | 城镇杂货商与词缀重铸纯逻辑：商品表、购买校验、重铸报价与单条词缀重掷（纯函数可单测） |
-| [src/runtime.js](src/runtime.js) | 运行时状态容器（state / keys / pointer / moveTarget / joystick）与红名判定 |
-| [src/logger.js](src/logger.js) | 结构化诊断日志：四级过滤、类别、环形缓冲、节流/采样、全局上下文、异常兜底与控制台入口（零依赖，可单测） |
-| [src/render.js](src/render.js) | Canvas 世界绘制、HUD DOM 渲染、技能弹窗 / 任务链 / 确认弹层 |
-| [src/persist.js](src/persist.js) | localStorage 存档读写与迁移函数表驱动的版本升级（v4） |
-| [src/audio.js](src/audio.js) | WebAudio 合成音效引擎（零素材，E2E 静默，静音状态持久化） |
-| [src/input.js](src/input.js) | 输入层：键盘 / 鼠标 / 触屏虚拟摇杆、键位改键捕获与全部 HUD 按钮事件绑定 |
-| [src/keybinds.js](src/keybinds.js) | 键位配置：默认键位、保留键、改键校验与 localStorage 持久化（纯函数可单测） |
-| [src/util.js](src/util.js) | DOM 查询与数学辅助（纯函数） |
+| 文件                               | 职责                                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [src/main.js](src/main.js)         | 入口与主逻辑：地图流程、主循环与 E2E 接口（战斗/掉落为薄封装，调用纯逻辑模块）                          |
+| [src/maps.js](src/maps.js)         | 4 张手工地图 + 96 张确定性生成地图、关卡顺序与通关规则                                                  |
+| [src/config.js](src/config.js)     | 职业、怪物资料、掉落池、运行环境标记，以及 0.2.5 装备/强化/词缀/技能升级/PK 规则常量                    |
+| [src/geometry.js](src/geometry.js) | 确定性随机、贝塞尔采样与路径计算（纯函数）                                                              |
+| [src/combat.js](src/combat.js)     | 伤害结算与击杀收益（纯函数，随机数参数注入；装备战力按有效值计入）                                      |
+| [src/drops.js](src/drops.js)       | 掉落掷点、词缀滚动、拾取结算与场景节点效果（纯函数，随机数 / 时间参数注入）                             |
+| [src/feedback.js](src/feedback.js) | 打击感与目标指引纯逻辑：连击计时/奖励、三阶段指引目标（纯函数可单测）                                   |
+| [src/skills.js](src/skills.js)     | 技能语义纯逻辑：破甲破防、冲锋位移/击退、直线穿透选敌、骨卫召唤与生息法阵（纯函数可单测）               |
+| [src/shop.js](src/shop.js)         | 城镇杂货商与词缀重铸纯逻辑：商品表、购买校验、重铸报价与单条词缀重掷（纯函数可单测）                    |
+| [src/runtime.js](src/runtime.js)   | 运行时状态容器（state / keys / pointer / moveTarget / joystick）与红名判定                              |
+| [src/threat.js](src/threat.js)     | 五类地图威胁规则与运行时：矿尘减伤、灼热周期扣血、腐雾压低回复、雷暴预警圈、潮汐减速（纯函数可单测）    |
+| [src/logger.js](src/logger.js)     | 结构化诊断日志：四级过滤、类别、环形缓冲、节流/采样、全局上下文、异常兜底与控制台入口（零依赖，可单测） |
+| [src/render.js](src/render.js)     | Canvas 世界绘制、HUD DOM 渲染、技能弹窗 / 任务链 / 确认弹层                                             |
+| [src/persist.js](src/persist.js)   | localStorage 存档读写与迁移函数表驱动的版本升级（v4）                                                   |
+| [src/audio.js](src/audio.js)       | WebAudio 合成音效引擎（零素材，E2E 静默，静音状态持久化）                                               |
+| [src/input.js](src/input.js)       | 输入层：键盘 / 鼠标 / 触屏虚拟摇杆、键位改键捕获与全部 HUD 按钮事件绑定                                 |
+| [src/keybinds.js](src/keybinds.js) | 键位配置：默认键位、保留键、改键校验与 localStorage 持久化（纯函数可单测）                              |
+| [src/util.js](src/util.js)         | DOM 查询与数学辅助（纯函数）                                                                            |
 
 `geometry.js`、`maps.js`、`config.js`、`combat.js`、`skills.js`、`feedback.js`、`drops.js` 不依赖 DOM，可直接被 Node 单元测试引用，也是未来服务端共享逻辑的候选。
 
@@ -57,7 +58,7 @@ npm run serve
 - 词缀重铸（0.3.5）：对已穿戴装备重掷一条词缀（白板装备则新附一条，新词缀自动避开已有属性），金币成本 = 120 + 40×强化等级 + 60×当前词缀数，另需 1 张词缀重铸卷。重铸只改变一条词缀，其余保持不变。
 - 装备边际贡献（0.4.0）：已穿戴槽位悬停显示「本件贡献：攻击 +x · 生命 +y · 防御 +z」；背包装备悬停显示「装备后：攻击 73→118 · 生命 446→506 · 防御 37」（同部位已穿时给旧→新对比，公式与角色三围同源）；城镇重铸列表每行也标出本件贡献，重铸成功后该行高亮 2 秒。
 - 铭牌与飘字（0.4.1–0.4.2）：名字 / 血量 / 血条统一画在场景最上层，伤害飘字、粒子与技能环不会再压住血条；铭牌只绘制视野内目标（按纵深排序），靠地图边缘的飘字会被夹回视口内；死亡复活后**首领保留已损失生命**（普通怪仍满血重置），不会因一次失误把整条首领血条重打一遍。
-- 铭牌可读性回归（0.4.2）：`npm run test:ui:nameplate` 插桩 Canvas 绘制并逐帧检测「非铭牌内容命中铭牌」，断言飘字 / 粒子 / 特效环遮挡为 0。0.7.0 按 GitCode 平行线决定删除 GitHub Actions，门禁改为提交前本地跑 `npm run verify` + 三项浏览器回归。
+- 铭牌可读性回归（0.4.2）：`npm run test:ui:nameplate` 插桩 Canvas 绘制并逐帧检测「非铭牌内容命中铭牌」，断言飘字 / 粒子 / 特效环遮挡为 0。0.7.0 曾按 GitCode 平行线删除 GitHub Actions；当前已恢复 GitHub Actions，本地提交前仍先跑 `npm run verify` + 关键浏览器回归。
 - 致盲被动回归（0.7.2）：`npm run test:ui:blind` 把玩家放到第 31 关「冰封雪原猎手」旁不还手，等它命中后断言 `snapshot().player.blind > 0`、`blindMissChance === 0.3` 且生命确实下降——防的是「参数写好了但没人读」这类静默失效。
 - 行为开关回归（0.7.3）：`npm run test:ui:abilities` 在雾松林逐只对比 16 只怪的 `attackShape / passives / onDeath` 签名，断言 `noabishapes` / `noabipassives` / `noabideath` 各自只关一维、其余逐只不变，`noabilities` 仍三类全关。难度消融结论：第 30 关死亡压力主要来自**攻击形态**（基线中位 8 死 → 关形态 1 死），被动中等（5 死），亡语无影响（8 死）。
 - 角色面板三围（0.3.8）：头像 / 战力下方显示 **生命 / 攻击 / 防御**，三项均与战斗结算同源——攻击含装备有效战力 ×0.9（与伤害公式一致）、生命取 `playerMaxHp()`、防御取 `playerDefense()`。重铸或换装后可直接对照数值变化；「战力」仍是综合评分，不等同于伤害。
@@ -76,12 +77,12 @@ npm run serve
 
 ## 升级节奏
 
-| 关卡阶段 | 升级速度 | 阶段终点 |
-|---|---:|---:|
-| 1–10 | 每图一级 | Lv.11 |
-| 11–30 | 每两图一级 | Lv.21 |
-| 31–60 | 每三图一级 | Lv.31 |
-| 61–100 | 每四图一级 | Lv.41 |
+| 关卡阶段 |   升级速度 | 阶段终点 |
+| -------- | ---------: | -------: |
+| 1–10     |   每图一级 |    Lv.11 |
+| 11–30    | 每两图一级 |    Lv.21 |
+| 31–60    | 每三图一级 |    Lv.31 |
+| 61–100   | 每四图一级 |    Lv.41 |
 
 普通怪和 Boss 提供击杀经验，首次进度击杀给满额经验，清完本关目标后继续刷怪给一半经验；击杀经验可即时升级并获得技能点。为避免刷怪破坏主线节奏，本关可升到的最高等级 = 主线曲线等级 + 1（终局封顶 Lv.41），通关结算时保留已获得的击杀等级并与主线曲线对齐。后期升级变慢后，每张地图仍通过装备、金币、药水、印记和首领材料提供即时收益。
 
@@ -111,14 +112,14 @@ npm run serve
 
 原型内置零依赖结构化日志（`src/logger.js`），用于出问题时直接定位「哪一次、在哪个分支、当时什么状态」。
 
-| 场景 | 用法 |
-|---|---|
-| 日常试玩 | 默认 `info` 级，只记录启动、存档、升级、死亡等关键事件 |
-| 详细排查 | 打开 `?log=debug`，浏览器控制台同时打印，可现场观察每个失败分支 |
-| 完全静默 | `?log=off` 关闭全部日志（仅用于对比帧率） |
-| 自动化测试 | `?e2e=1` 自动切到 debug 但**不镜像控制台**，避免探针被 console I/O 拖慢 |
-| 手动查看缓冲 | 控制台执行 `__ONEKNIFE_LOG__.text()` / `.text({ level: "warn" })` / `.stats()` / `.config()` |
-| E2E 读取 | `window.__ONEKNIFE_E2E__.logs({ limit, level, category })` 返回结构化条目，`logsText()` 返回纯文本 |
+| 场景         | 用法                                                                                               |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| 日常试玩     | 默认 `info` 级，只记录启动、存档、升级、死亡等关键事件                                             |
+| 详细排查     | 打开 `?log=debug`，浏览器控制台同时打印，可现场观察每个失败分支                                    |
+| 完全静默     | `?log=off` 关闭全部日志（仅用于对比帧率）                                                          |
+| 自动化测试   | `?e2e=1` 自动切到 debug 但**不镜像控制台**，避免探针被 console I/O 拖慢                            |
+| 手动查看缓冲 | 控制台执行 `__ONEKNIFE_LOG__.text()` / `.text({ level: "warn" })` / `.stats()` / `.config()`       |
+| E2E 读取     | `window.__ONEKNIFE_E2E__.logs({ limit, level, category })` 返回结构化条目，`logsText()` 返回纯文本 |
 
 - 缓冲固定 600 条环形队列，溢出时累计 `dropped` 并在 `stats()` 中显示，不占用持续内存。
 - 每条记录带全局上下文：地图 / 关卡号 / 职业 / 等级 / 血量上限 / 帧号 / 深渊层 / 难度。
@@ -145,6 +146,7 @@ npm run test:ui:blind         # 致盲被动端到端回归（需要先 npm run 
 npm run test:ui:status        # 状态 HUD 四视口渲染回归（直接写字段，需要先 npm run serve）
 npm run test:ui:status-real   # 五类状态真实战斗触发回归（需要先 npm run serve）
 npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
+npm run test:ui:threats       # 五类地图威胁 + 专属精英回归（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
 npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）

@@ -1424,6 +1424,75 @@ export function mapThreatFor(stageNumber) {
   return MAP_THREATS[(chapterIndex * 2 + Math.floor(slot / 2)) % MAP_THREATS.length];
 }
 
+// 0.8.80：每章 3 张地图放一名“地图专属精英”。它不是新物种，而是本图最高档刷怪点
+// 上的唯一命名精英；保留基础怪的行为/图鉴名，只额外挂一个金色称号与固定词缀组合。
+export const EXCLUSIVE_ELITE_SLOTS = [4, 6, 8];
+export const CHAPTER_ELITES = [
+  ["焦土督军", "断旗老兵", "荒道刽子手"],
+  ["潮葬舵手", "礁牙猎王", "沉船祭司"],
+  ["矿脉监工", "龙纹石卫", "地宫掘墓人"],
+  ["霜塬猎王", "冻河守誓者", "冰棺侍女"],
+  ["熔炉典狱", "烬旗战魔", "火刑执吏"],
+  ["黄泉引路人", "鬼门戍卫", "冥河摆渡者"],
+  ["断界巡守", "雷羽司命", "祭坛守望"],
+  ["陨坑猎首", "黑曜审判者", "星骸拾荒王"],
+  ["破军督战", "魔血旗手", "战场收尸人"],
+  ["帝陵守灯人", "金纹殉葬卫", "终殿执戟者"]
+];
+export const EXCLUSIVE_ELITE_AFFIXES = [
+  // 每章 3 张专属精英图各一套固定词缀，避免三张图同质。
+  [
+    ["guardian", "enrage"],
+    ["hunt", "echo"],
+    ["hoard", "purge"]
+  ],
+  [
+    ["enrage", "toxic"],
+    ["split", "hunt"],
+    ["echo", "guardian"]
+  ],
+  [
+    ["purge", "enrage"],
+    ["split", "hoard"],
+    ["toxic", "guardian"]
+  ],
+  [
+    ["enrage", "split"],
+    ["guardian", "echo"],
+    ["hunt", "toxic"]
+  ],
+  [
+    ["split", "purge"],
+    ["echo", "hoard"],
+    ["enrage", "guardian"]
+  ],
+  [
+    ["hunt", "toxic"],
+    ["guardian", "purge"],
+    ["echo", "split"]
+  ],
+  [
+    ["hoard", "enrage"],
+    ["toxic", "hunt"],
+    ["purge", "echo"]
+  ],
+  [
+    ["split", "guardian"],
+    ["enrage", "hoard"],
+    ["hunt", "purge"]
+  ],
+  [
+    ["echo", "toxic"],
+    ["guardian", "split"],
+    ["enrage", "echo"]
+  ],
+  [
+    ["purge", "guardian"],
+    ["hoard", "toxic"],
+    ["split", "echo"]
+  ]
+];
+
 export function generatedMap(stageNumber) {
   const chapterIndex = Math.floor((stageNumber - 1) / 10);
   const chapter = CHAPTERS[chapterIndex];
@@ -1440,6 +1509,17 @@ export function generatedMap(stageNumber) {
   const attackMult = difficulty?.attackMult || 1;
   const hazardMult = difficulty?.hazardMult || 1;
   const monsterRoster = generatedMonsterRoster(stageNumber);
+  const eliteSlotIndex = EXCLUSIVE_ELITE_SLOTS.indexOf(slot);
+  // 本图专属精英：固定落在本图最高刷怪档位（同图确定性），由 createEntities 强制标记。
+  const exclusiveElite =
+    eliteSlotIndex >= 0
+      ? {
+          name: CHAPTER_ELITES[chapterIndex][eliteSlotIndex],
+          affixes: EXCLUSIVE_ELITE_AFFIXES[chapterIndex][eliteSlotIndex],
+          reward: "material",
+          spawnIndex: layout.monsterSpawns.reduce((best, spawn, index) => (spawn[2] > layout.monsterSpawns[best][2] ? index : best), 0)
+        }
+      : null;
   const threat = mapThreatFor(stageNumber);
   const monsterTypes = chapter.monsters.map((name, typeIndex) => {
     // 9 档步长 2.785：第 8 档（最强）在第 100 关仍等于旧曲线峰值的 123。
@@ -1505,6 +1585,7 @@ export function generatedMap(stageNumber) {
     // 0.8.79：实际出场阵容（长度为 4~6 的 typeIndex 数组）。布局仍产 0..8 档，
     // createEntities 用 spawn[2] % roster.length 映射到本图阵容，保留原档位用于等级差。
     monsterRoster,
+    exclusiveElite,
     monsterSpawns: layout.monsterSpawns,
     // 0.7.7：局部难度修正记录在关卡对象上，单测据此确认「只作用于登记过的关卡」。
     difficulty: { attackMult, hazardMult, aggroMult: difficulty?.aggroMult || 1, reason: difficulty?.reason || null },
