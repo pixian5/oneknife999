@@ -95,7 +95,56 @@ export const ACTION_MONSTERS = new Set([
   "矿脉蝙蝠",
   "腐毒僵尸",
   "赤砂蝎",
-  "枯骨游魂"
+  "枯骨游魂",
+  // 2026-11-23：0.8.45 美术线落地的 46 只「独立原画（仅静态单帧）」普通怪，
+  // 用静态图派生四帧（idle 归一化；walk/attack/hit 小幅旋转/位移/缩放），属临时占位，
+  // 真实动作原画到位后覆盖同名文件并删除本注释。
+  "腐烬战奴",
+  "赤牙猎兽",
+  "残甲尸兵",
+  "荒道斥候",
+  "潮骨水鬼",
+  "蓝鳞海妖",
+  "礁甲兽",
+  "逐浪刀客",
+  "鲨卫",
+  "石俑卫",
+  "毒虫",
+  "铜甲尸",
+  "寻宝恶徒",
+  "霜牙狼",
+  "冻尸兵",
+  "冰壳魔",
+  "雪原猎手",
+  "熔岩奴",
+  "火翼魔",
+  "焦骨卫",
+  "炼狱行刑者",
+  "摄魂鬼",
+  "冥甲尸",
+  "渡魂妖",
+  "黄泉守卫",
+  "骑士",
+  "鬼鸮",
+  "遗迹傀儡",
+  "雷羽妖",
+  "巡天卫",
+  "断界法师",
+  "陨晶兽",
+  "虚空影",
+  "星骸兵",
+  "禁区猎杀者",
+  "堕神卫",
+  "魔血骑",
+  "战场怨魂",
+  "破军修罗",
+  "熔岩蛇王",
+  "虚影刺客",
+  "灰烬魔像",
+  "禁卫",
+  "金甲尸王",
+  "镇国妖师",
+  "不灭战魂"
 ]);
 
 // 40 个旧「章节前缀」生成怪 → 已有动作帧的物种。
@@ -246,9 +295,12 @@ export function resolveMonsterSpriteName(name, action = "idle", map) {
   if (!name) return null;
   // 先看完整名是否本身就是动作帧物种 / 别名键（如「苍月鲨卫」「幽冥骑士」本身就以章节短名开头，
   // 不能无条件剥前缀）；再尝试剥离章节前缀。
-  const exact = MONSTER_ALIASES[name] || (ACTION_MONSTERS.has(name) ? name : null);
+  // 2026-11-23：自身已有动作帧时优先用自己，别名只作为「无自有帧」时的回退。
+  // 之前 exact = 别名优先，会让 0.8.45 新增独立原画的怪仍去借别人的帧。
+  const self = ACTION_MONSTERS.has(name) ? name : null;
   const base = stripChapterPrefix(name, map?.chapter || 1);
-  const target = exact || MONSTER_ALIASES[base] || (ACTION_MONSTERS.has(base) ? base : null);
+  const baseSelf = ACTION_MONSTERS.has(base) ? base : null;
+  const target = self || baseSelf || MONSTER_ALIASES[name] || MONSTER_ALIASES[base] || null;
   if (!target) return `monster-full-${base}.png`;
   const safeAction = MONSTER_ACTIONS.has(action) ? action : "idle";
   return `monster-full-${target}-${safeAction}.png`;

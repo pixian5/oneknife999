@@ -45,6 +45,7 @@ const rows = [...byName.values()].map((rec) => {
   // 别名表以「去章节前缀的基础名」为键：先查全名，再查 base。
   const alias = MONSTER_ALIASES[rec.name] || MONSTER_ALIASES[base] || null;
   const species = alias || (ACTION_MONSTERS.has(rec.name) ? rec.name : ACTION_MONSTERS.has(base) ? base : null);
+  const ownFrameCount = ACTIONS.filter((a) => exists(`monster-full-${base}-${a}.png`)).length;
   return {
     name: rec.name,
     maps: [...rec.maps],
@@ -55,6 +56,8 @@ const rows = [...byName.values()].map((rec) => {
     species,
     whitelisted: Boolean(species),
     ownFrames: ACTIONS.filter((a) => exists(`monster-full-${base}-${a}.png`)).length,
+    // 有自有动作帧就不算「复用别名」，否则才按月名解析判断。
+
     staticFrame: exists(`monster-full-${base}.png`),
   };
 });
@@ -75,7 +78,7 @@ const summary = {
   resolvedWithMissing: rows.filter((r) => r.okCount < 4).length,
   whitelistedNames: rows.filter((r) => r.whitelisted).length,
   ownFrameSpecies: [...species.keys()].length,
-  aliasReusedNames: rows.filter((r) => r.species && r.species !== r.name).length,
+  aliasReusedNames: rows.filter((r) => r.ownFrames === 0 && r.species && r.species !== r.base).length,
   partialOwnFrames: rows.filter((r) => r.ownFrames > 0 && r.ownFrames < 4).length,
   staticOnly: rows.filter((r) => r.ownFrames === 0 && r.staticFrame).length,
   noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).length,
@@ -86,7 +89,7 @@ const report = {
   partialFrames: rows
     .filter((r) => r.ownFrames > 0 && r.ownFrames < 4)
     .map((r) => ({ name: r.name, base: r.base, have: ACTIONS.filter((a) => exists(`monster-full-${r.base}-${a}.png`)), missing: ACTIONS.filter((a) => !exists(`monster-full-${r.base}-${a}.png`)), whitelisted: r.whitelisted, maps: r.maps })),
-  aliasReused: rows.filter((r) => r.species && r.species !== r.name).map((r) => ({ name: r.name, species: r.species, maps: r.maps })),
+  aliasReused: rows.filter((r) => r.ownFrames === 0 && r.species && r.species !== r.base).map((r) => ({ name: r.name, species: r.species, maps: r.maps })),
   noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).map((r) => ({ name: r.name, base: r.base, maps: r.maps })),
   unresolved: rows.filter((r) => r.okCount < 4).map((r) => ({ name: r.name, missing: r.missing, resolved: r.resolved })),
 };
