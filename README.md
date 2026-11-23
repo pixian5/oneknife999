@@ -46,7 +46,7 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
-0.8.78：**工程门禁 + 素材瘦身**。`check` 改为全量扫描 `tools/check-syntax.mjs`（100 个文件），新增 `tools/check-version.mjs`（VERSION / package / `CURRENT_APP_VERSION` / `CACHE_VERSION` / SW `SHELL` 一致）与 `tools/asset-budget.mjs`（素材 ≤60MB、地图 ≤450KB、单图 ≤500KB）。`game/assets` 从约 114MB / 812 文件降到 **29.3MB / 757 文件**：55 个旧 `monster-*.png`（约 41.3MB）移入 `art-source/monster-legacy/` 且不入库；`ui-divider.jpg` 2.07MB → 73KB，怪物/Boss/装备/技能按实际显示尺寸做调色板压缩。`npm run verify` 250/250、素材审计 106/106、桌面/移动/360/320 状态 HUD、6 例真实状态、touch / hud-health / death-save 全部通过。详见 [docs/20261123-2228-工程门禁与素材瘦身-豆包.md](docs/20261123-2228-工程门禁与素材瘦身-豆包.md)。
+0.8.78：**工程门禁 + 素材瘦身**。`check` 改为全量扫描 `tools/check-syntax.mjs`（100 个文件），新增 `tools/check-version.mjs`（VERSION / package / `CURRENT_APP_VERSION` / `CACHE_VERSION` / SW `SHELL` 一致）与 `tools/asset-budget.mjs`（素材 ≤60MB、地图 ≤450KB、单图 ≤500KB）。`game/assets` 从约 114MB / 812 文件降到本批 **29.3MB / 757 文件**：55 个旧 `monster-*.png`（约 41.3MB）移入 `art-source/monster-legacy/` 且不入库；`ui-divider.jpg` 2.07MB → 73KB，怪物/Boss/装备/技能按实际显示尺寸做调色板压缩。随后合并美术线第三批（46 只独立原画派生 184 张四帧，并修「自身白名单优先、别名回退」解析优先级），最终 **35.6MB / 941 文件**，素材审计 106/106、137 个独立动作帧物种、0 别名复用、0 仅静态原画、0 无自有素材。`npm run verify` 250/250、桌面/移动/360/320 状态 HUD、6 例真实状态、touch / hud-health / death-save 全部通过。详见 [docs/20261123-2228-工程门禁与素材瘦身-豆包.md](docs/20261123-2228-工程门禁与素材瘦身-豆包.md)。
 
 0.8.77：**两条线合并 + Git 历史清理**。把 `main`（0.8.45，美术/实跑统计线）并入 `work`（0.8.76，玩法主线），用 `--no-ff` 保留汇合点；8 个冲突文件已解决，`game/src/main.js` 手工补回 `ULTIMATE_FX` 一刀时刻特效、`potionsUsed` 统计字段与 `deepTuned` 快照，避免 `tools/playthrough.cjs` 的 `potionUsed` 变成 `NaN`。`game/assets` 710 → **812**，并入 46 只无素材怪原画、12 种怪派生四帧、灰鬃狼/沙盗斥候补帧、`abyss-bg-01/02` 与 `fx-skill-ultimate`。同时从 Git 全历史删除 `.trae-html-share-packages/`、`tmp/`、`.screenshots/.tmp/` 三组误入垃圾（实测约 11.2 MiB），清理前生成 289MB 全量 bundle，强推 GitHub/GitCode 并删除 `deploy/0.8.6`、`trae/agent-SYLj24` 两个过期分支。合并后 `npm run format`、`npm run verify`（250/250）、四视口状态 HUD、6 例真实战斗状态回归全部通过；另外修掉 `loadMap` 未清 `lastKiller` 导致的状态假阳性。详见 [docs/20261123-2120-分支合并与Git历史清理-豆包.md](docs/20261123-2120-分支合并与Git历史清理-豆包.md)。
 
@@ -70,7 +70,7 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 1. **0.8.79 地图阵容差异化**：`maps.js` 的 `generatedMap()` 按关卡确定性取 4–6 种怪，不再每图复用本章全部 9 种；相邻两图重叠 ≤50%。给每图一个地图威胁（矿尘/灼热/腐雾/雷暴/潮汐），先上 HUD 标签再逐步接效果；每章 2–3 张图放地图专属精英。同步补“每图 4–6 种、刷怪档位不越界、tier 对池长取模”的单元测试，并补真实概率区间的状态触发统计回归。
 2. **0.8.80 深层修复**：F90 回响采用 **B 方案**（重生时 `bossDefeated=false`，必须清完 5 只小怪后再杀一次），已完成的 F90 做祖父保留、不倒退进度；深层每层入口一次性补给 1 瓶药水，死亡保留；用 A/B 验证“死亡保留普通怪已损生命 50%”是否能把 F91–F95 从数值墙拉回挑战层。修正“每层 +14% 生命”与实际约 +11.5% 的文案差异。
 3. **终局长线**：图鉴按章 3/6/9 条目给三档奖励（+最大生命 / +金币 / +掉落率），106 全收集给称号；深层每 5 层三选一契约，先做 5 条；10/30/50/70/90 层给称号、光环、头像框，不给数值。
-4. **美术与发布**：46 个“仅静态原画”的怪先补 12–20 个高频/章节代表怪，其余保留静态 + 程序化动作；新美术只用用户提供的 GLM/CogView Key，禁用内置 `image_gen` 并检查右下角“AI生成”。发布前核对 Instabox 的 `CURRENT_APP_VERSION` 与 `sw.js` 缓存版本；0.8.78 会清旧图缓存，首次打开会比之前慢一点。
+4. **美术与发布**：46 个怪已在 0.8.78 合并中派生四帧，下一步用真实逐帧动作原画覆盖同名文件，优先 12–20 个高频/章节代表怪，不重复生成派生帧；新美术只用用户提供的 GLM/CogView Key，禁用内置 `image_gen` 并检查右下角“AI生成”。发布前核对 Instabox 的 `CURRENT_APP_VERSION` 与 `sw.js` 缓存版本；0.8.78 会清旧图缓存，首次打开会比之前慢一点。
 5. **历史遗留**：真实长跑复验 `potionsUsed` 不再为 `NaN`；第四批 16 张装备/物品图标按 29px 可读性决定接入范围；Mac 仓库同步 0.8.78 时先 `git fetch --all --prune` 再 `git reset --hard origin/work`，不要直接 `git pull`。
 
 ## 【长期待办】

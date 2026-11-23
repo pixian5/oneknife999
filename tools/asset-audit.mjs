@@ -75,7 +75,7 @@ const summary = {
   resolvedWithMissing: rows.filter((r) => r.okCount < 4).length,
   whitelistedNames: rows.filter((r) => r.whitelisted).length,
   ownFrameSpecies: [...species.keys()].length,
-  aliasReusedNames: rows.filter((r) => r.species && r.species !== r.name).length,
+  aliasReusedNames: rows.filter((r) => r.ownFrames === 0 && r.species && r.species !== r.base).length,
   partialOwnFrames: rows.filter((r) => r.ownFrames > 0 && r.ownFrames < 4).length,
   staticOnly: rows.filter((r) => r.ownFrames === 0 && r.staticFrame).length,
   noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).length
@@ -93,7 +93,9 @@ const report = {
       whitelisted: r.whitelisted,
       maps: r.maps
     })),
-  aliasReused: rows.filter((r) => r.species && r.species !== r.name).map((r) => ({ name: r.name, species: r.species, maps: r.maps })),
+  aliasReused: rows
+    .filter((r) => r.ownFrames === 0 && r.species && r.species !== r.base)
+    .map((r) => ({ name: r.name, species: r.species, maps: r.maps })),
   noOwnArt: rows.filter((r) => r.ownFrames === 0 && !r.staticFrame).map((r) => ({ name: r.name, base: r.base, maps: r.maps })),
   unresolved: rows.filter((r) => r.okCount < 4).map((r) => ({ name: r.name, missing: r.missing, resolved: r.resolved }))
 };
