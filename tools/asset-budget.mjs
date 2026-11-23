@@ -14,6 +14,8 @@ const LIMITS = {
 
 function walk(dir, result = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // 跳过 Finder 的 .DS_Store 与本地抠图报告：它们不是运行包素材，不应计入总量。
+    if (entry.name.startsWith(".") || entry.name === "_cutout_report.json") continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
       walk(path, result);
