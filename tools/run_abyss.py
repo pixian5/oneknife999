@@ -122,6 +122,11 @@ def claim_resource_cache(floor, cache_policy="all", verbose=True):
     points = [p for p in s.get("tacticalPoints", []) if p.get("kind") == "resource"]
     if cache_policy == "main":
         points = [p for p in points if p.get("route", "main") == "main"]
+    elif cache_policy == "main-first":
+        # 0.8.71：有主线箱优先主线，没有主线箱时才退回支路。
+        # 此前 main 策略在 F87–F90 连续四层“没有主线箱”，直接放弃 +2 药水。
+        main_points = [p for p in points if p.get("route", "main") == "main"]
+        points = main_points or points
     if not points:
         if verbose:
             print(f"F{floor} 未找到可开的秘藏补给箱（{cache_policy}），跳过", flush=True)
@@ -164,6 +169,7 @@ def record_floor_deaths(floor, start_deaths, elapsed, s, start_hp, start_potion,
         "deathsEnd": p["deaths"],
         "deathsDelta": p["deaths"] - start_deaths,
         "cache": {**cache, "timing": cache_timing},
+        "completed": bool(s["progress"].get(f"abyss-F{floor}", {}).get("completed")),
         "diagnostics": s.get("diagnostics"),
     }
     DEATH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -185,8 +191,9 @@ def clear_current_floor(floor, cache_policy="all", cache_timing="after-clear", v
     # 支路箱的守怪仍在，但不会叠加“清完 5 只后回头跑图”的二次风险。
     if cache_timing == "entry":
         cache = claim_resource_cache(floor, cache_policy, verbose)
-    # 普通怪阶段
-    for guard in range(45):
+    # 普通怪阶段：0.8.71 F90 只剩 2 只时 45 次循环耗尽，增加到 120 次；
+    # 不把“回到营地”算作失败，死亡后继续找下一只。
+    for guard in range(120):
         s = snapshot()
         pr = s["progress"].get(key, {})
         p = s["player"]
@@ -198,7 +205,11 @@ def clear_current_floor(floor, cache_policy="all", cache_timing="after-clear", v
             deaths = p["deaths"]
             print(f"F{floor} 死亡一次，回营地后继续", flush=True)
             continue
-        pool = [e for e in s["entities"] if e.get("alive") and not e.get("boss")]
+        # 0.8.71：不要锁定白名 NPC / 友军；F90 的流浪武者曾被当成普通怪。
+        pool = [
+            e for e in s["entities"]
+            if e.get("alive") and not e.get("boss") and not e.get("npc") and not e.get("friendly")
+        ]
         if not pool:
             time.sleep(0.5)
             continue
@@ -261,8 +272,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", type=int, default=3)
     ap.add_argument("--end", type=int, default=10)
-    ap.add_argument("--cache-policy", choices=["all", "main", "none"], default="all",
-                    help="all=开所有可开箱；main=只开主线箱；none=不开箱")
+    ap.add_argument("--cache-policy", choices=["all", "main", "main-first", "none"], default="all",
+                    help="all=开所有可开箱；main=只开主线箱；main-first=主线优先、无主线才开支路；none=不开箱")
     ap.add_argument("--cache-timing", choices=["entry", "after-clear", "after-boss"], default="after-clear",
                     help="entry=进层先开箱；after-clear=清完小怪开箱；after-boss=打完 boss 开箱")
     args = ap.parse_args()
