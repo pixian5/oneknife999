@@ -162,6 +162,21 @@
             </div>
             <!-- 0.8.51：此前侧栏只显示最大生命，玩家看不出当前血量；补一条随受伤变化的血条。 -->
             <div class="meter hp"><span id="hpBar"></span></div>
+            <!-- 0.8.75：中毒/减速/眩晕/致盲的状态图标；破甲是目标 debuff，放在目标栏。 -->
+            <div class="status-strip hidden" id="playerStatusStrip" aria-label="玩家当前状态">
+              <span class="status-chip" id="statusPoison" title="中毒：每层持续扣血">
+                <img src="assets/status-poison.png" alt="中毒" /><em id="statusPoisonCount">×1</em>
+              </span>
+              <span class="status-chip" id="statusSlow" title="减速：移动速度下降">
+                <img src="assets/status-slow.png" alt="减速" /><em id="statusSlowCount">2s</em>
+              </span>
+              <span class="status-chip no-count" id="statusStun" title="眩晕：短暂无法出手">
+                <img src="assets/status-stun.png" alt="眩晕" /><em></em>
+              </span>
+              <span class="status-chip" id="statusBlind" title="致盲：出手有概率落空">
+                <img src="assets/status-blind.png" alt="致盲" /><em id="statusBlindCount">2s</em>
+              </span>
+            </div>
             <div class="meter-group">
               <div class="meter-label"><span id="expLabel">升级进度</span><b id="expText">0 / 120</b></div>
               <div class="meter exp"><span id="expBar"></span></div>
@@ -251,6 +266,12 @@
         </div>
         <div class="target-block">
           <span class="eyebrow">当前目标</span><strong id="targetText">未锁定目标</strong><span id="targetHint">靠近怪物开始战斗</span>
+          <!-- 0.8.75：破甲是怪身上的 debuff，只跟当前目标显示，不混进玩家状态条。 -->
+          <div class="target-status hidden" id="targetStatus" aria-label="目标减益">
+            <span class="status-chip small" id="statusArmorBreak" title="破甲：目标防御降低 15%">
+              <img src="assets/status-armor-break.png" alt="破甲" /><em id="statusArmorBreakCount">3s</em>
+            </span>
+          </div>
         </div>
         <button class="normal-attack-button" id="normalAttackBtn" title="普通攻击">
           <img class="attack-icon" src="assets/skill-attack.png" alt="" /><span class="attack-key">X</span><strong>普攻</strong

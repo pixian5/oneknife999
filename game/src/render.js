@@ -1740,6 +1740,36 @@ export function renderLog() {
   );
 }
 
+export function renderStatusIcons() {
+  if (!state?.player) return;
+  const player = state.player;
+  const poison = Math.max(0, Number(player.poison) || 0);
+  const slow = Math.max(0, Number(player.slowTimer) || 0);
+  const stun = Math.max(0, Number(player.stunTimer) || 0);
+  const blind = Math.max(0, Number(player.blindTimer) || 0);
+  const hasPlayerStatus = poison > 0 || slow > 0 || stun > 0 || blind > 0;
+
+  const toggle = (id, active, count = "") => {
+    const el = $(id);
+    if (!el) return;
+    el.classList.toggle("hidden", !active);
+    if (active && count) setText($(`${id}Count`), count);
+  };
+
+  toggle("statusPoison", poison > 0, poison > 0 ? `×${poison}` : "");
+  // 秒数向上取整，和破甲铭牌文字保持同一口径；0.1 秒内立即隐藏。
+  toggle("statusSlow", slow > 0, slow > 0 ? `${Math.ceil(slow)}s` : "");
+  toggle("statusStun", stun > 0);
+  toggle("statusBlind", blind > 0, blind > 0 ? `${Math.ceil(blind)}s` : "");
+  $("playerStatusStrip")?.classList.toggle("hidden", !hasPlayerStatus);
+
+  // 破甲挂在当前目标身上，不是玩家自身状态；目标切走后立即收起。
+  const target = state.entities?.find((entity) => entity.id === player.targetId && entity.alive);
+  const armorBreak = Math.max(0, Number(target?.armorBreakTimer) || 0);
+  $("targetStatus")?.classList.toggle("hidden", armorBreak <= 0);
+  if (armorBreak > 0) setText($("statusArmorBreakCount"), `${Math.ceil(armorBreak)}s`);
+}
+
 export function renderPlayer() {
   const hero = activeHero();
   const maxResource = hero.resource;
@@ -2568,6 +2598,7 @@ export function renderAll() {
   renderRegion();
   renderPlayer();
   renderTarget();
+  renderStatusIcons();
   renderNormalAttack();
   renderSkills();
   renderSkillModal();

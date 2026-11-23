@@ -188,7 +188,7 @@ import {
 const BUILD_VERSION = "0.8.7";
 
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.56";
+const CURRENT_APP_VERSION = "0.8.75";
 
 // 主循环计时与出口确认的模块内状态
 let lastTime = 0;
@@ -418,6 +418,13 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   setMoveTarget(null);
   state.player.invulnerable = 3;
   state.player.poison = 0;
+  // 0.8.75：状态计时是场景瞬态，换图/复活不能把上一场的减速、致盲、眩晕带进来。
+  state.player.poisonTimer = 0;
+  state.player.slowTimer = 0;
+  state.player.slowFactor = 1;
+  state.player.stunTimer = 0;
+  state.player.blindTimer = 0;
+  state.player.blindMissChance = 0;
   // 换图 / 复活时清空出手闸门，避免带着上一场的节奏进入新场景。
   state.player.attackGate = 0;
   state.entities = createEntities(map);
@@ -1601,6 +1608,8 @@ export function applyOnHitPassives(attacker, damage) {
   const stun = rollPassive(passives, "stun");
   if (stun.triggered) {
     state.player.attackTimer = Math.max(state.player.attackTimer, stun.params?.duration || 0.5);
+    // 0.8.75：attackTimer 同时承担普攻冷却，不能直接拿来判断“眩晕”；单独记一份短计时给 HUD。
+    state.player.stunTimer = Math.max(state.player.stunTimer || 0, stun.params?.duration || 0.5);
     // 0.8.35 施法打断：起手期被控制命中 → 取消释放（docs/02 interrupt_level 规则）。
     interruptCast("interrupted");
     textAt("打断", state.player.x, floatYAbovePlayer(36), "#f16d66", 12);
@@ -2409,6 +2418,7 @@ export function update(dt) {
   state.player.recovery = Math.max(0, (state.player.recovery || 0) - dt);
   state.player.hitFlash = Math.max(0, (state.player.hitFlash || 0) - dt);
   state.player.slowTimer = Math.max(0, (state.player.slowTimer || 0) - dt);
+  state.player.stunTimer = Math.max(0, (state.player.stunTimer || 0) - dt);
   state.player.potionLock = Math.max(0, (state.player.potionLock || 0) - dt);
   state.player.skillLock = Math.max(0, (state.player.skillLock || 0) - dt);
   state.player.blindTimer = Math.max(0, (state.player.blindTimer || 0) - dt);

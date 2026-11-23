@@ -105,6 +105,13 @@ export function createState(classId) {
       reforgeScroll: 0,
       equipment: Object.fromEntries(EQUIPMENT_SLOT_KEYS.map((slotKey) => [slotKey, null])),
       poison: 0,
+      // 0.8.75 状态条：显式初始化四类玩家状态计时，避免旧存档首次渲染时读到 undefined。
+      poisonTimer: 0,
+      slowTimer: 0,
+      slowFactor: 1,
+      stunTimer: 0,
+      blindTimer: 0,
+      blindMissChance: 0,
       // 0.8.13 精英「回响」词缀：距上次施法的秒数，99 表示很久没放技能。
       lastSkillAge: 99,
       visitedMaps: { ash_outskirts: true }
