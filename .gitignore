@@ -90,3 +90,6 @@ tmp/
 
 # 旧版原图归档（保留本地，不进入运行包）
 art-source/monster-legacy/
+
+# 深层 A/B 长跑测试档（本地证据，不入库）
+saves/abyss-runs/
