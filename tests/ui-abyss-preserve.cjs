@@ -1,4 +1,4 @@
-// 0.8.82 A/B：默认 A 组满血；B 组保留一半已损生命，用 ?abyssPreserve=1 显式开启。
+// 0.8.83 A/B：默认 A 组满血；B 组死亡后最高 50% 最大生命且只降不升，用 ?abyssPreserve=1 显式开启。
 // 用 testApi.loadMap(..., keepBossHp=true) 模拟死亡复活，不依赖真实致死。
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -58,7 +58,13 @@ async function runCase(browser, url) {
     const oldMax = mob.maxHp;
     api.testApi.loadMap("abyss-F91", st.player.x, st.player.y, true, true);
     const next = api.testApi.state().entities.find((entity) => entity.id === mob.id);
-    return { oldHp, oldMax, newHp: next?.hp, newMax: next?.maxHp, errors: [] };
+    const firstHp = next.hp;
+    // 第二次死亡：把同一只怪压到 20%，B 组必须保持 20%，不能再回血到 60%。
+    const lowHp = Math.round(next.maxHp * 0.2);
+    next.hp = lowHp;
+    api.testApi.loadMap("abyss-F91", st.player.x, st.player.y, true, true);
+    const second = api.testApi.state().entities.find((entity) => entity.id === mob.id);
+    return { oldHp, oldMax, newHp: firstHp, newMax: next.maxHp, lowHp, secondHp: second?.hp, errors: [] };
   });
   result.errors = errors;
   await context.close();
@@ -73,11 +79,19 @@ async function runCase(browser, url) {
     const a = await runCase(browser, `${BASE_URL}&abyssPreserve=0`);
     assert.equal(a.newHp, a.newMax, `A 组应满血重建：${a.oldHp}/${a.oldMax} -> ${a.newHp}/${a.newMax}`);
     const b = await runCase(browser, `${BASE_URL}&abyssPreserve=1`);
-    const expected = Math.max(1, Math.round(b.newMax - (b.oldMax - b.oldHp) * 0.5));
-    assert.equal(b.newHp, expected, `B 组应保留一半已损生命：${b.oldHp}/${b.oldMax} -> ${b.newHp}/${b.newMax}，期望 ${expected}`);
+    const expected = Math.max(1, Math.round(Math.min(b.oldHp, b.newMax * 0.5)));
+    assert.equal(
+      b.newHp,
+      expected,
+      `B 组应压到 50% 最大生命且只降不升：${b.oldHp}/${b.oldMax} -> ${b.newHp}/${b.newMax}，期望 ${expected}`
+    );
+    assert.equal(b.secondHp, b.lowHp, `B 组第二次死亡不能回血：20%=${b.lowHp}，实际 ${b.secondHp}`);
+    assert.equal(a.secondHp, a.newMax, `A 组第二次死亡仍应满血：${a.secondHp}/${a.newMax}`);
     assert.deepEqual(a.errors, [], `A 组页面异常：${a.errors.join(" | ")}`);
     assert.deepEqual(b.errors, [], `B 组页面异常：${b.errors.join(" | ")}`);
-    console.log(`0.8.82 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}`);
+    console.log(
+      `0.8.83 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}，B二次死亡=${b.secondHp}/${b.lowHp}`
+    );
   } finally {
     await browser.close();
   }

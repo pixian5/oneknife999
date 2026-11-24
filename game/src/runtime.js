@@ -236,7 +236,7 @@ export function restoreDamagedBoss(entities, previousEntities) {
   return true;
 }
 
-// 0.8.81 A/B 实验：死亡复活保留普通怪已损生命的 50%。
+// 0.8.83 A/B 实验：死亡后普通怪血量最高压到 50% 最大生命，且只降不升。
 // 只处理「上一场存活且受伤」的普通怪；首领仍走 restoreDamagedBoss，友军 / NPC / 召唤物不动。
 // ratio=0 时等价旧行为（满血重建），便于用同一个函数跑 A/B 两组。
 export function restoreDamagedAbyssMonsters(entities, previousEntities, ratio = 0.5) {

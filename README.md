@@ -4,7 +4,7 @@
 
 - **可玩原型**：十章 100 张连续关卡、三职业、首领阶段战、掉落装备、自动保存；纯前端 Canvas 实现，代码位于 [game/](game/)。
 - **设计文档**：[docs/](docs/) 是设计事实源（产品、战斗、成长、地图、PK、行会、经济、服务器、QA、数值基线），治理规则见 [docs/README.md](docs/README.md)。
-- **当前版本**：0.8.82（见 [VERSION](VERSION)）
+- **当前版本**：0.8.83（见 [VERSION](VERSION)）
 
 ## 快速开始
 
@@ -30,14 +30,14 @@ npm run test:ui               # 桌面 / 移动视口冒烟测试（含虚拟摇
 npm run test:ui:regression    # 界面渲染与输入回归（需先 npm run serve）
 npm run test:ui:nameplate     # 铭牌可读性回归：飘字 / 特效环不得压住血条（需先 npm run serve）
 npm run test:ui:threats       # 0.8.80 五类地图威胁 + 专属精英回归（需先 npm run serve）
-npm run test:ui:echo          # 0.8.82 F90 回响 B / 入口补给一次性（需先 npm run serve）
-npm run test:ui:preserve      # 0.8.82 死亡保留默认 A / 显式 B A/B（需先 npm run serve）
+npm run test:ui:echo          # 0.8.83 F90 回响 B / 入口补给一次性（需先 npm run serve）
+npm run test:ui:preserve      # 0.8.83 死亡保留默认 A / 显式 B A/B（需先 npm run serve）
 npm run test:e2e              # 真实浏览器百图通关回归（需先 npm run serve）
 npm run perf                  # 帧率探测，结果写入 .test-artifacts/（需先 npm run serve）
 npm run balance               # 真实速度数值模拟（三职业百图，输出 tests/balance-out.csv）
 ```
 
-持续集成：0.8.82 保持 GitHub Actions `main` / `work` 双分支触发，verify 含语法、版本、素材预算、格式与 **271 个单测**，UI 矩阵 22 项；本地提交前仍须跑 `npm run verify` + 关键浏览器回归。
+持续集成：0.8.83 保持 GitHub Actions `main` / `work` 双分支触发，verify 含语法、版本、素材预算、格式与 **272 个单测**，UI 矩阵 22 项；本地提交前仍须跑 `npm run verify` + 关键浏览器回归。
 
 ## 目录结构
 
@@ -49,6 +49,8 @@ docs/           设计文档事实源（00–20 分卷 + 历史备份 + 开发�
 ```
 
 ## 【当前开发进度】
+
+0.8.83：**B 组普通怪回血修复**。0.8.82 的 B 组按“剩余已损伤害 50%”回填，同一只 21828 HP 普通怪在两次死亡后从 8302 回到约 17361，越死越回血。0.8.83 改成“死亡后最高压到 `maxHp*0.5`，且只降不升”：8302 保持 8302、17361 压到 10914、低于 50% 不回升；A 组 `ratio=0` 仍满血重建，默认不变。`test:ui:preserve` 实测默认 A=7145/7145、显式 A=7145/7145、显式 B=3573/7145，B 第二次死亡 1429/1429 不回血；`npm run verify` **272/272**，`test:ui:echo` 通过。版本 0.8.83、`CACHE_VERSION=oneknife999-v0.8.83`。详见 [B 组回血修复](docs/20261124-1629-B组回血修复与0.8.83-豆包.md)、[当前开发进度](docs/20261124-1629-当前开发进度-豆包.md)、[下一步待实现](docs/20261124-1629-下一步待实现-豆包.md)。
 
 0.8.82：**死亡保留默认回退 A**。F91–F95 全量真实长跑 A=+47 死、B=+52 死，B 未证明优于 A；尝试“清完额外普通怪”对照时，F91 的 A/B 都陷入死亡循环（A 4 分钟 +17、B 2 分钟 +4，均未清完 12 只），说明该路线不是当前可玩玩法，已停止。默认改回 A（普通怪满血重建），B 保留为显式实验：`?abyssPreserve=1` 或 localStorage=1。`test:ui:preserve` 默认 A=7145/7145、B=5716/7145；`npm run verify` **271/271**。GitHub Actions `80ddc10` 双 run success，Instabox 已发布 0.8.82。**F90 回响 B 真实复验为分段通过**：提前击破真实键鼠通过（`echoEarlyDefeated=true`、`bossDefeated=false`、marks 不变、12 只小怪不清）；最终击破在缩短回响 HP、清空普通怪的夹具下真实键鼠通过（`completed=true`、marks 3529→3564 恰好 +35）。完整端到端未通过：默认 A 死亡满血重建叠加 12 只约 21k HP 普通怪，提前击破后清 5 只时 deaths 481→497、kills 仍 1。B 组复验还发现普通怪会“越死越回血”：同一只 21828 HP 怪从 8302 回到约 17361，因为每次死亡把已损伤害再减半；B 若要保留，需改成固定 50% max HP 或只降不升。详见 [docs/20261124-1605-F90回响B真实复验结果-豆包.md](docs/20261124-1605-F90回响B真实复验结果-豆包.md)。
 

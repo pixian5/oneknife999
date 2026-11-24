@@ -190,7 +190,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.82";
+const CURRENT_APP_VERSION = "0.8.83";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -200,7 +200,7 @@ let lastTime = 0;
 let potionsUsed = 0;
 let pendingTravel = null;
 // 0.8.82 A/B 开关：默认 A 组（死亡后普通怪满血重建，旧行为）。
-// F91–F95 全量真实长跑 A=+47 死、B=+52 死；B 在 F93/F95 反弹，未证明优于 A。
+// 0.8.83 把 B 组从“保留一半已损伤害”改为“死亡后最高 50% 最大生命，且只降不升”。
 // 想试 B 组：URL 加 ?abyssPreserve=1（优先级最高）；localStorage 写 1 也可覆盖默认。
 const ABYSS_PRESERVE_NORMAL_HP = (() => {
   try {
@@ -479,7 +479,7 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   }
   // 0.4.2：同图复活时回填受伤首领的生命（普通怪默认满血重置），阶段由 updateBoss 重新判定。
   if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
-  // 0.8.82 A/B：默认 A 组满血重建；B 组用 ?abyssPreserve=1 显式开启，只对深层。
+  // 0.8.82/0.8.83 A/B：默认 A 组满血重建；B 组用 ?abyssPreserve=1 显式开启，只对深层，死亡后最高 50% 最大生命。
   if (keepBossHp && ABYSS_PRESERVE_NORMAL_HP && map.id.startsWith(ABYSS_MAP_PREFIX)) {
     const restored = restoreDamagedAbyssMonsters(state.entities, previousEntities, ABYSS_DEATH_RULES.preserveNormalHpOnDeath);
     logInfo("abyss", "preserveNormalHp", { mapId, restored, ratio: ABYSS_DEATH_RULES.preserveNormalHpOnDeath });
