@@ -148,16 +148,14 @@ npm run test:ui:status-real   # 五类状态真实战斗触发回归（需要先
 npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
 npm run test:ui:threats       # 五类地图威胁 + 专属精英回归（需要先 npm run serve）
 npm run test:ui:echo          # F90 回响 B / 重构重生 / 入口补给一次性（需要先 npm run serve）
-npm run test:ui:preserve      # 死亡保留 B 组 50% 上限 / A 组满血 A/B（需要先 npm run serve）
+npm run test:ui:preserve      # 0.8.84 A 组死亡重建 / 旧 abyssPreserve 开关失效（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
 npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）
 npm run balance               # 真实速度数值模拟（三职业百图，无需浏览器，输出 tests/balance-out.csv）
 ```
 
-0.8.83 的死亡保留：默认仍是 A 组，死亡复活普通怪满血重建；B 组改成“死亡后最高压到 50% 最大生命，且只降不升”，修复 0.8.82 中同一只普通怪从 8302 回到 17361 的越死越回血。要试 B 用 `?abyssPreserve=1` 或 `localStorage.oneknife999-abyss-preserve=1`；`?abyssPreserve=0` 强制 A。实测 A=7145/7145、B=3573/7145，B 第二次死亡 1429/7145 不回血。
-
-0.8.82 的死亡保留默认回到 A 组：死亡复活普通怪满血重建（旧行为）。F91–F95 全量真实长跑：A 合计 +47 死、B 合计 +52 死；B 在 F91/F92/F94 更好，但 F93/F95 反弹，未证明优于 A。想试 B（只保留一半已损生命）：`?abyssPreserve=1` 或 `localStorage.oneknife999-abyss-preserve=1`；`?abyssPreserve=0` 可强制 A。F90 回响仍为“先清 5 只普通怪，再击破回响”；提前 AOE 击杀只算提前击破，42 秒后重生且不清周边小怪。
+0.8.84 删除死亡保留 B 组：深层普通怪死亡后统一满血重建（A 组旧行为）。依据是 A/B 各两轮 F91–F95 总死亡同为 +47、+51，均值同为 +49；逐层方差远大于组间差异，B 没有可测收益。`?abyssPreserve` 与 localStorage 标记不再生效。首领受伤回填、F90 回响“先清 5 只再击破”、42 秒重生、入口 +1 药水均不变。
 
 真实浏览器验收会使用真实鼠标、键盘和浏览器时钟完成 100 图。默认 URL 含 `e2e=1&fast=1`：该模式仅在本机地址生效，快进只把伤害放大 25 倍，Boss 单次伤害限制为最大生命的 18%，不直接修改玩家、怪物或关卡状态。每一关都清怪、验证 Boss 完整阶段和危险技能、读取自动存档、刷新页面、验证恢复，然后走出口进入下一关。
 

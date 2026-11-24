@@ -81,14 +81,6 @@ export function abyssMultipliers(floor) {
   };
 }
 
-// 深层死亡 / 入口补给规则（0.8.81）。
-// 注意：这里只放“可被单元测试的纯数值”，真正的开关与场景重建由 main.js 决定。
-export const ABYSS_DEATH_RULES = {
-  // 死亡后普通怪血量上限比例。0 = 完全重置（A 组旧行为），0.5 = 最高 50% 最大生命且只降不升。
-  // 0.8.82 默认走 A 组；0.8.83 起 B 组仍用 ?abyssPreserve=1 显式开启。
-  preserveNormalHpOnDeath: 0.5
-};
-
 // 深层成长文案：old 版写“每层 +14%”，会被误读成复利；实际公式是相对基础值加法。
 // 同一章内（F1–F10、F11–F20…）每层累加 14% 基础生命，换章后基础值提升。
 export function abyssGrowthText() {
@@ -122,19 +114,6 @@ export function shouldDeferAbyssBossVictory(rule, kills, need) {
   const targetKills = Math.max(1, Math.floor(Number(need) || 0));
   const currentKills = Math.max(0, Math.floor(Number(kills) || 0));
   return currentKills < targetKills;
-}
-
-// 0.8.83 死亡后普通怪血量上限：最多保留 maxHp*ratio，且只降不升。
-// 旧 0.8.81/0.8.82 用“新上限 - 已损生命 * 比例”，同一只怪多次死亡会从 8302 回到 17361；
-// 这里改成“上限封顶 + 取当前较低值”，保证死亡只会让怪更低，不会回血。
-// ratio=0 返回满血（A 组旧行为），ratio=0.5 返回最多 50% 最大生命。
-export function preservedAbyssNormalHp(maxHp, hp, ratio = ABYSS_DEATH_RULES.preserveNormalHpOnDeath) {
-  const cap = Math.max(1, Math.round(Number(maxHp) || 0));
-  const current = Math.max(1, Math.min(cap, Number(hp) || cap));
-  const keep = Math.max(0, Math.min(1, Number(ratio) || 0));
-  if (keep <= 0 || current >= cap) return cap;
-  const ceiling = Math.max(1, Math.min(cap, Math.round(cap * keep)));
-  return Math.max(1, Math.min(current, ceiling));
 }
 
 // 该层是否为 Boss 层；每 10 层一次。

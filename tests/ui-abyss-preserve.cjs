@@ -1,4 +1,4 @@
-// 0.8.83 A/B：默认 A 组满血；B 组死亡后最高 50% 最大生命且只降不升，用 ?abyssPreserve=1 显式开启。
+// 0.8.84 A 组回归：B 组删除后，深层普通怪死亡必须满血重建；?abyssPreserve=0/1 都不应再改变行为。
 // 用 testApi.loadMap(..., keepBossHp=true) 模拟死亡复活，不依赖真实致死。
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -59,12 +59,12 @@ async function runCase(browser, url) {
     api.testApi.loadMap("abyss-F91", st.player.x, st.player.y, true, true);
     const next = api.testApi.state().entities.find((entity) => entity.id === mob.id);
     const firstHp = next.hp;
-    // 第二次死亡：把同一只怪压到 20%，B 组必须保持 20%，不能再回血到 60%。
-    const lowHp = Math.round(next.maxHp * 0.2);
-    next.hp = lowHp;
+    const firstMax = next.maxHp;
+    // 第二次死亡：再压到 20%，A 组仍必须满血重建；旧 B 的保留/回血逻辑已删除。
+    next.hp = Math.round(next.maxHp * 0.2);
     api.testApi.loadMap("abyss-F91", st.player.x, st.player.y, true, true);
     const second = api.testApi.state().entities.find((entity) => entity.id === mob.id);
-    return { oldHp, oldMax, newHp: firstHp, newMax: next.maxHp, lowHp, secondHp: second?.hp, errors: [] };
+    return { oldHp, oldMax, firstHp, firstMax, secondHp: second?.hp, secondMax: second?.maxHp, errors: [] };
   });
   result.errors = errors;
   await context.close();
@@ -74,24 +74,13 @@ async function runCase(browser, url) {
 (async () => {
   const browser = await chromium.launch(browserLaunchOptions());
   try {
-    const d = await runCase(browser, BASE_URL);
-    assert.equal(d.newHp, d.newMax, `默认应走 A 组满血重建：${d.oldHp}/${d.oldMax} -> ${d.newHp}/${d.newMax}`);
-    const a = await runCase(browser, `${BASE_URL}&abyssPreserve=0`);
-    assert.equal(a.newHp, a.newMax, `A 组应满血重建：${a.oldHp}/${a.oldMax} -> ${a.newHp}/${a.newMax}`);
-    const b = await runCase(browser, `${BASE_URL}&abyssPreserve=1`);
-    const expected = Math.max(1, Math.round(Math.min(b.oldHp, b.newMax * 0.5)));
-    assert.equal(
-      b.newHp,
-      expected,
-      `B 组应压到 50% 最大生命且只降不升：${b.oldHp}/${b.oldMax} -> ${b.newHp}/${b.newMax}，期望 ${expected}`
-    );
-    assert.equal(b.secondHp, b.lowHp, `B 组第二次死亡不能回血：20%=${b.lowHp}，实际 ${b.secondHp}`);
-    assert.equal(a.secondHp, a.newMax, `A 组第二次死亡仍应满血：${a.secondHp}/${a.newMax}`);
-    assert.deepEqual(a.errors, [], `A 组页面异常：${a.errors.join(" | ")}`);
-    assert.deepEqual(b.errors, [], `B 组页面异常：${b.errors.join(" | ")}`);
-    console.log(
-      `0.8.83 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}，B二次死亡=${b.secondHp}/${b.newMax}`
-    );
+    for (const suffix of ["", "&abyssPreserve=0", "&abyssPreserve=1"]) {
+      const d = await runCase(browser, BASE_URL + suffix);
+      assert.equal(d.firstHp, d.firstMax, `0.8.84 应统一 A 组满血重建${suffix}：${d.oldHp}/${d.oldMax} -> ${d.firstHp}/${d.firstMax}`);
+      assert.equal(d.secondHp, d.secondMax, `0.8.84 第二次死亡仍应满血${suffix}：${d.secondHp}/${d.secondMax}`);
+      assert.deepEqual(d.errors, [], `页面异常${suffix}：${d.errors.join(" | ")}`);
+    }
+    console.log("0.8.84 A 组死亡重建回归通过：默认 / abyssPreserve=0 / abyssPreserve=1 均满血，第二次死亡不回保留");
   } finally {
     await browser.close();
   }

@@ -17,8 +17,6 @@ import {
   abyssRelativeHpGain,
   abyssEntrySupplyGain,
   shouldDeferAbyssBossVictory,
-  preservedAbyssNormalHp,
-  ABYSS_DEATH_RULES,
   recordBestiary,
   bestiaryStats,
   SET_BONUSES,
@@ -279,16 +277,4 @@ test("abyssEntrySupplyGain：每层首次进入 +1，重进 / 死亡 / 普通图
   assert.equal(abyssEntrySupplyGain("abyss-F1", 1, true), 1);
   assert.equal(abyssEntrySupplyGain("stage_100", 100, true), 0, "百图不给深层补给");
   assert.equal(abyssEntrySupplyGain("abyss-F0", 0, true), 0);
-});
-
-test("preservedAbyssNormalHp：ratio=0 满血重置，0.5 压到 50% 最大生命且只降不升", () => {
-  assert.equal(preservedAbyssNormalHp(1000, 600, 0), 1000, "A 组旧行为");
-  assert.equal(preservedAbyssNormalHp(1000, 600, 0.5), 500, "600 高于 500，压到 500");
-  assert.equal(preservedAbyssNormalHp(1000, 400, 0.5), 400, "400 低于 500，保持 400");
-  assert.equal(preservedAbyssNormalHp(1000, 1, 0.5), 1, "低血不回升");
-  assert.equal(preservedAbyssNormalHp(1, 0, 0.5), 1);
-  assert.equal(preservedAbyssNormalHp(1000, 1000, 0.5), 1000, "满血怪不变");
-  assert.equal(preservedAbyssNormalHp(21828, 8302, 0.5), 8302, "8302 低于 10914，保持");
-  assert.equal(preservedAbyssNormalHp(21828, 17361, 0.5), 10914, "17361 压到 10914");
-  assert.equal(ABYSS_DEATH_RULES.preserveNormalHpOnDeath, 0.5);
 });

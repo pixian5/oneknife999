@@ -58,8 +58,7 @@ import {
   pauseState,
   fx,
   clearHostileStatus,
-  abyssCachePotionGain,
-  restoreDamagedAbyssMonsters
+  abyssCachePotionGain
 } from "./runtime.js";
 import { COMBO_RULES, advanceCombo, registerComboKill } from "./feedback.js";
 import {
@@ -133,8 +132,7 @@ import {
   isAbyssBossFloor,
   abyssProgress,
   abyssEntrySupplyGain,
-  shouldDeferAbyssBossVictory,
-  ABYSS_DEATH_RULES
+  shouldDeferAbyssBossVictory
 } from "./endgame.js";
 import {
   resolveAbilities,
@@ -190,7 +188,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.83";
+const CURRENT_APP_VERSION = "0.8.84";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -199,23 +197,6 @@ let lastTime = 0;
 // 0.8.43：实际喝药次数（只统计成功扣药；与库存净变化分开，供 run-full-playthrough 记录）
 let potionsUsed = 0;
 let pendingTravel = null;
-// 0.8.82 A/B 开关：默认 A 组（死亡后普通怪满血重建，旧行为）。
-// 0.8.83 把 B 组从“保留一半已损伤害”改为“死亡后最高 50% 最大生命，且只降不升”。
-// 想试 B 组：URL 加 ?abyssPreserve=1（优先级最高）；localStorage 写 1 也可覆盖默认。
-const ABYSS_PRESERVE_NORMAL_HP = (() => {
-  try {
-    const search = globalThis.location?.search || "";
-    const param = new URLSearchParams(search).get("abyssPreserve");
-    if (param === "1") return true;
-    if (param === "0") return false;
-    const stored = globalThis.localStorage?.getItem("oneknife999-abyss-preserve");
-    if (stored === "1") return true;
-    if (stored === "0") return false;
-    return false;
-  } catch {
-    return false;
-  }
-})();
 // 0.3.4 围攻上限：同一时刻只允许 1 只怪蓄力。旧实现每帧只判定「最近的一只」敌人，
 // 因此被 6 只怪围住时承伤并不会翻 6 倍；固定前摇节奏必须显式保留这个特性，否则百图会陷入死亡循环。
 const MAX_WINDUP_ATTACKERS = 1;
@@ -479,11 +460,6 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   }
   // 0.4.2：同图复活时回填受伤首领的生命（普通怪默认满血重置），阶段由 updateBoss 重新判定。
   if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
-  // 0.8.82/0.8.83 A/B：默认 A 组满血重建；B 组用 ?abyssPreserve=1 显式开启，只对深层，死亡后最高 50% 最大生命。
-  if (keepBossHp && ABYSS_PRESERVE_NORMAL_HP && map.id.startsWith(ABYSS_MAP_PREFIX)) {
-    const restored = restoreDamagedAbyssMonsters(state.entities, previousEntities, ABYSS_DEATH_RULES.preserveNormalHpOnDeath);
-    logInfo("abyss", "preserveNormalHp", { mapId, restored, ratio: ABYSS_DEATH_RULES.preserveNormalHpOnDeath });
-  }
   state.drops = [];
   state.particles = [];
   state.texts = [];

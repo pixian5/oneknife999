@@ -1,7 +1,7 @@
 import { CLASSES, EQUIPMENT_SLOT_KEYS, equipmentHpBonus, equipmentDefenseBonus, equipmentTotals, effectiveItemPower } from "./config.js";
 import { MAPS, MAP_ORDER, MAP_CLEAR_RULES } from "./maps.js";
 import { clamp, distance } from "./util.js";
-import { setBonusTotals, preservedAbyssNormalHp } from "./endgame.js";
+import { setBonusTotals } from "./endgame.js";
 
 // 《一刀999》运行时状态容器：集中存放跨模块共享的可变引用。
 // state / moveTarget 必须通过 setState / setMoveTarget 更新。
@@ -234,23 +234,6 @@ export function restoreDamagedBoss(entities, previousEntities) {
   if (!boss) return false;
   boss.hp = Math.max(1, Math.min(boss.maxHp, damaged.hp));
   return true;
-}
-
-// 0.8.83 A/B 实验：死亡后普通怪血量最高压到 50% 最大生命，且只降不升。
-// 只处理「上一场存活且受伤」的普通怪；首领仍走 restoreDamagedBoss，友军 / NPC / 召唤物不动。
-// ratio=0 时等价旧行为（满血重建），便于用同一个函数跑 A/B 两组。
-export function restoreDamagedAbyssMonsters(entities, previousEntities, ratio = 0.5) {
-  if (!entities || !previousEntities || !(ratio > 0)) return 0;
-  let restored = 0;
-  for (const entity of entities) {
-    if (entity.boss || entity.friendly || entity.npc || entity.summoned) continue;
-    const old = previousEntities.find((candidate) => candidate.id === entity.id);
-    if (!old || !old.alive || old.boss || old.friendly || old.npc || old.summoned) continue;
-    if (!(old.hp < old.maxHp)) continue;
-    entity.hp = preservedAbyssNormalHp(entity.maxHp, old.hp, ratio);
-    restored += 1;
-  }
-  return restored;
 }
 
 // 单件装备对三围的贡献（0.4.0）：攻击按伤害公式的 0.9 系数折算，生命 / 防御与承伤同源。
