@@ -1,4 +1,4 @@
-// 0.8.81 A/B：死亡重建普通怪时，A 组满血、B 组保留一半已损生命。
+// 0.8.82 A/B：默认 A 组满血；B 组保留一半已损生命，用 ?abyssPreserve=1 显式开启。
 // 用 testApi.loadMap(..., keepBossHp=true) 模拟死亡复活，不依赖真实致死。
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -68,6 +68,8 @@ async function runCase(browser, url) {
 (async () => {
   const browser = await chromium.launch(browserLaunchOptions());
   try {
+    const d = await runCase(browser, BASE_URL);
+    assert.equal(d.newHp, d.newMax, `默认应走 A 组满血重建：${d.oldHp}/${d.oldMax} -> ${d.newHp}/${d.newMax}`);
     const a = await runCase(browser, `${BASE_URL}&abyssPreserve=0`);
     assert.equal(a.newHp, a.newMax, `A 组应满血重建：${a.oldHp}/${a.oldMax} -> ${a.newHp}/${a.newMax}`);
     const b = await runCase(browser, `${BASE_URL}&abyssPreserve=1`);
@@ -75,7 +77,7 @@ async function runCase(browser, url) {
     assert.equal(b.newHp, expected, `B 组应保留一半已损生命：${b.oldHp}/${b.oldMax} -> ${b.newHp}/${b.newMax}，期望 ${expected}`);
     assert.deepEqual(a.errors, [], `A 组页面异常：${a.errors.join(" | ")}`);
     assert.deepEqual(b.errors, [], `B 组页面异常：${b.errors.join(" | ")}`);
-    console.log(`0.8.81 死亡保留 A/B 回归通过：A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}`);
+    console.log(`0.8.82 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}`);
   } finally {
     await browser.close();
   }

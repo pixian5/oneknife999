@@ -85,7 +85,7 @@ export function abyssMultipliers(floor) {
 // 注意：这里只放“可被单元测试的纯数值”，真正的开关与场景重建由 main.js 决定。
 export const ABYSS_DEATH_RULES = {
   // 死亡复活保留普通怪已损生命的比例。0 = 完全重置（旧行为），0.5 = 只保留一半伤害。
-  // 0.8.81 默认走 A 组（0，旧行为）；加 ?abyssPreserve=1 或写 localStorage 才启用 B 组。
+  // 0.8.82 默认走 A 组（旧行为）；加 ?abyssPreserve=1 或写 localStorage=1 才启用 B 组。
   preserveNormalHpOnDeath: 0.5
 };
 
