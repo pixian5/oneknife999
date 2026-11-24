@@ -155,7 +155,7 @@ npm run perf                  # 帧率探测（需要先 npm run serve，结果�
 npm run balance               # 真实速度数值模拟（三职业百图，无需浏览器，输出 tests/balance-out.csv）
 ```
 
-0.8.83 的死亡保留：默认仍是 A 组，死亡复活普通怪满血重建；B 组改成“死亡后最高压到 50% 最大生命，且只降不升”，修复 0.8.82 中同一只普通怪从 8302 回到 17361 的越死越回血。要试 B 用 `?abyssPreserve=1` 或 `localStorage.oneknife999-abyss-preserve=1`；`?abyssPreserve=0` 强制 A。实测 A=7145/7145、B=3573/7145，B 第二次死亡 1429/1429 不回血。
+0.8.83 的死亡保留：默认仍是 A 组，死亡复活普通怪满血重建；B 组改成“死亡后最高压到 50% 最大生命，且只降不升”，修复 0.8.82 中同一只普通怪从 8302 回到 17361 的越死越回血。要试 B 用 `?abyssPreserve=1` 或 `localStorage.oneknife999-abyss-preserve=1`；`?abyssPreserve=0` 强制 A。实测 A=7145/7145、B=3573/7145，B 第二次死亡 1429/7145 不回血。
 
 0.8.82 的死亡保留默认回到 A 组：死亡复活普通怪满血重建（旧行为）。F91–F95 全量真实长跑：A 合计 +47 死、B 合计 +52 死；B 在 F91/F92/F94 更好，但 F93/F95 反弹，未证明优于 A。想试 B（只保留一半已损生命）：`?abyssPreserve=1` 或 `localStorage.oneknife999-abyss-preserve=1`；`?abyssPreserve=0` 可强制 A。F90 回响仍为“先清 5 只普通怪，再击破回响”；提前 AOE 击杀只算提前击破，42 秒后重生且不清周边小怪。
 

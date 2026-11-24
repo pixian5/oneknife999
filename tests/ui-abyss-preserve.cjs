@@ -90,7 +90,7 @@ async function runCase(browser, url) {
     assert.deepEqual(a.errors, [], `A 组页面异常：${a.errors.join(" | ")}`);
     assert.deepEqual(b.errors, [], `B 组页面异常：${b.errors.join(" | ")}`);
     console.log(
-      `0.8.83 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}，B二次死亡=${b.secondHp}/${b.lowHp}`
+      `0.8.83 死亡保留 A/B 回归通过：默认A=${d.newHp}/${d.newMax}，A=${a.newHp}/${a.newMax}，B=${b.newHp}/${b.newMax}，B二次死亡=${b.secondHp}/${b.newMax}`
     );
   } finally {
     await browser.close();
