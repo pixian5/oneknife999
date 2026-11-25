@@ -127,6 +127,11 @@ export function buildAbyssMap(floor) {
   }
   // 数值公式与 generatedMap 完全同源（typeIndex 用洗牌后位置，实现档位重排）。
   const anchored = (base, slope) => Math.round(base + (baseStage - 4) * slope);
+  // 0.8.85：F90 终局普通怪单独降档。
+  // 真实键鼠验收显示：12→6 只只减少了「任务需求之外」的杂兵，前 5 只任务怪仍按原数值
+  // 把 20 瓶药水耗尽；因此终局必须同时降低任务怪的生命 / 攻击 / 防御。
+  // 只作用于 F90，F1–F89 与 F91+ 仍使用原公式。
+  const normalTuning = f === 90 ? { hp: 0.55, attack: 0.6, defense: 0.8 } : { hp: 1, attack: 1, defense: 1 };
   // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
@@ -145,9 +150,9 @@ export function buildAbyssMap(floor) {
       return {
         name: rawName,
         color: [chapter.accent, "#89999c", "#7b6a58", "#9a6b72", "#6f8b7a", "#8a7f9c", "#a1766b", "#71839b", "#9b8f6f"][typeIndex % 9],
-        hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth)),
-        attack,
-        defense: anchored(16 + typeIndex * 0.4875, 0.35),
+        hp: Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth) * normalTuning.hp),
+        attack: Math.round(attack * normalTuning.attack),
+        defense: Math.round(anchored(16 + typeIndex * 0.4875, 0.35) * normalTuning.defense),
         exp: 0,
         gold: anchored(36 + typeIndex * 1.125, 1.4),
         radius: 16 + Math.floor(typeIndex * 0.44),
@@ -157,8 +162,10 @@ export function buildAbyssMap(floor) {
         ...(deep
           ? {
               deepTuned: true,
-              hp: Math.round(Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth)) * 1.6),
-              attack: Math.round(attack * 1.15),
+              hp: Math.round(
+                Math.round((480 + typeIndex * 17.5) * (1 + (baseStage - 4) * DIFFICULTY_TUNING.monsterHpGrowth) * normalTuning.hp) * 1.6
+              ),
+              attack: Math.round(attack * normalTuning.attack * 1.15),
               gold: anchored(36 + typeIndex * 1.125, 1.4) * 2
             }
           : {})
@@ -167,7 +174,8 @@ export function buildAbyssMap(floor) {
   // Boss：主题章首领做「回响」，首领层（每 10 层）×1.35、守门层 ×0.55；
   // 深层成长倍率仍在 createEntities 层叠加。
   // 0.8.38：hp 首领 1.35→1.25（缩短 boss 战时长）；attack 补偿见下方（防攻击成长叠加爆炸）。
-  const bossScale = f % 10 === 0 ? 1.25 : 0.55;
+  // 0.8.85：F90 回响单独降到 0.90 倍，目标 155434→约 111900；其他整十层不变。
+  const bossScale = f === 90 ? 0.9 : f % 10 === 0 ? 1.25 : 0.55;
   const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
   const id = abyssMapId(f);
   // 0.8.34 P2 裂隙层：每 5 层一次（f%5===0 且非首领层），精英概率与词缀数提升（createEntities 读取）。
@@ -211,6 +219,8 @@ export function buildAbyssMap(floor) {
     // 提前用 AOE 把回响打死只算“提前击破”，回响 42 秒后重生，且不会清空周边小怪。
     // 其他整十层保持 legacy，避免重玩 F10–F80 的节奏被一次改动整体改写。
     echoVictoryRule: f === 90 ? "clear-first" : "legacy",
+    // 0.8.85：本层普通怪的全局降档系数，单测据此守住终局数值不被后续改动悄悄改回。
+    normalTuning,
     routePlan: layout.routePlan,
     encounterBands: layout.routePlan.encounterBands,
     landmarkLabels: [
@@ -1083,7 +1093,7 @@ export const DIFFICULTY_TUNING = {
 
 // 布局核心（0.8.33 参数化）：key 同时充当种子源与站点/纵向位的取模输入；
 // 百图壳传 stageNumber（行为与旧版逐字节一致），深层壳传独立种子空间的 key，互不撞布局。
-function buildLayout(key, siteIndex, chapter, townWidth, eliteAll) {
+function buildLayout(key, siteIndex, chapter, townWidth, eliteAll, spawnLimit = Infinity) {
   const random = seededRandom(key * 982451653 + 104729);
   const site = SITE_LAYOUTS[siteIndex];
   const townY = [180, 565, 950][key % 3];
@@ -1172,7 +1182,10 @@ function buildLayout(key, siteIndex, chapter, townWidth, eliteAll) {
         progress,
         lateral: (index % 2 ? 1 : -1) * (28 + ((key + index) % 3) * 16)
       }));
-  const monsterSpawns = monsterRoutes.map(({ route, progress, lateral }, index) => {
+  // 0.8.85：F90 终局层只保留 6 个刷怪营位（5 只任务怪 + 1 只巡逻压力），
+  // 不做“地图仍刷 12 只、只藏任务计数”的假削减；routePlan 的计数也在裁剪后统计。
+  const limitedMonsterRoutes = Number.isFinite(spawnLimit) ? monsterRoutes.slice(0, Math.max(5, Math.floor(spawnLimit))) : monsterRoutes;
+  const monsterSpawns = limitedMonsterRoutes.map(({ route, progress, lateral }, index) => {
     const routePath = route === "branch" ? branchPath : path;
     let adjustedProgress = progress;
     let point = routePoint(routePath, adjustedProgress, lateral);
@@ -1378,7 +1391,9 @@ export function generatedLayout(stageNumber, chapter) {
 // 0.8.33 深层布局：独立种子空间（floor × 2654435761 + 977，避开百图 5-100 的种子区间），
 // 站点选择按 (floor×3+4)%10 与百图 (stageNumber-1)%10 错位，营地加宽至 320（深层补给更慷慨）。
 export function generatedAbyssLayout(floor, chapter) {
-  return buildLayout(floor * 2654435761 + 977, (floor * 3 + 4) % 10, chapter, 320, true);
+  // 0.8.85：F90 是 5 杀 + 回响的终局层，只放 6 个营位；F91–F99 保持原 12 个营位。
+  const f = Math.max(1, Math.floor(Number(floor) || 1));
+  return buildLayout(f * 2654435761 + 977, (f * 3 + 4) % 10, chapter, 320, true, f === 90 ? 6 : Infinity);
 }
 
 // 0.8.79：每张生成图从本章 9 种怪里确定性取 4~6 种，相邻图重叠不超过较小阵容的一半。

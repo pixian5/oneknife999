@@ -271,10 +271,12 @@ test("shouldDeferAbyssBossVictory：仅 clear-first 规则且未清完普通怪�
   assert.equal(shouldDeferAbyssBossVictory("clear-first", 0, 0), true, "need 兜底为 1");
 });
 
-test("abyssEntrySupplyGain：每层首次进入 +1，重进 / 死亡 / 普通图不给", () => {
+test("abyssEntrySupplyGain：每层首次进入 +1，F90 终局 +5，重进 / 死亡 / 普通图不给", () => {
   assert.equal(abyssEntrySupplyGain("abyss-F91", 91, true), 1);
   assert.equal(abyssEntrySupplyGain("abyss-F91", 91, false), 0, "死亡重进不能重复领");
   assert.equal(abyssEntrySupplyGain("abyss-F1", 1, true), 1);
+  assert.equal(abyssEntrySupplyGain("abyss-F90", 90, true), 5, "F90 终局入口给 5 瓶");
+  assert.equal(abyssEntrySupplyGain("abyss-F90", 90, false), 0, "F90 重进不能重复领");
   assert.equal(abyssEntrySupplyGain("stage_100", 100, true), 0, "百图不给深层补给");
   assert.equal(abyssEntrySupplyGain("abyss-F0", 0, true), 0);
 });

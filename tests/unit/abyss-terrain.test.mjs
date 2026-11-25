@@ -118,6 +118,22 @@ test("附带：深层地图结构与命名（供 loadMap/渲染的必要字段�
   assert.ok(counts.size > 1, "相邻层数怪种数应有变化");
 });
 
+test("回归9 F90 终局密度与回响阈值：6 个营位、回响 ×0.90、F80 不变", () => {
+  const f90 = buildAbyssMap(90);
+  const base = generatedMap(95);
+  assert.equal(f90.monsterSpawns.length, 6, "F90 只应保留 6 个刷怪营位");
+  assert.equal(
+    f90.routePlan.encounterBands.reduce((sum, band) => sum + band.count, 0),
+    6,
+    "F90 routePlan 的分段计数必须与 6 个营位一致"
+  );
+  assert.equal(f90.boss.hp, Math.round(base.boss.hp * 0.9), "F90 回响基础 HP 应为基准关 ×0.90");
+  assert.equal(f90.boss.phases, 3, "F90 仍是三阶段回响");
+  assert.deepEqual(f90.normalTuning, { hp: 0.55, attack: 0.6, defense: 0.8 }, "F90 普通怪必须按终局降档系数结算");
+  assert.deepEqual(buildAbyssMap(80).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F80 不得被 F90 的普通怪降档影响");
+  assert.equal(buildAbyssMap(80).monsterSpawns.length, 12, "F80 不得被 F90 的缩减影响");
+});
+
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
   // 0.8.39 之前 spawn 用 tier % pick（5/6/7），而深渊怪挂在索引 pick / pick+1，
   // 永远取不到 —— 「每 3 层 2 只深渊化怪」整段配置空转。

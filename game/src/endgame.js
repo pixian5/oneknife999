@@ -97,12 +97,17 @@ export function abyssRelativeHpGain(fromFloor, toFloor) {
   return (to / from - 1) * 100;
 }
 
-// 深层每层入口一次性补给：只有第一次进入该深层才给 1 瓶。
+// 深层每层入口一次性补给：只有第一次进入该深层才发放。
 // 用 visitedMaps 作为“已领过”的持久标记；死亡重进 / 刷新都不会重复领。
+// 0.8.85：F90 终局入口一次补给 5 瓶。真实键鼠验收显示：普通怪降档后，
+// 20 瓶起步的存档清完 5 只任务怪只剩约 4 瓶，而回响实战约需 5 瓶，差 1 瓶无法收尾。
+// 终局层单独补 5 瓶，使 20 瓶起步拥有 25 瓶完整预算；F1–F89 仍只发 1 瓶。
 export function abyssEntrySupplyGain(mapId, floor, firstVisit) {
   if (!firstVisit) return 0;
   if (!String(mapId || "").startsWith("abyss-F")) return 0;
-  if (Math.max(0, Math.floor(Number(floor) || 0)) <= 0) return 0;
+  const depth = Math.max(0, Math.floor(Number(floor) || 0));
+  if (depth <= 0) return 0;
+  if (depth === 90) return 5; // F90 终局补给：只补清层后回响战的缺口
   return 1;
 }
 
