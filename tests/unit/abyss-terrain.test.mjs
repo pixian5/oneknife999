@@ -134,6 +134,19 @@ test("回归9 F90 终局密度与回响阈值：6 个营位、回响 ×0.90、F8
   assert.equal(buildAbyssMap(80).monsterSpawns.length, 12, "F80 不得被 F90 的缩减影响");
 });
 
+test("回归10 F99 单层降档：普通怪 ×0.75/0.75/0.8，F98/F100 不受影响", () => {
+  const f99 = buildAbyssMap(99);
+  assert.deepEqual(f99.normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F99 普通怪必须按单层降档系数结算");
+  assert.equal(f99.monsterSpawns.length, 12, "F99 只降数值，不减刷怪营位");
+  assert.deepEqual(buildAbyssMap(98).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F98 不得被 F99 降档影响");
+  assert.deepEqual(buildAbyssMap(100).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F100 不得被 F99 降档影响");
+  // 深渊化怪仍保留强化（1.6×0.75=1.2），不是把整层改成普通怪。
+  const deep = f99.monsterTypes.find((type) => type.deepTuned);
+  assert.ok(deep, "F99 仍应有深渊化怪");
+  const base = f99.monsterTypes.find((type) => !type.deepTuned);
+  assert.ok(deep.hp > base.hp, "深渊化怪 HP 必须仍高于同层普通怪");
+});
+
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
   // 0.8.39 之前 spawn 用 tier % pick（5/6/7），而深渊怪挂在索引 pick / pick+1，
   // 永远取不到 —— 「每 3 层 2 只深渊化怪」整段配置空转。
