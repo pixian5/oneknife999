@@ -1198,6 +1198,9 @@ function buildLayout(key, siteIndex, chapter, townWidth, eliteAll, spawnLimit = 
       }));
   // 0.8.85：F90 终局层只保留 6 个刷怪营位（5 只任务怪 + 1 只巡逻压力），
   // 不做“地图仍刷 12 只、只藏任务计数”的假削减；routePlan 的计数也在裁剪后统计。
+  // 0.8.88：F100 同样收到 6 营位。0.8.87 的承伤拆分显示，F100 全程 57,564 承伤中
+  // 深层杂兵占 50,563（约 88%）、回响普攻仅 5,676、回响特殊技 1,325；
+  // 12 营位留下的 7 只额外杂兵才是回响阶段的主要成本，不是回响 HP 或 crack。
   const limitedMonsterRoutes = Number.isFinite(spawnLimit) ? monsterRoutes.slice(0, Math.max(5, Math.floor(spawnLimit))) : monsterRoutes;
   const monsterSpawns = limitedMonsterRoutes.map(({ route, progress, lateral }, index) => {
     const routePath = route === "branch" ? branchPath : path;
@@ -1406,8 +1409,10 @@ export function generatedLayout(stageNumber, chapter) {
 // 站点选择按 (floor×3+4)%10 与百图 (stageNumber-1)%10 错位，营地加宽至 320（深层补给更慷慨）。
 export function generatedAbyssLayout(floor, chapter) {
   // 0.8.85：F90 是 5 杀 + 回响的终局层，只放 6 个营位；F91–F99 保持原 12 个营位。
+  // 0.8.88：F100 与 F90 同为整十终局层，也收到 6 营位。
   const f = Math.max(1, Math.floor(Number(floor) || 1));
-  return buildLayout(f * 2654435761 + 977, (f * 3 + 4) % 10, chapter, 320, true, f === 90 ? 6 : Infinity);
+  // 0.8.88：F90/F100 两个整十终局层都只保留 6 营位；F100 的诊断见 buildLayout 上方注释。
+  return buildLayout(f * 2654435761 + 977, (f * 3 + 4) % 10, chapter, 320, true, f === 90 || f === 100 ? 6 : Infinity);
 }
 
 // 0.8.79：每张生成图从本章 9 种怪里确定性取 4~6 种，相邻图重叠不超过较小阵容的一半。

@@ -56,6 +56,8 @@ export function activeHero() {
 
 // 0.8.6 诊断容器：只服务难度探针 / e2e 归因，不参与任何结算，也不写入存档。
 //   damage / hits：按来源累计承伤与命中次数（monster=普通怪或首领本体、hazard=地面危险区、poison=中毒）；
+//   damageSources / sourceHits：0.8.88 的互斥归因桶，把 monster 拆成普通图小怪、深层小怪、首领普攻，
+//     把 hazard 拆成首领特殊技（bossSpecial）与其他地面危险区（hazard）；旧字段保留，避免破坏既有探针；
 //   hazards：按危险区形态（sting / logs / devour / other）分型统计生成数、命中数、伤害；
 //   deaths：每次死亡瞬间的上下文（致死来源、首领血量与阶段、毒层、脚下是否有危险区）。
 // 与 hazardStats 并存：后者是 0.8.4 已对外承诺的旧字段，保留避免破坏既有探针输出。
@@ -63,6 +65,26 @@ export function createDiagnostics() {
   return {
     damage: { monster: 0, hazard: 0, poison: 0 },
     hits: { monster: 0, hazard: 0, poison: 0 },
+    damageSources: {
+      normalMob: 0,
+      abyssMob: 0,
+      bossNormal: 0,
+      bossSpecial: 0,
+      hazard: 0,
+      poison: 0,
+      reflect: 0,
+      threat: 0
+    },
+    sourceHits: {
+      normalMob: 0,
+      abyssMob: 0,
+      bossNormal: 0,
+      bossSpecial: 0,
+      hazard: 0,
+      poison: 0,
+      reflect: 0,
+      threat: 0
+    },
     hazards: {},
     deaths: []
   };
@@ -139,6 +161,15 @@ export function createState(classId) {
     abyssFloor: 0,
     abyssBest: 0
   };
+}
+
+// 0.8.88：只对 F100 的清层后同图复活生效：保留最后 3 只杂兵，其余不再重建。
+// 之前的“只留回响”实测把 F100 压到 136s/+3，低于 F99 的 276s/+21，终局强度塌了；
+// 保留 3 只既不让 5 只任务怪全部重生，也保住回响阶段的基本压迫感。
+export function abyssRespawnTrashLimit(mapId, progress, keepBossHp) {
+  if (!keepBossHp || mapId !== "abyss-F100" || !progress || progress.completed) return Infinity;
+  if (Number(progress.kills) < Number(progress.need || 5)) return Infinity;
+  return 3;
 }
 
 export function mapProgress(mapId = state.currentMapId) {

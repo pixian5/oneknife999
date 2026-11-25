@@ -147,12 +147,18 @@ test("回归10 F99 单层降档：普通怪 ×0.75/0.75/0.8，F98/F100 不受影
   assert.ok(deep.hp > base.hp, "深渊化怪 HP 必须仍高于同层普通怪");
 });
 
-test("回归11 F100 回响单层降档：×1.25×0.85，F90/F110 与普通怪不变", () => {
+test("回归11 F100 回响降档与 6 营位：×1.25×0.85，F90/F110 与普通怪不变", () => {
   const f100 = buildAbyssMap(100);
   const base = generatedMap(95);
   assert.equal(f100.boss.hp, Math.round(base.boss.hp * 1.25 * 0.85), "F100 回响应在首领档上再乘 0.85");
   assert.equal(Math.round(f100.boss.hp * abyssMultipliers(100).hp), 145710, "F100 回响实体 HP 应为约 145710");
   assert.equal(f100.boss.phases, 3, "F100 仍是三阶段回响");
+  assert.equal(f100.monsterSpawns.length, 6, "F100 应只保留 6 个刷怪营位（5 任务怪 + 1 巡逻压力）");
+  assert.equal(
+    f100.routePlan.encounterBands.reduce((sum, band) => sum + band.count, 0),
+    6,
+    "F100 routePlan 的计数必须与实际 6 营位一致"
+  );
   assert.deepEqual(f100.normalTuning, { hp: 1, attack: 1, defense: 1 }, "F100 普通怪不得被回响降档影响");
   assert.equal(buildAbyssMap(90).boss.hp, Math.round(base.boss.hp * 0.9), "F90 回响降档不得被 F100 影响");
   assert.equal(buildAbyssMap(110).boss.hp, Math.round(base.boss.hp * 1.25), "F110 仍按常规首领层 ×1.25");

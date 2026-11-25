@@ -3,7 +3,7 @@
 // 玩家一次失误就要把整条首领血条重打一遍，也是难度探针 0/1/5 死波动的来源。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { restoreDamagedBoss, createDiagnostics, createState } from "../../game/src/runtime.js";
+import { restoreDamagedBoss, createDiagnostics, createState, abyssRespawnTrashLimit } from "../../game/src/runtime.js";
 
 const boss = (hp, maxHp) => ({ id: "boss-1", boss: true, alive: true, hp, maxHp });
 
@@ -49,6 +49,18 @@ test("createDiagnostics：形状完整且每次返回独立对象", () => {
   const first = createDiagnostics();
   assert.deepEqual(first.damage, { monster: 0, hazard: 0, poison: 0 });
   assert.deepEqual(first.hits, { monster: 0, hazard: 0, poison: 0 });
+  // 0.8.88：互斥归因桶必须齐全，且与旧 damage/hits 分开；旧字段保留给既有探针。
+  assert.deepEqual(first.damageSources, {
+    normalMob: 0,
+    abyssMob: 0,
+    bossNormal: 0,
+    bossSpecial: 0,
+    hazard: 0,
+    poison: 0,
+    reflect: 0,
+    threat: 0
+  });
+  assert.deepEqual(first.sourceHits, first.damageSources);
   assert.deepEqual(first.hazards, {});
   assert.deepEqual(first.deaths, []);
   first.damage.hazard = 999;
@@ -63,4 +75,14 @@ test("createState：新档自带诊断容器，且不写入玩家数据", () => 
   assert.ok(state.diagnostics, "缺少 diagnostics");
   assert.equal(state.diagnostics.deaths.length, 0);
   assert.equal(JSON.stringify(state.player).includes("diagnostics"), false, "诊断不应进入玩家数据（避免写档）");
+});
+
+// 0.8.88：F100 清完 5 只后的死亡复活，最多保留 3 只杂兵，其余不再重建。
+test("abyssRespawnTrashLimit：只对 F100 的清层后同图复活限流", () => {
+  const progress = { kills: 5, need: 5, completed: false };
+  assert.equal(abyssRespawnTrashLimit("abyss-F100", progress, true), 3);
+  assert.equal(abyssRespawnTrashLimit("abyss-F100", { ...progress, kills: 4 }, true), Infinity);
+  assert.equal(abyssRespawnTrashLimit("abyss-F99", progress, true), Infinity);
+  assert.equal(abyssRespawnTrashLimit("abyss-F100", progress, false), Infinity);
+  assert.equal(abyssRespawnTrashLimit("abyss-F100", { ...progress, completed: true }, true), Infinity);
 });

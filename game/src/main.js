@@ -45,6 +45,7 @@ import {
   activeMap,
   activeHero,
   mapProgress,
+  abyssRespawnTrashLimit,
   isForwardExit,
   primaryExit,
   playerMaxHp,
@@ -188,7 +189,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.87";
+const CURRENT_APP_VERSION = "0.8.88";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -214,11 +215,17 @@ function gateAbilities(abilities) {
 
 // 0.8.6 承伤诊断写入（只读统计，不参与结算）：
 // 按来源累加伤害与命中次数，供探针判定「这一关的痛点是普通怪、红圈还是毒」。
-function recordDamage(source, amount) {
+function recordDamage(source, amount, bucket = source) {
   if (!state.diagnostics) state.diagnostics = createDiagnostics();
   const diag = state.diagnostics;
-  diag.damage[source] = (diag.damage[source] || 0) + Math.max(0, Math.round(amount));
+  const rounded = Math.max(0, Math.round(amount));
+  // 0.8.6 旧口径：monster / hazard / poison 总数保持不变，避免已有探针读数断裂。
+  diag.damage[source] = (diag.damage[source] || 0) + rounded;
   diag.hits[source] = (diag.hits[source] || 0) + 1;
+  // 0.8.88 互斥归因桶：普通图小怪 / 深层小怪 / 首领普攻 / 首领特殊技 / 其他危险区 / 毒 / 反伤 / 热浪。
+  // 这些桶相加等于真实总承伤，不再让「首领普攻」和「深层杂兵」都混在 monster 里。
+  diag.damageSources[bucket] = (diag.damageSources[bucket] || 0) + rounded;
+  diag.sourceHits[bucket] = (diag.sourceHits[bucket] || 0) + 1;
 }
 
 // 危险区分型统计：spawned 记录生成数，hit / damage 在引爆命中时累加。
@@ -460,6 +467,14 @@ export function loadMap(mapId, spawnX, spawnY, silent, keepBossHp = false) {
   }
   // 0.4.2：同图复活时回填受伤首领的生命（普通怪默认满血重置），阶段由 updateBoss 重新判定。
   if (keepBossHp) restoreDamagedBoss(state.entities, previousEntities);
+  // 0.8.88：F100 清完 5 只后的回响阶段，死亡复活最多重建最后 3 只杂兵；
+  // 避免每次死亡都把 5 只任务怪全部重建、让玩家从营地重新穿怪。首次进层与 F91–F99 不受影响。
+  const respawnTrashLimit = abyssRespawnTrashLimit(map.id, mapProgress(map.id), keepBossHp);
+  if (Number.isFinite(respawnTrashLimit)) {
+    const keep = state.entities.filter((entity) => entity.boss || entity.friendly || entity.npc);
+    const trash = state.entities.filter((entity) => !entity.boss && !entity.friendly && !entity.npc);
+    state.entities = keep.concat(trash.slice(-respawnTrashLimit));
+  }
   state.drops = [];
   state.particles = [];
   state.texts = [];
@@ -678,7 +693,7 @@ export function resolveDamage(target, multiplier, skillName, kind, fxKey = null)
     state.player.hp = Math.max(0, state.player.hp - reflected);
     // 0.8.23：反伤单独记账并写击杀者——此前该路径既不进承伤来源也不记 lastKiller，
     // 探针里表现为「未知」致死，0.8.22 轮为此多花了一整轮归因才定位到反伤。
-    recordDamage("反伤", reflected);
+    recordDamage("反伤", reflected, "reflect");
     if (state.player.hp <= 0) state.player.lastKiller = `${target.name}·反伤`;
     textAt(`-${reflected}`, state.player.x, floatYAbovePlayer(6), "#f16d66", 11);
   }
@@ -1820,7 +1835,9 @@ export function playerDamage(dt) {
         // 0.8.26 受击瞬间叠加短促格挡姿态（guard），与 hitFlash 叠加但不覆盖其优先级。
         state.player.guardTimer = 0.35;
         // 0.8.6：按来源累计承伤，探针据此给出「普通怪 / 首领本体」的占比。
-        recordDamage("monster", total);
+        // 0.8.88：同时写入互斥归因桶，首领普攻与深层杂兵不再共用 monster。
+        const damageBucket = attacker.boss ? "bossNormal" : state.abyssFloor > 0 ? "abyssMob" : "normalMob";
+        recordDamage("monster", total, damageBucket);
         // 0.8.7：每 5 次怪物命中采样一条，带形态 / 段数 / 承伤前后血量，定位「为什么突然暴毙」。
         logSample("monster-hit", 5, "debug", "combat", "monsterHit", {
           attacker: attacker.id,
@@ -1905,7 +1922,7 @@ export function playerDamage(dt) {
         state.player.hp = Math.max(0, state.player.hp - amount);
         // 0.8.6：危险区承伤按「来源」与「形态」双记，用于区分 sting（跟脚落地）
         // 与 logs / devour（随机落点）哪一种才是真正的痛点。
-        recordDamage("hazard", amount);
+        recordDamage("hazard", amount, h.bossHazard ? "bossSpecial" : "hazard");
         recordHazard(h.kind || "other", "hit", 1);
         recordHazard(h.kind || "other", "damage", amount);
         logDebug("hazard", "hit", {
@@ -2409,6 +2426,8 @@ export function spawnHazard(boss) {
   target.attackerLevel = boss.level;
   // 0.8.6：记录形态，引爆时按形态统计命中与伤害。
   target.kind = def.specialKind || "other";
+  // 0.8.88：首领特殊技单独标记，引爆时归入 bossSpecial，不再和普通地面危险区混算。
+  target.bossHazard = true;
   state.hazards.push(target);
   state.hazardsSpawned = (state.hazardsSpawned || 0) + 1;
   recordHazard(target.kind, "spawned", 1);
@@ -2442,7 +2461,7 @@ export function updateThreat(dt) {
       state.player.hp = Math.max(1, state.player.hp - event.amount);
       const actual = Math.max(0, Math.round(before - state.player.hp));
       if (actual > 0) {
-        recordDamage("threat-heat", actual);
+        recordDamage("threat-heat", actual, "threat");
         textAt(`-${actual}`, state.player.x, floatYAbovePlayer(6), "#f0a35e", 13);
       }
       logThrottled("threat-heat", 4000, "debug", "threat", "heatTick", { amount: actual, hp: Math.round(state.player.hp) });
