@@ -147,6 +147,17 @@ test("回归10 F99 单层降档：普通怪 ×0.75/0.75/0.8，F98/F100 不受影
   assert.ok(deep.hp > base.hp, "深渊化怪 HP 必须仍高于同层普通怪");
 });
 
+test("回归11 F100 回响单层降档：×1.25×0.85，F90/F110 与普通怪不变", () => {
+  const f100 = buildAbyssMap(100);
+  const base = generatedMap(95);
+  assert.equal(f100.boss.hp, Math.round(base.boss.hp * 1.25 * 0.85), "F100 回响应在首领档上再乘 0.85");
+  assert.equal(Math.round(f100.boss.hp * abyssMultipliers(100).hp), 145710, "F100 回响实体 HP 应为约 145710");
+  assert.equal(f100.boss.phases, 3, "F100 仍是三阶段回响");
+  assert.deepEqual(f100.normalTuning, { hp: 1, attack: 1, defense: 1 }, "F100 普通怪不得被回响降档影响");
+  assert.equal(buildAbyssMap(90).boss.hp, Math.round(base.boss.hp * 0.9), "F90 回响降档不得被 F100 影响");
+  assert.equal(buildAbyssMap(110).boss.hp, Math.round(base.boss.hp * 1.25), "F110 仍按常规首领层 ×1.25");
+});
+
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
   // 0.8.39 之前 spawn 用 tier % pick（5/6/7），而深渊怪挂在索引 pick / pick+1，
   // 永远取不到 —— 「每 3 层 2 只深渊化怪」整段配置空转。
