@@ -369,4 +369,5 @@ test("buildAbyssMap：F90 回响采用 clear-first，其他整十层保持 legac
   assert.equal(buildAbyssMap(90).echoVictoryRule, "clear-first");
   assert.equal(buildAbyssMap(80).echoVictoryRule, "legacy");
   assert.equal(buildAbyssMap(91).echoVictoryRule, "legacy");
+  assert.equal(buildAbyssMap(120).echoVictoryRule, "legacy", "F120 不使用 F90 的 clear-first，普通怪降档后按 legacy 通关");
 });
