@@ -164,6 +164,20 @@ test("回归11 F100 回响降档与 6 营位：×1.25×0.85，F90/F110 与普通
   assert.equal(buildAbyssMap(110).boss.hp, Math.round(base.boss.hp * 1.25), "F110 仍按常规首领层 ×1.25");
 });
 
+test("回归12 F105 起裂隙层收 6 营位：早期裂隙与整十层不变", () => {
+  const f105 = buildAbyssMap(105);
+  assert.equal(f105.riftFloor, true, "F105 必须是裂隙层");
+  assert.equal(f105.monsterSpawns.length, 6, "F105 裂隙层应只保留 6 个刷怪营位");
+  assert.equal(
+    f105.routePlan.encounterBands.reduce((sum, band) => sum + band.count, 0),
+    6,
+    "F105 routePlan 的分段计数必须与 6 个营位一致"
+  );
+  assert.equal(buildAbyssMap(5).monsterSpawns.length, 12, "F5 早期裂隙层不得被 F105 调整影响");
+  assert.equal(buildAbyssMap(95).monsterSpawns.length, 12, "F95 裂隙层不得被 F105 调整影响");
+  assert.equal(buildAbyssMap(110).monsterSpawns.length, 12, "F110 整十层不得被裂隙收营位影响");
+});
+
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
   // 0.8.39 之前 spawn 用 tier % pick（5/6/7），而深渊怪挂在索引 pick / pick+1，
   // 永远取不到 —— 「每 3 层 2 只深渊化怪」整段配置空转。

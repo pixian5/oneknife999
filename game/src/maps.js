@@ -1410,9 +1410,13 @@ export function generatedLayout(stageNumber, chapter) {
 export function generatedAbyssLayout(floor, chapter) {
   // 0.8.85：F90 是 5 杀 + 回响的终局层，只放 6 个营位；F91–F99 保持原 12 个营位。
   // 0.8.88：F100 与 F90 同为整十终局层，也收到 6 营位。
+  // 0.8.89：F105 两样本 353.85s/+24.5，abyssMob 占 85%–88%、回响本体仅 6.3k–7.1k；
+  // 裂隙层的 12 营位 + 3 只双词缀精英是墙，因此 F105 起的非整十裂隙层也收到 6 营位。
+  // 只影响 F105/F115/F125…，F5–F95 的早期裂隙层、F100/F110 等整十层保持原布局。
   const f = Math.max(1, Math.floor(Number(floor) || 1));
-  // 0.8.88：F90/F100 两个整十终局层都只保留 6 营位；F100 的诊断见 buildLayout 上方注释。
-  return buildLayout(f * 2654435761 + 977, (f * 3 + 4) % 10, chapter, 320, true, f === 90 || f === 100 ? 6 : Infinity);
+  const lateRift = f >= 105 && f % 5 === 0 && f % 10 !== 0;
+  const spawnLimit = f === 90 || f === 100 || lateRift ? 6 : Infinity;
+  return buildLayout(f * 2654435761 + 977, (f * 3 + 4) % 10, chapter, 320, true, spawnLimit);
 }
 
 // 0.8.79：每张生成图从本章 9 种怪里确定性取 4~6 种，相邻图重叠不超过较小阵容的一半。
