@@ -236,8 +236,27 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
       .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
     assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
   }
-  assert.deepEqual(buildAbyssMap(130).normalTuning, { hp: 0.6, attack: 0.6, defense: 0.8 }, "F130 不得被 0.8.94 档位影响");
-  assert.deepEqual(buildAbyssMap(141).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F141 暂不纳入本版章节档位");
+  assert.deepEqual(buildAbyssMap(130).normalTuning, { hp: 0.6, attack: 0.6, defense: 0.8 }, "F130 不得被 0.8.95 档位影响");
+  // 0.8.95：F141–F150 继续按章节档位结算，普通怪攻击全部压到 791 以下。
+  for (const floor of [141, 142, 143, 144, 145, 146, 147]) {
+    assert.deepEqual(
+      buildAbyssMap(floor).normalTuning,
+      { hp: 0.65, attack: 0.62, defense: 0.8 },
+      `F${floor} 普通怪必须按章节档位 0.62 攻击结算`
+    );
+  }
+  for (const floor of [148, 149]) {
+    assert.deepEqual(buildAbyssMap(floor).normalTuning, { hp: 0.6, attack: 0.58, defense: 0.8 }, `F${floor} 普通怪必须按 0.58 攻击结算`);
+  }
+  assert.deepEqual(buildAbyssMap(150).normalTuning, { hp: 0.58, attack: 0.56, defense: 0.8 }, "F150 整十层普通怪必须按 0.56 攻击结算");
+  for (const floor of [141, 147, 148, 149, 150]) {
+    const map = buildAbyssMap(floor);
+    const normalAttack = map.monsterTypes
+      .filter((type) => !type.deepTuned)
+      .map((type) => Math.round(type.attack * map.normalTuning.attack * abyssMultipliers(floor).attack));
+    assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
+  }
+  assert.deepEqual(buildAbyssMap(151).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F151 暂不纳入本版章节档位");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {

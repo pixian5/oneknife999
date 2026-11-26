@@ -158,6 +158,9 @@ export function buildAbyssMap(floor) {
   // 因此不再逐层补丁：F131–F137 用 0.65/0.65/0.8，F138–F139 因层数攻击倍率再涨一档降到 0.63，
   // F140 作为整十层用 0.60/0.60/0.8。F130 与 F140 同档，但 F140 的 chapterIndex 回到 9、
   // 基础 HP 更高，压力应留在回响；深渊化怪仍允许保留两击压力。
+  // 0.8.95：F141 重新回到第 1 章，但层数攻击倍率已到 10.87 倍；默认普通怪攻击 794–978，
+  // 仍是两击必死。F141–F147 用 0.65 生命 / 0.62 攻击；F148–F149 基础攻击再上一档，
+  // 用 0.60 / 0.58；F150 整十层用 0.58 / 0.56，把普通怪攻击压到 791 以下，压力留给回响。
   const normalTuning =
     f === 90
       ? { hp: 0.55, attack: 0.6, defense: 0.8 }
@@ -167,11 +170,17 @@ export function buildAbyssMap(floor) {
           ? { hp: 0.6, attack: 0.6, defense: 0.8 }
           : f === 138 || f === 139
             ? { hp: 0.63, attack: 0.63, defense: 0.8 }
-            : f === 127 || f === 128 || f === 129 || (f >= 131 && f <= 137)
-              ? { hp: 0.65, attack: 0.65, defense: 0.8 }
-              : f === 99 || f === 108 || f === 110 || f === 126
-                ? { hp: 0.75, attack: 0.75, defense: 0.8 }
-                : { hp: 1, attack: 1, defense: 1 };
+            : f >= 141 && f <= 147
+              ? { hp: 0.65, attack: 0.62, defense: 0.8 }
+              : f === 148 || f === 149
+                ? { hp: 0.6, attack: 0.58, defense: 0.8 }
+                : f === 150
+                  ? { hp: 0.58, attack: 0.56, defense: 0.8 }
+                  : f === 127 || f === 128 || f === 129 || (f >= 131 && f <= 137)
+                    ? { hp: 0.65, attack: 0.65, defense: 0.8 }
+                    : f === 99 || f === 108 || f === 110 || f === 126
+                      ? { hp: 0.75, attack: 0.75, defense: 0.8 }
+                      : { hp: 1, attack: 1, defense: 1 };
   // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
