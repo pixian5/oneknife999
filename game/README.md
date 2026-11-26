@@ -1,6 +1,6 @@
 # 一刀999 浏览器百图原型
 
-这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.89。
+这是《一刀999》传奇类游戏的可玩浏览器原型，当前实现 10 章、100 张连续关卡地图，验证“清怪 -> 首领 -> 掉落 -> 升级 -> 自动保存 -> 出口 -> 下一关”的完整循环。当前版本为 0.8.90。
 
 ## 启动
 
@@ -148,12 +148,15 @@ npm run test:ui:status-real   # 五类状态真实战斗触发回归（需要先
 npm run test:ui:abilities     # 细粒度行为开关回归（需要先 npm run serve）
 npm run test:ui:threats       # 五类地图威胁 + 专属精英回归（需要先 npm run serve）
 npm run test:ui:echo          # F90 回响 B / 重构重生 / 入口补给一次性（需要先 npm run serve）
+npm run test:ui:trash         # 深层 5 杀后清残余杂兵 / respawn Infinity（需要先 npm run serve）
 npm run test:ui:preserve      # 0.8.84 A 组死亡重建 / 旧 abyssPreserve 开关失效（需要先 npm run serve）
 npm run test:difficulty       # 非快进难度探针：抽样关卡按正式数值通关，测死亡数与耗时（需要先 npm run serve）
 npm run test:e2e              # 百图通关回归（需要先 npm run serve）
 npm run perf                  # 帧率探测（需要先 npm run serve，结果写入 .test-artifacts/）
 npm run balance               # 真实速度数值模拟（三职业百图，无需浏览器，输出 tests/balance-out.csv）
 ```
+
+0.8.90 F106–F110 深层终局收口：F105 起所有非整十层与 F100 起整十层统一 6 营位；深渊化怪不再叠精英；F108/F110 普通怪 `0.75/0.75/0.8`；F110 起整十回响 `1.25×0.65`；整十层首进 +5 瓶。`clearAbyssApproachTrash()` 放在 abyss 分支，清完 5 只即把所有非首领杂兵（含死亡倒计时中的第六只）设 `respawn=Infinity`。最终真实键鼠 F106 132.2s/+7、F107 262.4s/+17、F108 128.6s/+5、F109 167.6s/+10、F110 204.0s/+10；改前 F108 502.7s/+49、F110 584.7s/+52。单测 271/271，`test:ui:abyss-terrain`、`test:ui:echo` 全 PASS。
 
 0.8.89 F105 裂隙层收 6 营位：`generatedAbyssLayout()` 对 `f >= 105 && f % 5 === 0 && f % 10 !== 0` 返回 6 营位，F5–F95 早期裂隙层与 F100/F110 整十层不变。真实键鼠 F105 两样本 268.4s/+21、170.8s/+12（中位 219.6s/+16.5），从 353.85s/+24.5 降 134.25s / 8 死；A `abyssMob` 44,709/57、清 +19 / 回响 +2，B `abyssMob` 24,478/31、清 +11 / 回响 +1。6 营位实际只保留 1 只双词缀精英（`enrage+hoard`），不是 3 只；要恢复 3 只需另写营位选点逻辑。单测 271/271，`test:ui:abyss-terrain` 8/9/10a/10b 与 `test:ui:echo` 全 PASS。
 
