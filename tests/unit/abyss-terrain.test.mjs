@@ -147,7 +147,7 @@ test("回归10 F99 单层降档：普通怪 ×0.75/0.75/0.8，F98/F100 不受影
   assert.ok(deep.hp > base.hp, "深渊化怪 HP 必须仍高于同层普通怪");
 });
 
-test("回归11 F100 回响降档与 6 营位：×1.25×0.85，F90/F110 与普通怪不变", () => {
+test("回归11 F100/F110 回响降档与 6 营位：F100 ×0.85、F110 起 ×0.65", () => {
   const f100 = buildAbyssMap(100);
   const base = generatedMap(95);
   assert.equal(f100.boss.hp, Math.round(base.boss.hp * 1.25 * 0.85), "F100 回响应在首领档上再乘 0.85");
@@ -161,21 +161,30 @@ test("回归11 F100 回响降档与 6 营位：×1.25×0.85，F90/F110 与普通
   );
   assert.deepEqual(f100.normalTuning, { hp: 1, attack: 1, defense: 1 }, "F100 普通怪不得被回响降档影响");
   assert.equal(buildAbyssMap(90).boss.hp, Math.round(base.boss.hp * 0.9), "F90 回响降档不得被 F100 影响");
-  assert.equal(buildAbyssMap(110).boss.hp, Math.round(base.boss.hp * 1.25), "F110 仍按常规首领层 ×1.25");
+  // 0.8.90：F110 从 187436 收到 121836（1.25×0.65），F120 起同档。
+  const f110 = buildAbyssMap(110);
+  assert.equal(f110.boss.hp, Math.round(base.boss.hp * 1.25 * 0.65), "F110 起整十层回响应在首领档上乘 0.65");
+  assert.equal(Math.round(f110.boss.hp * abyssMultipliers(110).hp), 121836, "F110 回响实体 HP 应为 121836");
+  assert.equal(f110.monsterSpawns.length, 6, "F110 整十终局层也应只保留 6 个刷怪营位");
+  assert.equal(buildAbyssMap(120).boss.hp, Math.round(base.boss.hp * 1.25 * 0.65), "F120 起沿用 F110 的 0.65 回响档");
 });
 
-test("回归12 F105 起裂隙层收 6 营位：早期裂隙与整十层不变", () => {
+test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
   const f105 = buildAbyssMap(105);
   assert.equal(f105.riftFloor, true, "F105 必须是裂隙层");
-  assert.equal(f105.monsterSpawns.length, 6, "F105 裂隙层应只保留 6 个刷怪营位");
+  for (const floor of [105, 106, 107, 108, 109, 111]) {
+    assert.equal(buildAbyssMap(floor).monsterSpawns.length, 6, `F${floor} 深层应只保留 6 个刷怪营位`);
+  }
   assert.equal(
     f105.routePlan.encounterBands.reduce((sum, band) => sum + band.count, 0),
     6,
     "F105 routePlan 的分段计数必须与 6 个营位一致"
   );
-  assert.equal(buildAbyssMap(5).monsterSpawns.length, 12, "F5 早期裂隙层不得被 F105 调整影响");
-  assert.equal(buildAbyssMap(95).monsterSpawns.length, 12, "F95 裂隙层不得被 F105 调整影响");
-  assert.equal(buildAbyssMap(110).monsterSpawns.length, 12, "F110 整十层不得被裂隙收营位影响");
+  assert.equal(buildAbyssMap(5).monsterSpawns.length, 12, "F5 早期裂隙层不得被深层收营位影响");
+  assert.equal(buildAbyssMap(95).monsterSpawns.length, 12, "F95 裂隙层不得被深层收营位影响");
+  assert.deepEqual(buildAbyssMap(108).normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F108 普通怪应单层降档");
+  assert.deepEqual(buildAbyssMap(110).normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F110 普通怪应单层降档");
+  assert.deepEqual(buildAbyssMap(107).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F107 不得被 F108 降档影响");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {

@@ -189,7 +189,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.8.89";
+const CURRENT_APP_VERSION = "0.8.90";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -295,7 +295,11 @@ export function createEntities(map) {
     const scaled = scaleForDifficulty({ hp: baseType.hp * abyss.hp, attack: baseType.attack * abyss.attack }, difficulty);
     const type = { ...baseType, hp: scaled.hp, attack: scaled.attack };
     const level = clamp(map.levelMin + spawn[2] * 2 + (index % 3), map.levelMin, map.levelMax);
-    const elite = eliteFlags[index] || null;
+    // 0.8.90：深渊化怪（deepTuned）已经自带 HP×1.6；若再叠精英 HP×1.8，
+    // 会得到 2.88 倍的“双强化”怪。F108 的深渊焦焰飞龙因此变成 48,602 HP、
+    // 且落在离出生点 411 的营位，机器人 120 次循环只清到 4/5。深层化与精英
+    // 只能二选一：保留深渊化形态，不再给它挂精英词缀。
+    const elite = eliteFlags[index] && !type.deepTuned ? eliteFlags[index] : null;
     if (elite) {
       type.hp = Math.round(type.hp * ELITE_TUNING.hpMult);
       type.attack = Math.round(type.attack * ELITE_TUNING.attackMult);
@@ -1352,7 +1356,12 @@ export function checkMapCompletion() {
   if (rule?.abyss) {
     if (progress.kills >= progress.need && !progress.killAnnounced) {
       progress.killAnnounced = true;
-      if (!progress.bossDefeated) log(`本层清剿完成：按 T 深入下一层，或挑战守门者${rule.boss}。`, "loot");
+      if (!progress.bossDefeated) {
+        // 0.8.90：深层清完 5 只后，第六个营位的巡逻杂兵不再参与回响战。
+        // 必须放在 abyss 分支内——深层在这里就 return，放普通图分支永远不会执行。
+        clearAbyssApproachTrash();
+        log(`本层清剿完成：按 T 深入下一层，或挑战守门者${rule.boss}。`, "loot");
+      }
     }
     progress.completed = progress.kills >= progress.need && progress.bossDefeated;
     if (progress.completed && !progress.completionAnnounced) {
@@ -2133,6 +2142,25 @@ export function cancelTravel() {
   // 把玩家弹回安全方向
   state.player.x = Math.max(60, exit.x - 80);
   showToast("已取消进入");
+}
+
+// 0.8.90：深层 5 只任务怪清完后，第六个营位的“巡逻压力”仍会在回响战里追打玩家。
+// F109 的 25 次死亡中 10 次死在离首领 462–735px 的 `神魔魔血骑`；F110 旧档同样
+// 有大量死亡发生在远离首领的杂兵位。清完任务怪时清掉未召唤的普通杂兵，只保留
+// 首领与首领召唤物，让回响战回到“玩家 vs 首领”。
+function clearAbyssApproachTrash() {
+  let cleared = 0;
+  for (const entity of state.entities) {
+    if (entity.boss || entity.friendly || entity.npc || entity.summoned) continue;
+    // 0.8.90 修正：不能只处理 alive 的杂兵。若第五只任务怪倒下时第六只正处于
+    // 死亡倒计时，它的 respawn 仍是 28–45s，回响战中途会原地复活并追打玩家。
+    // 这里对所有非首领杂兵统一置死并把 respawn 设为 Infinity，彻底退出本层战斗。
+    entity.alive = false;
+    entity.hp = entity.maxHp;
+    entity.respawn = Infinity;
+    cleared += 1;
+  }
+  if (cleared > 0) log(`清剿完成：${cleared} 只残余杂兵退散，首领战开始。`, "loot");
 }
 
 // 0.8.60：深层清层后清空残余。首领的召唤物、远处未死的小怪、地面 Hazard

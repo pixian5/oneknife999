@@ -102,12 +102,15 @@ export function abyssRelativeHpGain(fromFloor, toFloor) {
 // 0.8.85：F90 终局入口一次补给 5 瓶。真实键鼠验收显示：普通怪降档后，
 // 20 瓶起步的存档清完 5 只任务怪只剩约 4 瓶，而回响实战约需 5 瓶，差 1 瓶无法收尾。
 // 终局层单独补 5 瓶，使 20 瓶起步拥有 25 瓶完整预算；F1–F89 仍只发 1 瓶。
+// 0.8.90：F110 真实键鼠 584.7s/+52，回响 187,436 HP、39 次回响阶段死亡；
+// 与 F90 同样属于“整十终局层只发 1 瓶药水”的补给缺口。F90 及 F100+ 的整十层
+// 统一改为首进 5 瓶，让回响战有足够容错；F1–F89 的非整十层仍只发 1 瓶。
 export function abyssEntrySupplyGain(mapId, floor, firstVisit) {
   if (!firstVisit) return 0;
   if (!String(mapId || "").startsWith("abyss-F")) return 0;
   const depth = Math.max(0, Math.floor(Number(floor) || 0));
   if (depth <= 0) return 0;
-  if (depth === 90) return 5; // F90 终局补给：只补清层后回响战的缺口
+  if (depth >= 90 && depth % 10 === 0) return 5; // F90/F100/F110…整十终局层补给
   return 1;
 }
 
