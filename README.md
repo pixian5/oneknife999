@@ -30,8 +30,8 @@ npm run serve      # 打开 http://127.0.0.1:4174
 
 ## 0.8.99 发布
 
-- 代码 `de9dc42`、文档 `c09f33f`、main `fba1f04`；work `45880000755` / `45880165663` 24/24，main `45880176009` 24/24（`de51ed3` 一次 perf 抖动已被覆盖）。
-- Instabox 在 `fba1f04`，`VERSION=0.8.99`、`APP_VERSION="0.8.99"`、`CACHE_VERSION="oneknife999-v0.8.99"`；公网 `/` 20,548B、`src/main.js` 169,074B、`sw.js` 4,540B 均 200。
+- 代码 `de9dc42`、文档 `c09f33f`、发布文档 `a8a1d6b`；main 源码 `fba1f04`、最终文档 `e233de6`；work `45880000755` / `45880165663` 24/24，main `45880176009` 24/24、`45881486089` 首轮 perf 抖动后 rerun 24/24（`de51ed3` 一次 perf 抖动已被覆盖）。
+- Instabox 在 `e233de6`（游戏文件同 `fba1f04`），`VERSION=0.8.99`、`APP_VERSION="0.8.99"`、`CACHE_VERSION="oneknife999-v0.8.99"`；公网 `/` 20,548B、`src/main.js` 169,074B、`sw.js` 4,540B 均 200。
 - 公网冒烟三职业立绘 384×512、0 error；正式档恢复 F95（5/5、deaths 525、marks 3714、potion 0、加载后 HP 1583）。详见 [0.8.99 发布与公网冒烟](docs/20261127-0330-0.8.99发布与公网冒烟-豆包.md)。
 
 ## 0.8.98 深层验收（历史）
