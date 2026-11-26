@@ -193,6 +193,32 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
   assert.deepEqual(buildAbyssMap(107).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F107 不得被 F108 降档影响");
   assert.deepEqual(buildAbyssMap(119).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F119 不得被 F120 降档影响");
   assert.deepEqual(buildAbyssMap(121).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F121 不得被 F120 降档影响");
+  // 0.8.92：F126 双深渊化层单层降档，普通怪 10028–12582、深渊怪 17801/20728。
+  const f126 = buildAbyssMap(126);
+  assert.deepEqual(f126.normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F126 普通怪必须按单层降档系数结算");
+  const f126mobs = f126.monsterTypes.map((type) => Math.round(type.hp * abyssMultipliers(126).hp));
+  assert.equal(Math.min(...f126mobs.filter((_, index) => !f126.monsterTypes[index].deepTuned)), 10028, "F126 普通怪最低实体 HP 应为 10028");
+  assert.equal(Math.max(...f126mobs), 20728, "F126 深渊怪最高实体 HP 应为 20728");
+  assert.deepEqual(buildAbyssMap(125).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F125 不得被 F126 降档影响");
+  // 0.8.93：F127–F129 连续降档，普通怪攻击压到 774 以下，避免 1583 血玩家被两击秒杀。
+  for (const floor of [127, 128, 129]) {
+    const map = buildAbyssMap(floor);
+    assert.deepEqual(map.normalTuning, { hp: 0.65, attack: 0.65, defense: 0.8 }, `F${floor} 普通怪必须按连续降档系数结算`);
+    const hpList = map.monsterTypes.map((type) => Math.round(type.hp * abyssMultipliers(floor).hp));
+    assert.ok(Math.max(...hpList) <= 20699, `F${floor} 最高实体 HP 不得超过 20699`);
+    const normalAttack = map.monsterTypes
+      .filter((type) => !type.deepTuned)
+      .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
+    assert.ok(Math.max(...normalAttack) <= 774, `F${floor} 普通怪单次攻击不得超过 774，否则两击秒杀 1583 血玩家`);
+  }
+  const f127 = buildAbyssMap(127);
+  const f127Hp = f127.monsterTypes.map((type) => Math.round(type.hp * abyssMultipliers(127).hp));
+  assert.equal(Math.min(...f127Hp), 9334, "F127 普通怪最低实体 HP 应为 9334");
+  assert.equal(Math.max(...f127Hp), 12038, "F127 普通怪最高实体 HP 应为 12038");
+  const f130 = buildAbyssMap(130);
+  assert.deepEqual(f130.normalTuning, { hp: 0.6, attack: 0.6, defense: 0.8 }, "F130 整十层普通怪必须再降一档");
+  const f130Attack = f130.monsterTypes.map((type) => Math.round(type.attack * abyssMultipliers(130).attack));
+  assert.ok(Math.max(...f130Attack) <= 717, "F130 普通怪单次攻击不得超过 717");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
