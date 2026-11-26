@@ -167,6 +167,12 @@ test("回归11 F100/F110 回响降档与 6 营位：F100 ×0.85、F110 起 ×0.6
   assert.equal(Math.round(f110.boss.hp * abyssMultipliers(110).hp), 121836, "F110 回响实体 HP 应为 121836");
   assert.equal(f110.monsterSpawns.length, 6, "F110 整十终局层也应只保留 6 个刷怪营位");
   assert.equal(buildAbyssMap(120).boss.hp, Math.round(base.boss.hp * 1.25 * 0.65), "F120 起沿用 F110 的 0.65 回响档");
+  // 0.8.91：F120 普通怪单层降档，实体普通怪 10449–13510、深渊怪 17942–20399。
+  const f120 = buildAbyssMap(120);
+  assert.deepEqual(f120.normalTuning, { hp: 0.65, attack: 0.75, defense: 0.8 }, "F120 普通怪必须按单层降档系数结算");
+  const f120mobs = f120.monsterTypes.map((type) => Math.round(type.hp * abyssMultipliers(120).hp));
+  assert.equal(Math.min(...f120mobs.filter((_, index) => !f120.monsterTypes[index].deepTuned)), 10449, "F120 普通怪最低实体 HP 应为 10449");
+  assert.equal(Math.max(...f120mobs), 20399, "F120 深渊怪最高实体 HP 应为 20399");
 });
 
 test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
@@ -185,6 +191,8 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
   assert.deepEqual(buildAbyssMap(108).normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F108 普通怪应单层降档");
   assert.deepEqual(buildAbyssMap(110).normalTuning, { hp: 0.75, attack: 0.75, defense: 0.8 }, "F110 普通怪应单层降档");
   assert.deepEqual(buildAbyssMap(107).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F107 不得被 F108 降档影响");
+  assert.deepEqual(buildAbyssMap(119).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F119 不得被 F120 降档影响");
+  assert.deepEqual(buildAbyssMap(121).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F121 不得被 F120 降档影响");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
