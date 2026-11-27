@@ -81,6 +81,17 @@ export function abyssMultipliers(floor) {
   };
 }
 
+// 0.9.4：F231 起深层回响普攻硬上限 1,500。此前 F237 已到 1,583、F240 到 2,278，
+// 任何命中都等于秒杀，5 瓶药水也无法覆盖；1,500 让满血吃一发剩 83，可喝药后再战。
+export const ABYSS_BOSS_ATTACK_CAP = 1500;
+export const ABYSS_BOSS_ATTACK_CAP_FROM = 231;
+
+export function capAbyssBossAttack(floor, attack) {
+  const n = Math.max(0, Math.floor(Number(floor) || 0));
+  const value = Math.max(0, Math.round(Number(attack) || 0));
+  return n >= ABYSS_BOSS_ATTACK_CAP_FROM ? Math.min(value, ABYSS_BOSS_ATTACK_CAP) : value;
+}
+
 // 深层成长文案：old 版写“每层 +14%”，会被误读成复利；实际公式是相对基础值加法。
 // 同一章内（F1–F10、F11–F20…）每层累加 14% 基础生命，换章后基础值提升。
 export function abyssGrowthText() {
