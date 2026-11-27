@@ -189,7 +189,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.9.2";
+const CURRENT_APP_VERSION = "0.9.3";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -2435,7 +2435,11 @@ export function spawnHazard(boss) {
   // 且惩罚的是远程职业「停在射程边缘」的正确打法，因此只降危险区伤害、不动首领本体输出。
   // 手工地图没有 difficulty 字段，缺省为 1。
   const hazardMult = map.difficulty?.hazardMult || 1;
-  const damage = Math.round(boss.attack * 1.4 * hazardMult);
+  const rawDamage = Math.round(boss.attack * 1.4 * hazardMult);
+  // 0.9.3：危险区伤害随 Boss 攻击逐章抬升，F219 的 sting 单次约 2,005 已高于 1,583 满血，
+  // 任何一次命中必死、药水完全失效。所有危险区单次伤害封顶为最大生命的 70%：满血可吃一发，
+  // 第二发仍会死，保留走位压力，不再出现“无法用操作弥补”的一击墙。
+  const damage = Math.min(rawDamage, Math.round(playerMaxHp() * 0.7));
   let target;
   if (def.specialKind === "logs") {
     // 森林巨猿：在玩家附近随机落木

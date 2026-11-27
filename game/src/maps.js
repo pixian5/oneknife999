@@ -366,8 +366,24 @@ export function buildAbyssMap(floor) {
     219: { hp: 0.4, attack: 0.41, defense: 0.8 },
     220: { hp: 0.38, attack: 0.41, defense: 0.8 }
   };
-  const normalTuning = normalTuning201to210[f] || normalTuning211to220[f] || normalTuningLegacy;
-  // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
+  // 0.9.3：F221 起进入第九个十层循环，层数攻击倍率 16.47–17.10；默认普通怪攻击 1,202–2,035。
+  // 按每层默认峰值反算攻击系数，普通怪压到 ≤784：
+  // F221 0.51、F222 0.49、F223 0.47、F224 0.46、F225 0.44；
+  // F226 0.43、F227 0.41、F228 0.41、F229 0.40、F230 0.38。
+  // 深渊怪 F222 835、F225 796、F228 918 保留两击压力；F230 整十回响单层降档见下方。
+  const normalTuning221to230 = {
+    221: { hp: 0.56, attack: 0.51, defense: 0.8 },
+    222: { hp: 0.54, attack: 0.49, defense: 0.8 },
+    223: { hp: 0.52, attack: 0.47, defense: 0.8 },
+    224: { hp: 0.5, attack: 0.46, defense: 0.8 },
+    225: { hp: 0.48, attack: 0.44, defense: 0.8 },
+    226: { hp: 0.46, attack: 0.43, defense: 0.8 },
+    227: { hp: 0.44, attack: 0.41, defense: 0.8 },
+    228: { hp: 0.42, attack: 0.41, defense: 0.8 },
+    229: { hp: 0.4, attack: 0.4, defense: 0.8 },
+    230: { hp: 0.38, attack: 0.38, defense: 0.8 }
+  };
+  const normalTuning = normalTuning201to210[f] || normalTuning211to220[f] || normalTuning221to230[f] || normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
   const monsterTypes = order
@@ -424,7 +440,7 @@ export function buildAbyssMap(floor) {
       ? 0.9
       : f === 100
         ? 1.25 * 0.85
-        : f === 210 || f === 220
+        : f === 210 || f === 220 || f === 230
           ? 1.25 * 0.65 * 0.75
           : f >= 110 && f % 10 === 0
             ? 1.25 * 0.65
@@ -506,7 +522,8 @@ export function buildAbyssMap(floor) {
       // 首领层 1.1→0.85、守门层 0.8→0.65（实测 F10 修正前为百图终关攻击 2.3 倍，10 秒死亡循环）。
       // 0.9.2：F210/F220 回响本体攻击 2,010/2,099 高于玩家 1,583 满血，任何命中都必死，
       // 5 瓶药水也无法覆盖；这两层改为 0.62，让满血可以吃一发后立刻喝药，保留“接近斩杀线”的压力。
-      attack: Math.round(anchored(112, 0.42) * (f === 210 || f === 220 ? 0.62 : f % 10 === 0 ? 0.85 : 0.65)),
+      // 0.9.3：F230 默认攻击 2,189，0.62 仍为 1,596 > 1,583；单独用 0.60 压到 1,545。
+      attack: Math.round(anchored(112, 0.42) * (f === 230 ? 0.6 : f === 210 || f === 220 ? 0.62 : f % 10 === 0 ? 0.85 : 0.65)),
       defense: anchored(60, 0.05),
       exp: 0,
       gold: anchored(1100, 6.5),
