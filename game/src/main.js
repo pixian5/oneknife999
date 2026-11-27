@@ -189,7 +189,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.9.1";
+const CURRENT_APP_VERSION = "0.9.2";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -2004,7 +2004,9 @@ export function die() {
     underfoot: underfootHazard?.kind || null,
     level: state.player.level
   });
-  if (state.diagnostics.deaths.length > 20) state.diagnostics.deaths.shift();
+  // 0.9.2：此前只保留最后 20 条死亡上下文，F195 报 +33 只录 20、F210 报 +54 只录 20，
+  // 探针会误判“诊断丢失”。改为最多 500 条，足够单层长战；仍设上限避免极端挂机无限增长。
+  if (state.diagnostics.deaths.length > 500) state.diagnostics.deaths.shift();
   // 0.8.7：死亡上下文同时写日志，dump 时不用再去翻 diagnostics 结构。
   logWarn("death", "player", state.diagnostics.deaths[state.diagnostics.deaths.length - 1]);
   sfx.death();

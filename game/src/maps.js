@@ -350,7 +350,23 @@ export function buildAbyssMap(floor) {
     209: { hp: 0.4, attack: 0.41, defense: 0.8 },
     210: { hp: 0.38, attack: 0.39, defense: 0.8 }
   };
-  const normalTuning = normalTuning201to210[f] || normalTuningLegacy;
+  // 0.9.2：F211 起进入第八个十层循环，默认普通怪攻击 1,104–1,902；逐层压到 ≤790：
+  // F211 0.56/0.53、F212 0.54/0.53、F213 0.52/0.49、F214 0.50/0.48、F215 0.48/0.47；
+  // F216 0.46/0.46、F217 0.44/0.47、F218 0.42/0.42、F219 0.40/0.41、F220 0.38/0.41。
+  // 深渊怪 F213 875、F216 935、F219 817 保留两击压力；F220 是整十回响，Boss 单层降档见下方。
+  const normalTuning211to220 = {
+    211: { hp: 0.56, attack: 0.53, defense: 0.8 },
+    212: { hp: 0.54, attack: 0.53, defense: 0.8 },
+    213: { hp: 0.52, attack: 0.49, defense: 0.8 },
+    214: { hp: 0.5, attack: 0.48, defense: 0.8 },
+    215: { hp: 0.48, attack: 0.47, defense: 0.8 },
+    216: { hp: 0.46, attack: 0.46, defense: 0.8 },
+    217: { hp: 0.44, attack: 0.47, defense: 0.8 },
+    218: { hp: 0.42, attack: 0.42, defense: 0.8 },
+    219: { hp: 0.4, attack: 0.41, defense: 0.8 },
+    220: { hp: 0.38, attack: 0.41, defense: 0.8 }
+  };
+  const normalTuning = normalTuning201to210[f] || normalTuning211to220[f] || normalTuningLegacy;
   // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
@@ -408,13 +424,15 @@ export function buildAbyssMap(floor) {
       ? 0.9
       : f === 100
         ? 1.25 * 0.85
-        : f >= 110 && f % 10 === 0
-          ? 1.25 * 0.65
-          : f === 127 || f === 128 || f === 129
-            ? 0.45
-            : f % 10 === 0
-              ? 1.25
-              : 0.55;
+        : f === 210 || f === 220
+          ? 1.25 * 0.65 * 0.75
+          : f >= 110 && f % 10 === 0
+            ? 1.25 * 0.65
+            : f === 127 || f === 128 || f === 129
+              ? 0.45
+              : f % 10 === 0
+                ? 1.25
+                : 0.55;
   const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
   const id = abyssMapId(f);
   // 0.8.34 P2 裂隙层：每 5 层一次（f%5===0 且非首领层），精英概率与词缀数提升（createEntities 读取）。
@@ -486,7 +504,9 @@ export function buildAbyssMap(floor) {
       hp: Math.round(anchored(3000, 67.5) * bossScale),
       // 0.8.38 攻击补偿：boss 基准本高于普通怪，再乘 abyss 攻击成长会指数化——
       // 首领层 1.1→0.85、守门层 0.8→0.65（实测 F10 修正前为百图终关攻击 2.3 倍，10 秒死亡循环）。
-      attack: Math.round(anchored(112, 0.42) * (f % 10 === 0 ? 0.85 : 0.65)),
+      // 0.9.2：F210/F220 回响本体攻击 2,010/2,099 高于玩家 1,583 满血，任何命中都必死，
+      // 5 瓶药水也无法覆盖；这两层改为 0.62，让满血可以吃一发后立刻喝药，保留“接近斩杀线”的压力。
+      attack: Math.round(anchored(112, 0.42) * (f === 210 || f === 220 ? 0.62 : f % 10 === 0 ? 0.85 : 0.65)),
       defense: anchored(60, 0.05),
       exp: 0,
       gold: anchored(1100, 6.5),
