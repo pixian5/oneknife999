@@ -42,8 +42,8 @@ npm run serve      # 打开 http://127.0.0.1:4174
 
 ## 0.9.1 发布
 
-- 代码 `9d2b1fd`、文档 `2d3ba35`；main 源码 `5a5be45`、最终文档 `8e7710e`；work 源码 `45941359542` 与 main 源码 `45941374387` 24/24，work 文档 `45941540380` 24/24；main 文档 `45941554472` 首轮 `ui:regression` 失败、rerun 后 24/24。
-- Instabox 在 `8e7710e`，`VERSION=0.9.1`、`APP_VERSION="0.9.1"`、`CACHE_VERSION="oneknife999-v0.9.1"`；公网 `/` 20,548B、`src/main.js` 169,073B、`sw.js` 4,539B 均 200。
+- 代码 `9d2b1fd`、文档 `2d3ba35`→`b2062e0`；main 源码 `5a5be45`、最终文档 `08c3985`；work 源码 `45941359542` 与 main 源码 `45941374387` 24/24，最终 work `b2062e0` `45942965076`、main `08c3985` `45942974011` 均 24/24；中间文档 `8e7710e`、`147adb1`、`d98851e` 各一次 UI 抖动，rerun 后全绿。
+- Instabox 在 `08c3985`，`VERSION=0.9.1`、`APP_VERSION="0.9.1"`、`CACHE_VERSION="oneknife999-v0.9.1"`；公网 `/` 20,548B、`src/main.js` 169,073B、`sw.js` 4,539B 均 200。
 - 公网冒烟三职业立绘 384×512、`errors=[]`、`failed=[]`，SW `sw.js?v=0.9.1`、缓存键 `oneknife999-v0.9.1`；正式档恢复 F95（5/5、deaths 525、marks 3714、potion 0、加载后 HP 1583）。详见 [0.9.1 发布与公网冒烟](docs/20261127-1252-0.9.1发布与公网冒烟-豆包.md)。
 
 ## 0.9.0 发布（历史）
@@ -121,7 +121,7 @@ npm run perf                  # 帧率探测，结果写入 .test-artifacts/（�
 npm run balance               # 真实速度数值模拟（三职业百图，输出 tests/balance-out.csv）
 ```
 
-持续集成：0.8.96 保持 GitHub Actions `main` / `work` 双分支触发，verify 含语法、版本、素材预算、格式与 **271 个单测**，UI 矩阵 23 项（新增 `test:ui:trash`）；本地提交前仍须跑 `npm run verify` + 关键浏览器回归。
+持续集成：0.9.1 保持 GitHub Actions `main` / `work` 双分支触发，verify 含语法、版本、素材预算、格式与 **271 个单测**，UI 矩阵 23 项；本地提交前仍须跑 `npm run verify` + 关键浏览器回归。
 
 ## 目录结构
 
