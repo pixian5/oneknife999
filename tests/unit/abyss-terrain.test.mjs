@@ -357,7 +357,28 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
       .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
     assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
   }
-  assert.deepEqual(buildAbyssMap(201).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F201 回到默认档位");
+  // 0.9.1：F201–F210 第七个十层循环；F211 才回到默认。
+  const expected201to210 = {
+    201: { hp: 0.56, attack: 0.55, defense: 0.8 },
+    202: { hp: 0.54, attack: 0.53, defense: 0.8 },
+    203: { hp: 0.52, attack: 0.52, defense: 0.8 },
+    204: { hp: 0.5, attack: 0.5, defense: 0.8 },
+    205: { hp: 0.48, attack: 0.48, defense: 0.8 },
+    206: { hp: 0.46, attack: 0.46, defense: 0.8 },
+    207: { hp: 0.44, attack: 0.45, defense: 0.8 },
+    208: { hp: 0.42, attack: 0.43, defense: 0.8 },
+    209: { hp: 0.4, attack: 0.41, defense: 0.8 },
+    210: { hp: 0.38, attack: 0.39, defense: 0.8 }
+  };
+  for (const [floorText, tuning] of Object.entries(expected201to210)) {
+    const floor = Number(floorText);
+    assert.deepEqual(buildAbyssMap(floor).normalTuning, tuning, `F${floor} 普通怪档位不符`);
+    const normalAttack = buildAbyssMap(floor)
+      .monsterTypes.filter((type) => !type.deepTuned)
+      .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
+    assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
+  }
+  assert.deepEqual(buildAbyssMap(211).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F211 回到默认档位");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {

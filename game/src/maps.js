@@ -185,7 +185,7 @@ export function buildAbyssMap(floor) {
   // F191 0.56/0.62、F192 0.54/0.56、F193 0.52/0.53、F194 0.50/0.54、F195 0.48/0.49；
   // F196 0.46/0.47、F197 0.44/0.47、F198 0.42/0.44、F199 0.40/0.43、F200 0.38/0.42。
   // F192 深渊怪 890、F195 847、F198 804 仍保留两击压力；F200 整十回响 215,441 HP 由 5 瓶承担。
-  const normalTuning =
+  const normalTuningLegacy =
     f === 90
       ? { hp: 0.55, attack: 0.6, defense: 0.8 }
       : f === 120
@@ -333,6 +333,24 @@ export function buildAbyssMap(floor) {
                                                                                                                     attack: 1,
                                                                                                                     defense: 1
                                                                                                                   };
+  // 0.9.1：F201 起进入第七个十层循环，层数攻击倍率 15.07–15.70；默认普通怪攻击 1,055–1,868，
+  // F204/F207/F210 的深渊化怪到 1,742–2,182。逐层压到普通怪 580–774：
+  // F201 0.56/0.55、F202 0.54/0.53、F203 0.52/0.52、F204 0.50/0.50、F205 0.48/0.48；
+  // F206 0.46/0.46、F207 0.44/0.45、F208 0.42/0.43、F209 0.40/0.41、F210 0.38/0.39。
+  // F204 深渊怪 871/894、F207 899、F210 771/851 仍保留两击压力；F210 整十回响 225,842 HP 由 5 瓶承担。
+  const normalTuning201to210 = {
+    201: { hp: 0.56, attack: 0.55, defense: 0.8 },
+    202: { hp: 0.54, attack: 0.53, defense: 0.8 },
+    203: { hp: 0.52, attack: 0.52, defense: 0.8 },
+    204: { hp: 0.5, attack: 0.5, defense: 0.8 },
+    205: { hp: 0.48, attack: 0.48, defense: 0.8 },
+    206: { hp: 0.46, attack: 0.46, defense: 0.8 },
+    207: { hp: 0.44, attack: 0.45, defense: 0.8 },
+    208: { hp: 0.42, attack: 0.43, defense: 0.8 },
+    209: { hp: 0.4, attack: 0.41, defense: 0.8 },
+    210: { hp: 0.38, attack: 0.39, defense: 0.8 }
+  };
+  const normalTuning = normalTuning201to210[f] || normalTuningLegacy;
   // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
