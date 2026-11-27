@@ -462,13 +462,38 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
       .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
     assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
   }
+  // 0.9.6：F251–F260 第十二个十层循环；F261 才回到默认。
+  const expected251to260 = {
+    251: { hp: 0.56, attack: 0.45, defense: 0.8 },
+    252: { hp: 0.52, attack: 0.44, defense: 0.8 },
+    253: { hp: 0.52, attack: 0.43, defense: 0.8 },
+    254: { hp: 0.5, attack: 0.42, defense: 0.8 },
+    255: { hp: 0.42, attack: 0.34, defense: 0.8 },
+    256: { hp: 0.46, attack: 0.39, defense: 0.8 },
+    257: { hp: 0.44, attack: 0.37, defense: 0.8 },
+    258: { hp: 0.36, attack: 0.33, defense: 0.8 },
+    259: { hp: 0.4, attack: 0.36, defense: 0.8 },
+    260: { hp: 0.24, attack: 0.34, defense: 0.8 }
+  };
+  for (const [floorText, tuning] of Object.entries(expected251to260)) {
+    const floor = Number(floorText);
+    assert.deepEqual(buildAbyssMap(floor).normalTuning, tuning, `F${floor} 普通怪档位不符`);
+    const normalAttack = buildAbyssMap(floor)
+      .monsterTypes.filter((type) => !type.deepTuned)
+      .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
+    assert.ok(Math.max(...normalAttack) <= 791, `F${floor} 普通怪单次攻击不得超过 791，否则两击秒杀 1583 血玩家`);
+    const deepAttack = buildAbyssMap(floor)
+      .monsterTypes.filter((type) => type.deepTuned)
+      .map((type) => Math.round(type.attack * abyssMultipliers(floor).attack));
+    if (deepAttack.length) assert.ok(Math.max(...deepAttack) <= 791, `F${floor} 深渊怪单次攻击不得超过 791`);
+  }
   // F210/F220/F230 的回响本体必须低于玩家满血 1583，避免任何命中都必死、药水完全失效。
   for (const floor of [210, 220, 230]) {
     const bossAttack = Math.round(buildAbyssMap(floor).boss.attack * abyssMultipliers(floor).attack);
     assert.ok(bossAttack < 1583, `F${floor} 回响攻击 ${bossAttack} 必须低于满血 1583`);
   }
   // 0.9.4：F231 起回响普攻硬上限 1,500（实体层），F240 默认 2,278 必须被压住。
-  for (let floor = 231; floor <= 250; floor += 1) {
+  for (let floor = 231; floor <= 260; floor += 1) {
     const rawBossAttack = Math.round(buildAbyssMap(floor).boss.attack * abyssMultipliers(floor).attack);
     const cappedBossAttack = capAbyssBossAttack(floor, rawBossAttack);
     assert.ok(cappedBossAttack <= 1500, `F${floor} 回响实体攻击 ${cappedBossAttack} 必须 ≤1500`);
@@ -479,7 +504,10 @@ test("回归12 F105 起深层收 6 营位：早期层与 F95 不变", () => {
   // F250 是第十一个整十层，走默认 1.25×0.65，HP 约 267,444，比 F240 高约 21%。
   const f250BossHp = Math.round(buildAbyssMap(250).boss.hp * abyssMultipliers(250).hp);
   assert.ok(f250BossHp > 260000 && f250BossHp < 275000, `F250 回响 HP ${f250BossHp} 应在 260k–275k`);
-  assert.deepEqual(buildAbyssMap(251).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F251 回到默认档位");
+  // F260 是第十二个整十层，走默认 1.25×0.65，HP 约 277,845，比 F250 高约 3.9%。
+  const f260BossHp = Math.round(buildAbyssMap(260).boss.hp * abyssMultipliers(260).hp);
+  assert.ok(f260BossHp > 270000 && f260BossHp < 285000, `F260 回响 HP ${f260BossHp} 应在 270k–285k`);
+  assert.deepEqual(buildAbyssMap(261).normalTuning, { hp: 1, attack: 1, defense: 1 }, "F261 回到默认档位");
 });
 
 test("回归8 深渊怪档位可达：每 3 层的 spawn 里真的会出现深渊化怪档", () => {
