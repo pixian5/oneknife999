@@ -437,6 +437,27 @@ export function buildAbyssMap(floor) {
     259: { hp: 0.4, attack: 0.36, defense: 0.8 },
     260: { hp: 0.24, attack: 0.34, defense: 0.8 }
   };
+  // 0.9.7：F261 起进入第十三个十层循环，层数攻击倍率 19.27–19.90；默认普通怪攻击 1,792–2,408，
+  // F261/F264/F267/F270 还各带两只深渊化怪，默认深渊攻击最高 2,104–2,726。
+  // 重新回到第 1 章基础档，HP 回落，压力主要来自层数攻击倍率。
+  // 普通层按峰值 ≤791 反算：F262 0.42、F263 0.42、F265 0.39、F266 0.36、F268 0.35、F269 0.33。
+  // 首轮实测 F261 0/5、约 1 分钟 +8：两只深渊怪 16k–18k HP，玩家单刀 909 需 20 刀，
+  // 每次复活只能打 3 刀就再次死亡。F261 的 hp 从 0.56 降到 0.30（深渊约 10k）、攻击 0.44→0.40，
+  // 把清怪暴露时间砍半，保留三击压力。四个带深渊化怪的层按同型再留余量：
+  // F261 0.30/0.40、F264 0.30/0.37、F267 0.24/0.32、F270 0.20/0.28。
+  // F270 是整十层，hp 0.20 压双深渊到约 14k，攻击 0.28 让深渊峰值仍低于 791。
+  const normalTuning261to270 = {
+    261: { hp: 0.3, attack: 0.4, defense: 0.8 },
+    262: { hp: 0.54, attack: 0.42, defense: 0.8 },
+    263: { hp: 0.52, attack: 0.42, defense: 0.8 },
+    264: { hp: 0.3, attack: 0.37, defense: 0.8 },
+    265: { hp: 0.48, attack: 0.39, defense: 0.8 },
+    266: { hp: 0.46, attack: 0.36, defense: 0.8 },
+    267: { hp: 0.24, attack: 0.32, defense: 0.8 },
+    268: { hp: 0.42, attack: 0.35, defense: 0.8 },
+    269: { hp: 0.4, attack: 0.33, defense: 0.8 },
+    270: { hp: 0.2, attack: 0.28, defense: 0.8 }
+  };
   const normalTuning =
     normalTuning201to210[f] ||
     normalTuning211to220[f] ||
@@ -444,6 +465,7 @@ export function buildAbyssMap(floor) {
     normalTuning231to240[f] ||
     normalTuning241to250[f] ||
     normalTuning251to260[f] ||
+    normalTuning261to270[f] ||
     normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
