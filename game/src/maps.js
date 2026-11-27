@@ -419,12 +419,31 @@ export function buildAbyssMap(floor) {
     249: { hp: 0.36, attack: 0.32, defense: 0.8 },
     250: { hp: 0.38, attack: 0.35, defense: 0.8 }
   };
+  // 0.9.6：F251 起进入第十二个十层循环，层数攻击倍率 18.57–19.20；默认普通怪攻击 1,727–2,323。
+  // 普通层按峰值 ≤791 反算：F251 0.45、F253 0.43、F254 0.42、F256 0.39、F257 0.37、F259 0.36、F260 0.34。
+  // 三个带深渊化怪的层（F252/F255/F258）单独留余量：0.44、0.34、0.33，深渊峰值分别 746/773/781。
+  // F260 首轮实测 0/5、66 死：帝陵精英 22k HP，玩家单次 919 伤害需 24 刀，而 787 攻两击必死，
+  // 每次复活只能打 2–3 刀，精英回满血形成硬墙。把 F260 的 hp 系数降到 0.24（精英约 14k），
+  // 攻击仍保持 0.34（峰值 787），保留终层两击压力但不至于清怪不可推进。
+  const normalTuning251to260 = {
+    251: { hp: 0.56, attack: 0.45, defense: 0.8 },
+    252: { hp: 0.52, attack: 0.44, defense: 0.8 },
+    253: { hp: 0.52, attack: 0.43, defense: 0.8 },
+    254: { hp: 0.5, attack: 0.42, defense: 0.8 },
+    255: { hp: 0.42, attack: 0.34, defense: 0.8 },
+    256: { hp: 0.46, attack: 0.39, defense: 0.8 },
+    257: { hp: 0.44, attack: 0.37, defense: 0.8 },
+    258: { hp: 0.36, attack: 0.33, defense: 0.8 },
+    259: { hp: 0.4, attack: 0.36, defense: 0.8 },
+    260: { hp: 0.24, attack: 0.34, defense: 0.8 }
+  };
   const normalTuning =
     normalTuning201to210[f] ||
     normalTuning211to220[f] ||
     normalTuning221to230[f] ||
     normalTuning231to240[f] ||
     normalTuning241to250[f] ||
+    normalTuning251to260[f] ||
     normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
