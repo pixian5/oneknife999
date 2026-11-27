@@ -400,8 +400,32 @@ export function buildAbyssMap(floor) {
     239: { hp: 0.4, attack: 0.37, defense: 0.8 },
     240: { hp: 0.38, attack: 0.35, defense: 0.8 }
   };
+  // 0.9.5：F241 起进入第十一个十层循环，层数攻击倍率 17.87–18.50；默认普通怪攻击 1,608–2,239。
+  // 按每层默认峰值反算攻击系数，普通怪压到 ≤791：F241 0.49、F242 0.47、F243 0.45、F244 0.42、F245 0.41；
+  // F246 0.39、F247 0.38、F248 0.37、F249 0.36、F250 0.35。
+  // 首轮实测 F243 473.7s/+52、只清 3/5：深渊炎蝠 21,747 HP / 919 攻，98 次深渊怪命中造成 52 死。
+  // 因此三个带深渊化怪的层再降一档：F243 0.46/0.38（深渊攻 780）、F246 0.42/0.37（735）、
+  // F249 0.36/0.32（767）；普通层保持 0.49→0.35 的连续曲线，普通怪峰值仍 ≤791。
+  // F250 整十回响仍走默认 1.25×0.65 档。
+  const normalTuning241to250 = {
+    241: { hp: 0.56, attack: 0.49, defense: 0.8 },
+    242: { hp: 0.54, attack: 0.47, defense: 0.8 },
+    243: { hp: 0.46, attack: 0.38, defense: 0.8 },
+    244: { hp: 0.5, attack: 0.42, defense: 0.8 },
+    245: { hp: 0.48, attack: 0.41, defense: 0.8 },
+    246: { hp: 0.42, attack: 0.37, defense: 0.8 },
+    247: { hp: 0.44, attack: 0.38, defense: 0.8 },
+    248: { hp: 0.42, attack: 0.37, defense: 0.8 },
+    249: { hp: 0.36, attack: 0.32, defense: 0.8 },
+    250: { hp: 0.38, attack: 0.35, defense: 0.8 }
+  };
   const normalTuning =
-    normalTuning201to210[f] || normalTuning211to220[f] || normalTuning221to230[f] || normalTuning231to240[f] || normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
+    normalTuning201to210[f] ||
+    normalTuning211to220[f] ||
+    normalTuning221to230[f] ||
+    normalTuning231to240[f] ||
+    normalTuning241to250[f] ||
+    normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
   const monsterTypes = order
