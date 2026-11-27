@@ -129,6 +129,7 @@ import {
   unlockedDifficulties,
   DIFFICULTY_TIERS,
   abyssMultipliers,
+  capAbyssBossAttack,
   abyssQualityBonus,
   isAbyssBossFloor,
   abyssProgress,
@@ -189,7 +190,7 @@ import {
 
 // 《一刀999》入口与主逻辑：地图流程、战斗、掉落、输入、主循环与 E2E 接口。
 // 应用版本（与 VERSION 文件同步，供 SW 缓存键使用——发布时随 VERSION 一起更新）。
-const CURRENT_APP_VERSION = "0.9.3";
+const CURRENT_APP_VERSION = "0.9.4";
 // 0.8.7 构建版本：直接复用应用版本，避免两套版本号在诊断接口里各说各话。
 const BUILD_VERSION = CURRENT_APP_VERSION;
 
@@ -346,6 +347,9 @@ export function createEntities(map) {
   });
   const b = map.boss;
   const bossScaled = scaleForDifficulty({ hp: b.hp * abyss.hp, attack: b.attack * abyss.attack }, difficulty);
+  // 0.9.4：F231 起深层回响普攻硬上限 1,500。此前 F237 已到 1,583、F240 到 2,278，
+  // 任何命中都等于秒杀，5 瓶药水也无法覆盖；1,500 让满血吃一发剩 83，可喝药后再战。
+  bossScaled.attack = capAbyssBossAttack(state?.abyssFloor, bossScaled.attack);
   result.push({
     id: b.id,
     name: b.name,
