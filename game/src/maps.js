@@ -458,6 +458,42 @@ export function buildAbyssMap(floor) {
     269: { hp: 0.4, attack: 0.33, defense: 0.8 },
     270: { hp: 0.2, attack: 0.28, defense: 0.8 }
   };
+  // 0.9.8：F271 起进入第十四个十层循环，层数攻击倍率 19.97–20.60；默认普通怪攻击 1,857–2,493，
+  // F273/F276/F279 还各带两只深渊化怪，默认深渊攻击 2,293/2,540/2,792。
+  // 普通层按峰值 ≤791 反算：F271 0.42、F272 0.41、F274 0.39、F275 0.37、F277 0.34、F278 0.33、F280 0.31。
+  // 三个深渊化层同时压普通与深渊：F273 hp 0.38/attack 0.34（峰值 784）、
+  // F276 hp 0.32/attack 0.30（772）、F279 hp 0.28/attack 0.28（780）。
+  // 深渊层 HP 不再统一压到 0.20–0.30，而是保留 17.8k–19.9k，避免像 F264 一样 90 秒空过。
+  // F280 为整十层，普通层 hp 0.34/attack 0.31；回响默认 1.25×0.65，约 298,646 HP，比 F270 高 3.6%。
+  const normalTuning271to280 = {
+    271: { hp: 0.56, attack: 0.42, defense: 0.8 },
+    272: { hp: 0.54, attack: 0.41, defense: 0.8 },
+    273: { hp: 0.38, attack: 0.34, defense: 0.8 },
+    274: { hp: 0.5, attack: 0.39, defense: 0.8 },
+    275: { hp: 0.48, attack: 0.37, defense: 0.8 },
+    276: { hp: 0.32, attack: 0.3, defense: 0.8 },
+    277: { hp: 0.44, attack: 0.34, defense: 0.8 },
+    278: { hp: 0.42, attack: 0.33, defense: 0.8 },
+    279: { hp: 0.28, attack: 0.28, defense: 0.8 },
+    280: { hp: 0.34, attack: 0.31, defense: 0.8 }
+  };
+  // 0.9.8 真实键鼠发现：F271–F280 的回响普攻统一 1,500（两击必死），
+  // F277 483.6s/+40、F279 581.4s/+47，F280 在 600s 上限内打不完。
+  // 这里只调回响 Boss：攻击按层反算到实体 737–775（保留三击窗口），
+  // HP 按层降到 35,825–220,546；普通怪、深渊怪与地面危险区全部不动。
+  const bossTuning271to280 = {
+    271: { hp: 0.3, attack: 0.34 },
+    272: { attack: 0.318 },
+    273: { attack: 0.307 },
+    274: { attack: 0.297 },
+    275: { hp: 0.35, attack: 0.288 },
+    276: { hp: 0.3, attack: 0.28 },
+    277: { hp: 0.3, attack: 0.275 },
+    278: { hp: 0.35, attack: 0.256 },
+    279: { hp: 0.32, attack: 0.249 },
+    280: { hp: 0.6, attack: 0.242 }
+  };
+  const bossTuning = bossTuning271to280[f];
   const normalTuning =
     normalTuning201to210[f] ||
     normalTuning211to220[f] ||
@@ -466,6 +502,7 @@ export function buildAbyssMap(floor) {
     normalTuning241to250[f] ||
     normalTuning251to260[f] ||
     normalTuning261to270[f] ||
+    normalTuning271to280[f] ||
     normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
@@ -519,7 +556,8 @@ export function buildAbyssMap(floor) {
   // 0.8.93：F127–F129 的守门回响仍按 0.55 倍结算，实测单次 916 伤害同样两击必死。
   // 这三层单独降到 0.45（伤害约 750，可吃三击），整十层 F130 仍保留 0.8125 倍终局压力。
   const bossScale =
-    f === 90
+    bossTuning?.hp ??
+    (f === 90
       ? 0.9
       : f === 100
         ? 1.25 * 0.85
@@ -533,7 +571,8 @@ export function buildAbyssMap(floor) {
                 ? 0.45
                 : f % 10 === 0
                   ? 1.25
-                  : 0.55;
+                  : 0.55);
+  const bossAttackScale = bossTuning?.attack ?? (f === 230 ? 0.6 : f === 210 || f === 220 ? 0.62 : f % 10 === 0 ? 0.85 : 0.65);
   const siteName = ABYSS_SITE_NAMES[(f - 1) % ABYSS_SITE_NAMES.length];
   const id = abyssMapId(f);
   // 0.8.34 P2 裂隙层：每 5 层一次（f%5===0 且非首领层），精英概率与词缀数提升（createEntities 读取）。
@@ -610,7 +649,7 @@ export function buildAbyssMap(floor) {
       // 0.9.3：F230 默认攻击 2,189，0.62 仍为 1,596 > 1,583；单独用 0.60 压到 1,545。
       // 0.9.4：F237+ 的默认回响攻击已越过 1,583，F240 到 2,278；整十层不再逐层写分支，
       // 统一由 main.js 的 ABYSS_BOSS_ATTACK_CAP 在实体层压到 1,500。
-      attack: Math.round(anchored(112, 0.42) * (f === 230 ? 0.6 : f === 210 || f === 220 ? 0.62 : f % 10 === 0 ? 0.85 : 0.65)),
+      attack: Math.round(anchored(112, 0.42) * bossAttackScale),
       defense: anchored(60, 0.05),
       exp: 0,
       gold: anchored(1100, 6.5),
