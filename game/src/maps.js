@@ -526,7 +526,41 @@ export function buildAbyssMap(floor) {
     289: { hp: 0.718, attack: 0.248 },
     290: { hp: 0.7, attack: 0.24 }
   };
-  const bossTuning = bossTuning281to290[f] || bossTuning271to280[f];
+  // 0.10.0：F291 起进入第十六个十层循环。F291 的 chapterIndex 再次回到 0、baseStage 回到 5，
+  // 但层数攻击倍率已到 21.37–22.00，默认普通怪攻击 1,987–2,662、深渊怪 2,331–2,926，
+  // 仍然不能回默认。F291/F294/F297/F300 是四个深渊化层，攻击系数必须按深渊峰值反算。
+  // 普通/深渊攻击统一压到 ≤791：F291 0.39、F292 0.37、F293 0.36、F294 0.33、
+  // F295 0.34、F296 0.33、F297 0.29、F298 0.31、F299 0.30、F300 0.26。
+  // HP 保持普通 9.5k–16.1k、深渊 17.4k–20.7k；F297/F300 的普通攻击偏低，
+  // 是因为两只深渊化怪吃 1.15 倍攻击，必须先保深渊峰值 ≤791。
+  const normalTuning291to300 = {
+    291: { hp: 0.56, attack: 0.39, defense: 0.8 },
+    292: { hp: 0.5, attack: 0.37, defense: 0.8 },
+    293: { hp: 0.46, attack: 0.36, defense: 0.8 },
+    294: { hp: 0.36, attack: 0.33, defense: 0.8 },
+    295: { hp: 0.42, attack: 0.34, defense: 0.8 },
+    296: { hp: 0.4, attack: 0.33, defense: 0.8 },
+    297: { hp: 0.3, attack: 0.29, defense: 0.8 },
+    298: { hp: 0.36, attack: 0.31, defense: 0.8 },
+    299: { hp: 0.34, attack: 0.3, defense: 0.8 },
+    300: { hp: 0.26, attack: 0.26, defense: 0.8 }
+  };
+  // 0.10.0 回响继续表驱动：F291 章节重置后基础 HP 只有 70,415，若走默认 0.55 倍会从
+  // F290 的 266,240 跌到 70,415；这里反算成 134,445→306,676 的连续曲线，F300 仍高于 F290。
+  // 攻击系数按取整后的基础攻击反算，F291–F300 实体攻击 753–791，保留三击窗口。
+  const bossTuning291to300 = {
+    291: { hp: 1.05, attack: 0.33 },
+    292: { hp: 0.98, attack: 0.31 },
+    293: { hp: 0.92, attack: 0.29 },
+    294: { hp: 0.87, attack: 0.29 },
+    295: { hp: 0.83, attack: 0.28 },
+    296: { hp: 0.79, attack: 0.27 },
+    297: { hp: 0.76, attack: 0.26 },
+    298: { hp: 0.73, attack: 0.25 },
+    299: { hp: 0.7, attack: 0.24 },
+    300: { hp: 0.78, attack: 0.235 }
+  };
+  const bossTuning = bossTuning291to300[f] || bossTuning281to290[f] || bossTuning271to280[f];
   const normalTuning =
     normalTuning201to210[f] ||
     normalTuning211to220[f] ||
@@ -537,6 +571,7 @@ export function buildAbyssMap(floor) {
     normalTuning261to270[f] ||
     normalTuning271to280[f] ||
     normalTuning281to290[f] ||
+    normalTuning291to300[f] ||
     normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
