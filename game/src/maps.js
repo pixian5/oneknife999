@@ -493,7 +493,40 @@ export function buildAbyssMap(floor) {
     279: { hp: 0.32, attack: 0.249 },
     280: { hp: 0.6, attack: 0.242 }
   };
-  const bossTuning = bossTuning271to280[f];
+  // 0.9.9：F281 起进入第十五个十层循环。F281 的 chapterIndex 回到 0、baseStage 回到 5，
+  // 但层数攻击倍率仍在 20.67–21.30，默认普通怪攻击 1,860–2,577、深渊峰值 2,730，
+  // 必须继续逐层反算，不能把 F281 当成“回到默认”。
+  // 普通/深渊攻击统一压到 ≤791：F281 0.42、F282 0.39、F283 0.38、F284 0.36、
+  // F285 0.33、F286 0.35、F287 0.33、F288 0.28、F289 0.31、F290 0.30。
+  // HP 仍保持普通最高约 12k–15k、深渊最高约 18k–19k，避免章节重置后出现 90 秒空过。
+  const normalTuning281to290 = {
+    281: { hp: 0.56, attack: 0.42, defense: 0.8 },
+    282: { hp: 0.5, attack: 0.39, defense: 0.8 },
+    283: { hp: 0.46, attack: 0.38, defense: 0.8 },
+    284: { hp: 0.44, attack: 0.36, defense: 0.8 },
+    285: { hp: 0.36, attack: 0.33, defense: 0.8 },
+    286: { hp: 0.38, attack: 0.35, defense: 0.8 },
+    287: { hp: 0.36, attack: 0.33, defense: 0.8 },
+    288: { hp: 0.28, attack: 0.28, defense: 0.8 },
+    289: { hp: 0.32, attack: 0.31, defense: 0.8 },
+    290: { hp: 0.3, attack: 0.3, defense: 0.8 }
+  };
+  // 0.9.9 回响 Boss 继续表驱动。F281 章节重置后 Boss 基础 HP 只有 83,759（乘档前），
+  // 若仍走默认 0.8125 会从 F280 的 220,546 直接跌到 68,054；这里按层反算成
+  // 110,169→266,240 的连续曲线，F290 仍高于 F280。攻击保持 752–788，保留三击窗口。
+  const bossTuning281to290 = {
+    281: { hp: 0.89, attack: 0.331 },
+    282: { hp: 0.87, attack: 0.322 },
+    283: { hp: 0.857, attack: 0.305 },
+    284: { hp: 0.843, attack: 0.287 },
+    285: { hp: 0.826, attack: 0.277 },
+    286: { hp: 0.813, attack: 0.268 },
+    287: { hp: 0.792, attack: 0.269 },
+    288: { hp: 0.761, attack: 0.26 },
+    289: { hp: 0.718, attack: 0.248 },
+    290: { hp: 0.7, attack: 0.24 }
+  };
+  const bossTuning = bossTuning281to290[f] || bossTuning271to280[f];
   const normalTuning =
     normalTuning201to210[f] ||
     normalTuning211to220[f] ||
@@ -503,6 +536,7 @@ export function buildAbyssMap(floor) {
     normalTuning251to260[f] ||
     normalTuning261to270[f] ||
     normalTuning271to280[f] ||
+    normalTuning281to290[f] ||
     normalTuningLegacy; // 数值按该怪在主题章内的**原始索引**计算（与基准关同名怪完全同源，回归 5 断言守住）；
   // 洗牌只决定「哪些怪出场」，不重排数值档——同种怪在任何层强度一致，玩家可预期。
   const originalIndex = (name) => chapter.monsters.indexOf(name);
